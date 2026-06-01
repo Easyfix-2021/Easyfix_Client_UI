@@ -31,7 +31,7 @@ import {
 import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
 import { ApiError, downloadBlob } from '@/lib/api';
 import { useSpoc } from '@/lib/spoc-context';
-import { getBucketLabel } from '@/lib/utils';
+import { getBucketStatusForJob, getBucketCurrentStatusForJob } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
 
@@ -58,6 +58,15 @@ type Job = {
   ready_for_billing?: string | null;   // 'Yes' / 'No'
   sub_job_id?: number | null;
   job_reopen_flag?: number | null;     // 1 → "Reopened", 0 → "Reopen"
+  // Fields used by getBucketCurrentStatusForJob (Status of Order column)
+  approved_by_client?: number | null;
+  spoc_approval_by_client?: number | null;
+  call_later?: number | boolean | null;
+  fk_easyfixter_id?: number | null;
+  approval_sent_on_date_time?: string | null;
+  approved_on_date_time?: string | null;
+  approval_reject_date_time?: string | null;
+  full_fillment_created_time?: string | null;
 };
 
 // Tab keys mirror legacy flag values exactly.
@@ -594,28 +603,26 @@ export default function OrderHistoryPage() {
                   <td>{j.city_name || '—'}</td>
                   <td>
                     <div className="text-slate-800">{j.customer_name || '—'}</div>
-                    {j.customer_mob_no && (
-                      <div className="text-xs text-slate-500">{j.customer_mob_no}</div>
-                    )}
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
-                    {/* Status Of Order — filled pill button. Label
-                        comes from getBucketLabel() (legacy parity:
-                        same wording the Angular dashboard showed). */}
+                    {/* Status Of Order — context-aware label (ported
+                        from CommonUtils.java#getBucketCurrentStatusForJob).
+                        Falls back to the static bucket name when no
+                        rule matches the row. */}
                     <span className={cn(
                       'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
                       statusBadgeClass(j.job_status)
                     )}>
-                      {getBucketLabel(j.job_status)}
+                      {getBucketCurrentStatusForJob(j) || getBucketStatusForJob(j.job_status) || '—'}
                     </span>
                   </td>
-                  {/* Bucket — outline-style chip with the same legacy
-                      bucket label. Visually distinct from the filled
-                      Status pill via the white-bg outline style. */}
+                  {/* Bucket — static status→category label
+                      (CommonUtils.java#getBucketStatusForJob).
+                      Visually distinct outline chip. */}
                   <td>
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border border-slate-300 bg-white text-slate-700 whitespace-nowrap">
-                      {getBucketLabel(j.job_status)}
+                      {getBucketStatusForJob(j.job_status) || '—'}
                     </span>
                   </td>
                   <td className="text-xs">{j.source_type || '—'}</td>

@@ -95,7 +95,7 @@ export default function JobsPage() {
                   </Link>
                 </td>
                 <td className="font-mono text-xs">{j.job_reference_id || j.client_ref_id || '—'}</td>
-                <td>{j.customer_name}<br/><span className="text-xs text-slate-500">{j.customer_mob_no}</span></td>
+                <td>{j.customer_name}</td>
                 <td>{j.city_name || '—'}</td>
                 <td><span className="badge bg-slate-100 text-slate-700">{STATUS_LABELS[j.job_status] || j.job_status}</span></td>
                 <td className="text-xs">{formatDate(j.scheduled_date_time)}</td>

@@ -293,9 +293,6 @@ export default function TxOnLocationPage() {
                   </td>
                   <td>
                     <div className="text-slate-800">{j.customer_name || '—'}</div>
-                    {j.customer_mob_no && (
-                      <div className="text-xs text-slate-500">{j.customer_mob_no}</div>
-                    )}
                   </td>
                   <td>{j.city_name || '—'}</td>
                   <td className="text-sm">{j.service_category_name || '—'}</td>
