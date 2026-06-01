@@ -127,6 +127,45 @@ function statusBadgeClass(status: number) {
   }
 }
 
+/*
+ * Color for the "Bucket" column — the context-aware sub-status returned
+ * by getBucketCurrentStatusForJob (Ready for Billing, Tx Allocated,
+ * Estimate Approved, etc.). Keyed by exact label so the same row
+ * always renders the same colour across pages.
+ *
+ * Palette aligns with the legacy Angular dashboard:
+ *   Ready for Billing → pink (highlight: invoice is pending action)
+ *   Allocated/Ongoing → blue (in flight, no action needed)
+ *   Tx On Location    → violet (technician is actively working)
+ *   Completed         → emerald (done)
+ *   Rejected / Cancel → rose (failure)
+ *   Awaiting decision → amber (waiting on someone)
+ *   Fallback          → slate (no special meaning)
+ */
+function bucketBadgeClass(label: string) {
+  switch (label) {
+    case 'Ready for Billing':       return 'bg-pink-50 text-pink-700 ring-pink-200';
+    case 'Visit Completed':
+    case 'Completed':
+    case 'Completed on TX App':
+    case 'Estimate Approved':       return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    case 'Tx Allocated':
+    case 'Tx Ongoing Order':
+    case 'New Ticket':              return 'bg-blue-50 text-blue-700 ring-blue-200';
+    case 'Tx On Location':          return 'bg-violet-50 text-violet-700 ring-violet-200';
+    case 'Tx Unallocated':
+    case 'Approve Estimate':
+    case 'Ready for Full-Fillement':
+    case 'Full-Fillement on Hold':  return 'bg-amber-50 text-amber-700 ring-amber-200';
+    case 'Cancel Order':
+    case 'Estimate Rejected':
+    case 'Un-Authorize':            return 'bg-rose-50 text-rose-700 ring-rose-200';
+    case 'Call Later':
+    case 'Enquiry Order':           return 'bg-slate-100 text-slate-700 ring-slate-200';
+    default:                        return 'bg-slate-100 text-slate-700 ring-slate-200';
+  }
+}
+
 function ageInDays(iso: string | null): number | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -606,24 +645,37 @@ export default function OrderHistoryPage() {
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
-                    {/* Status Of Order — context-aware label (ported
-                        from CommonUtils.java#getBucketCurrentStatusForJob).
-                        Falls back to the static bucket name when no
-                        rule matches the row. */}
+                    {/* Status Of Order — legacy parity: this column holds
+                        the static status→category label
+                        (CommonUtils.java#getBucketStatusForJob).
+                        Examples: status 3/5 → "Completed", 9 → "New Ticket". */}
                     <span className={cn(
                       'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
                       statusBadgeClass(j.job_status)
                     )}>
-                      {getBucketCurrentStatusForJob(j) || getBucketStatusForJob(j.job_status) || '—'}
-                    </span>
-                  </td>
-                  {/* Bucket — static status→category label
-                      (CommonUtils.java#getBucketStatusForJob).
-                      Visually distinct outline chip. */}
-                  <td>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border border-slate-300 bg-white text-slate-700 whitespace-nowrap">
                       {getBucketStatusForJob(j.job_status) || '—'}
                     </span>
+                  </td>
+                  {/* Bucket — legacy parity: this column holds the
+                      context-aware sub-status
+                      (CommonUtils.java#getBucketCurrentStatusForJob).
+                      Examples: "Ready for Billing", "Tx Allocated",
+                      "Estimate Approved". Falls back to the static
+                      bucket name when no contextual rule matches.
+                      Colour-coded via bucketBadgeClass so each label
+                      gets the same pastel tone it had in legacy. */}
+                  <td>
+                    {(() => {
+                      const label = getBucketCurrentStatusForJob(j) || getBucketStatusForJob(j.job_status) || '—';
+                      return (
+                        <span className={cn(
+                          'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
+                          bucketBadgeClass(label)
+                        )}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="text-xs">{j.source_type || '—'}</td>
                   <td className="text-xs">{age != null ? `${age} d` : '—'}</td>

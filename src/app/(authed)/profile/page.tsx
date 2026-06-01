@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   User, Briefcase, Phone, Mail, Smartphone, Send, Network,
-  ShieldCheck, CreditCard, Camera, Check, Save,
+  ShieldCheck, CreditCard, Check, Save,
   Loader2, Pencil, Linkedin, Fingerprint,
   BadgeCheck, BellRing, FileBadge, AtSign,
   Sparkles, Wallet, X, Search, ChevronDown,
@@ -40,6 +40,10 @@ type Profile = {
   email_cc: string | null;
   payment_mode: number | null;
   approval_by_client: number | null;
+  // Parent-client brand block (populated by GET /profile)
+  client_id?: number | null;
+  client_name?: string | null;
+  client_logo_url?: string | null;
 };
 
 type TeamMember = { id: number; name: string | null; email: string | null };
@@ -149,19 +153,12 @@ export default function ProfilePage() {
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
         <div className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-start gap-5">
-            {/* Avatar with subtle ring + camera */}
-            <div className="relative shrink-0 mx-auto md:mx-0">
+            {/* Avatar — initials tile (camera removed; photo upload is
+                deferred until storage backend is wired). */}
+            <div className="shrink-0 mx-auto md:mx-0">
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-primary-dark grid place-items-center text-3xl font-extrabold text-white shadow-md shadow-primary/20 ring-4 ring-white">
                 {initialsOf(p.contact_name)}
               </div>
-              <button
-                type="button"
-                title="Change photo (coming soon)"
-                className="absolute -bottom-1 -right-1 w-8 h-8 bg-white text-primary rounded-full grid place-items-center shadow ring-1 ring-slate-200 hover:scale-105 transition"
-                aria-label="Change photo"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Identity block */}
@@ -185,6 +182,39 @@ export default function ProfilePage() {
                 </Pill>
               </div>
             </div>
+
+            {/* Right-side client brand block — logo when available, name
+                tag underneath. Hidden until profile loads. Keeps the SPOC
+                anchored to their client identity on the page they spend
+                the most time on. */}
+            {(p.client_logo_url || p.client_name) && (
+              <div className="shrink-0 mx-auto md:mx-0 flex flex-col items-center gap-1.5">
+                <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 shadow-sm grid place-items-center overflow-hidden p-2">
+                  {p.client_logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.client_logo_url}
+                      alt={p.client_name || 'Client logo'}
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => {
+                        // Hide broken image — the name pill below still
+                        // shows the brand so the layout doesn't collapse.
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center px-1">
+                      {p.client_name}
+                    </span>
+                  )}
+                </div>
+                {p.client_name && (
+                  <span className="text-[11px] font-semibold text-slate-500 max-w-[6.5rem] text-center truncate">
+                    {p.client_name}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick stats strip — divider line above */}

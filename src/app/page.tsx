@@ -195,7 +195,6 @@ export default function LoginPage() {
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Registered Mobile Number or Email Address"
                 />
-                {error && <p className="text-white font-semibold">{error}</p>}
                 <button
                   type="submit"
                   disabled={loading || !identifier.trim()}
@@ -239,7 +238,6 @@ export default function LoginPage() {
                   onChange={(e) => onOtpChange(e.target.value)}
                   placeholder="Enter OTP"
                 />
-                {error && <p className="text-white font-semibold">{error}</p>}
                 {loading && (
                   <p className="text-white font-semibold inline-flex items-center gap-2">
                     <span
@@ -295,7 +293,6 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Email Id"
                 />
-                {error && <p className="text-white font-semibold">{error}</p>}
                 <button
                   type="submit"
                   disabled={loading || !clientId.trim() || !email.trim()}
@@ -366,6 +363,44 @@ export default function LoginPage() {
           />
         </div>
       </section>
+
+      {/* Error modal — centred popup matching the legacy Angular SweetAlert
+          dialog. Triggered whenever `error` is set (failed OTP send /
+          verify / signup, or the inactive-client guard from the backend). */}
+      {error && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="error-modal-title"
+          onClick={() => setError(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-8 pt-8 pb-6 text-center">
+              <h2
+                id="error-modal-title"
+                className="text-3xl font-semibold text-slate-900"
+              >
+                Error
+              </h2>
+              <p className="mt-5 text-slate-700 leading-relaxed">{error}</p>
+            </div>
+            <div className="pb-8 flex justify-center">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setError(null)}
+                className="rounded-md bg-[#2778c4] hover:bg-[#1f64a8] text-white font-semibold px-10 py-2.5 shadow transition"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating social widget — fixed bottom-right, expands upward */}
       <div

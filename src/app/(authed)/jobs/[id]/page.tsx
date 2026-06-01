@@ -325,12 +325,12 @@ export default function JobDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {j.job_reference_id && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-mono font-semibold">
-                    REF · {j.job_reference_id}
+                    RefId · {j.job_reference_id}
                   </span>
                 )}
                 {j.client_ref_id && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-mono font-semibold">
-                    CLIENT · {j.client_ref_id}
+                    Client Ref Id · {j.client_ref_id}
                   </span>
                 )}
                 {j.job_type && (
