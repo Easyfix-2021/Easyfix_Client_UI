@@ -77,7 +77,11 @@ export default function ProfilePage() {
     if (fetchError) setError(fetchError);
   }, [data, fetchError]);
 
-  const managerOptions: TeamMember[] = team.data?.items ?? [];
+  // useMemo so the reference is stable across renders — without it,
+  // every render creates a new [] and the downstream `useMemo`
+  // recomputes for nothing (and risks an infinite loop in any future
+  // useEffect that depends on it).
+  const managerOptions = useMemo<TeamMember[]>(() => team.data?.items ?? [], [team.data]);
   const currentManager = useMemo(
     () => p?.manager_id ? managerOptions.find((m) => m.id === p.manager_id) ?? null : null,
     [p?.manager_id, managerOptions]

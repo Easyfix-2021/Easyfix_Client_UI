@@ -229,7 +229,11 @@ export default function MyTeamPage() {
 
   const fetchPath = useMemo(() => `/team?status=${status}`, [status]);
   const { data, error, loading } = useFetch<{ items: TeamMember[] }>(fetchPath);
-  const members = data?.items ?? [];
+  // useMemo so the reference is STABLE across renders when data hasn't
+  // changed. Without this, `data?.items ?? []` returned a fresh empty
+  // array each render — downstream useMemo([members]) recomputed →
+  // useEffect on `tree` fired → setExpanded → re-render → infinite loop.
+  const members = useMemo<TeamMember[]>(() => data?.items ?? [], [data]);
 
   // Table search — filters across name / email / mobile / designation.
   const filteredForTable = useMemo(() => {

@@ -367,7 +367,7 @@ export default function JobDetailPage() {
             <QuickStat icon={Calendar} label="Ticket Created" value={formatDateTime(j.ticket_created_date_time || j.created_date_time) || '—'} />
             <QuickStat icon={Clock} label="Appointment" value={formatDateTime(j.requested_date_time) || '—'} sub={j.time_slot || undefined} />
             <QuickStat icon={User} label="Customer" value={j.customer_name || '—'} sub={j.customer_mob_no || undefined} />
-            <QuickStat icon={HardHat} label="Technician" value={j.easyfixer_name || 'Not yet allocated'} sub={j.easyfixer_mobile || undefined} accent={!!j.easyfixer_name} />
+            <QuickStat icon={HardHat} label="Technician" value={j.easyfixer_name || 'Not yet allocated'} accent={!!j.easyfixer_name} />
           </div>
         </div>
       </div>
