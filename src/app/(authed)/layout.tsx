@@ -145,11 +145,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 
   return (
     <SpocContext.Provider value={spoc}>
-    <div className="min-h-screen flex bg-slate-50">
-      {/* Sidebar */}
+    <div className="min-h-screen bg-slate-50">
+      {/* Sidebar — fixed on every breakpoint so it stays visible while
+          the main column scrolls. Mobile keeps the overlay behaviour
+          (no margin push); desktop pushes the main column right via
+          ml-16 / ml-64 below to make room for the fixed sidebar. */}
       <aside
         className={cn(
-          'fixed md:static inset-y-0 left-0 z-40 flex flex-col transition-all duration-200',
+          'fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200',
           'bg-gradient-to-b from-[#d9212b] via-[#b91c1c] to-[#7f1d1d] text-white shadow-2xl',
           sidebarOpen ? 'w-64' : 'w-0 md:w-16 overflow-hidden'
         )}
@@ -190,8 +193,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
         </nav>
       </aside>
 
-      {/* Main column: navbar + content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main column: navbar + content.
+          Left margin matches sidebar width on desktop so content
+          doesn't sit under the fixed sidebar. Mobile keeps ml-0 since
+          the sidebar overlays instead of pushing. */}
+      <div className={cn(
+        'flex flex-col min-w-0 transition-[margin] duration-200',
+        sidebarOpen ? 'md:ml-64' : 'ml-0 md:ml-16'
+      )}>
         <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center px-4 md:px-6 gap-4">
           <button
             type="button"

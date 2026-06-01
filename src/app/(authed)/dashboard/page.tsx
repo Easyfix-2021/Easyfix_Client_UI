@@ -595,14 +595,25 @@ export default function OrderHistoryPage() {
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
-                    <span className={cn('badge ring-1', statusBadgeClass(j.job_status))}>
+                    {/* Status Of Order — filled pill button. Colour
+                        varies per status code via statusBadgeClass(). */}
+                    <span className={cn(
+                      'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
+                      statusBadgeClass(j.job_status)
+                    )}>
                       {STATUS_LABELS[j.job_status] || `Status ${j.job_status}`}
                     </span>
                   </td>
-                  {/* "Bucket" — legacy showed a separate computed string;
-                       in the new schema this maps to the same human label
-                       as Status Of Order unless we add a backend bucketer. */}
-                  <td className="text-xs text-slate-600">{STATUS_LABELS[j.job_status] || '—'}</td>
+                  {/* Bucket — outline-style chip so it's visually
+                      distinct from the filled Status pill next to it.
+                      Legacy showed a separate computed string; in the
+                      new schema this maps to the same human label as
+                      Status until a backend bucketer is wired. */}
+                  <td>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border border-slate-300 bg-white text-slate-700 whitespace-nowrap">
+                      {STATUS_LABELS[j.job_status] || '—'}
+                    </span>
+                  </td>
                   <td className="text-xs">{j.source_type || '—'}</td>
                   <td className="text-xs">{age != null ? `${age} d` : '—'}</td>
                 </tr>
