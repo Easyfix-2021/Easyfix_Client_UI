@@ -31,7 +31,7 @@ import {
 import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
 import { ApiError, downloadBlob } from '@/lib/api';
 import { useSpoc } from '@/lib/spoc-context';
-import { STATUS_LABELS } from '@/lib/utils';
+import { getBucketLabel } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
 
@@ -83,17 +83,22 @@ const LEGACY_STATUS_SET = [0, 1, 2, 3, 5, 6, 7, 9, 10, 15, 20, 21, 22];
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20];
 
 // Bucket options for the "All Orders" tab filter pickers.
+// Labels + value-to-status mapping mirror the legacy
+// Angular_ClientDashboard `Buckets` constant in
+// components/models/shared.model.ts (1:1 — names, order, status codes).
+// "Fulfilment" intentionally spelt with the legacy double-l so SPOCs
+// who learned the dashboard recognise the term unchanged.
 const BUCKET_OPTIONS: MultiSelectOption<string>[] = [
-  { value: '0',    label: 'Unconfirmed' },
-  { value: '1',    label: 'Scheduled' },
-  { value: '2',    label: 'In-Progress' },
-  { value: '3,5',  label: 'Completed' },
-  { value: '15',   label: 'Awaiting Approval' },
-  { value: '21',   label: 'On Hold' },
-  { value: '10',   label: 'Revisit' },
-  { value: '9',    label: 'Call Later' },
-  { value: '7',    label: 'Enquiry' },
-  { value: '6',    label: 'Cancelled' },
+  { value: '9',    label: 'New Tickets' },
+  { value: '0',    label: 'Allocated - Unallocated' },
+  { value: '1',    label: 'TX On Going' },
+  { value: '2,20', label: 'TX On Location' },
+  { value: '10',   label: 'Under EF Audit' },
+  { value: '15',   label: 'Approve Estimate' },
+  { value: '21',   label: 'Fullfillment On Hold' },
+  { value: '3,5',  label: 'Completed - VisitCompleted' },
+  { value: '6',    label: 'Failed - Cancelled' },
+  { value: '7',    label: 'Failed - Enquiry' },
 ];
 
 function statusBadgeClass(status: number) {
@@ -595,23 +600,22 @@ export default function OrderHistoryPage() {
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
-                    {/* Status Of Order — filled pill button. Colour
-                        varies per status code via statusBadgeClass(). */}
+                    {/* Status Of Order — filled pill button. Label
+                        comes from getBucketLabel() (legacy parity:
+                        same wording the Angular dashboard showed). */}
                     <span className={cn(
                       'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
                       statusBadgeClass(j.job_status)
                     )}>
-                      {STATUS_LABELS[j.job_status] || `Status ${j.job_status}`}
+                      {getBucketLabel(j.job_status)}
                     </span>
                   </td>
-                  {/* Bucket — outline-style chip so it's visually
-                      distinct from the filled Status pill next to it.
-                      Legacy showed a separate computed string; in the
-                      new schema this maps to the same human label as
-                      Status until a backend bucketer is wired. */}
+                  {/* Bucket — outline-style chip with the same legacy
+                      bucket label. Visually distinct from the filled
+                      Status pill via the white-bg outline style. */}
                   <td>
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border border-slate-300 bg-white text-slate-700 whitespace-nowrap">
-                      {STATUS_LABELS[j.job_status] || '—'}
+                      {getBucketLabel(j.job_status)}
                     </span>
                   </td>
                   <td className="text-xs">{j.source_type || '—'}</td>
