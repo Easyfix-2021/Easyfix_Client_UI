@@ -30,7 +30,7 @@ import {
   User, Briefcase, HardHat, Tag, MessageSquare, ImageIcon,
   CheckCircle2, XCircle, Loader2, IndianRupee, Hash,
   Activity, FileText, X as XIcon, ClipboardList,
-  PhoneCall, Star, Flame, Headphones,
+  PhoneCall, Star, Flame, Headphones, ShoppingCart,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
@@ -71,6 +71,10 @@ type Job = {
   approval_reject_date_time: string | null;
   approval_sent_on_date_time: string | null;
   approval_reject_reason: string | null;
+  // Estimate-status card needs the SPOC name who actioned (approved /
+  // rejected). Backed by `apc.contact_name` join on
+  // tbl_job.approved_by_client_contact (added to LIST_JOIN).
+  approved_by_contact_name: string | null;
   time_slot: string | null;
   is_escalated?: boolean | number | null;
   approved_by_client: number | null;
@@ -79,6 +83,17 @@ type Job = {
   primary_job_id: number | null;
   job_reopen_flag: number | null;
   full_fillment_reason: string | null;
+  // Free-text comment the SPOC typed in the "Notes for Technician"
+  // field on the New Order form. Stored on tbl_job.efr_special_notes
+  // (the dedicated technician-facing column).
+  efr_special_notes: string | null;
+  // collected_by — legacy tbl_job code for who pays for the visit fee:
+  //   1 = Easyfixer            → "Paid by Customer"
+  //   2 = Easyfix              → "Free for customer"
+  //   3 = Client               → "Paid by Client"
+  //   0 / null = Any           → no label
+  // Matches the New Order form's payment radio (`form.payment`).
+  collected_by: number | null;
   services: Array<{
     job_service_id: number;
     service_id: number | null;
@@ -149,29 +164,49 @@ function num(v: number | string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// ─── Status timeline ────────────────────────────────────────────────
-// Each milestone has a status threshold; reached if current status >=
-// threshold, OR specific date column is filled. Color flips to brand
-// red when reached, otherwise muted slate.
+/*
+ * Payment mode label — translates tbl_job.collected_by into the human
+ * phrase the SPOC picked at booking time. Mirrors the labels on the
+ * New Order page's payment radio (Free for customer / Paid by Customer)
+ * and the legacy CRM dropdown.
+ */
+function paymentModeLabel(code: number | null | undefined): string | null {
+  switch (Number(code)) {
+    case 1: return 'Paid by Customer';
+    case 2: return 'Free for customer';
+    case 3: return 'Paid by Client';
+    default: return null;
+  }
+}
+
+// ─── Order Lifecycle (6-step) ───────────────────────────────────────
+// Labels mirror the legacy Angular `order-progress-bar-top` columns 1:1
+// (job-detail.component.html lines 113-131):
+//   1. Ticket Created   — j.ticket_created_date_time
+//   2. Cx Appointment   — j.requested_date_time / status >= 1
+//   3. Tx Allocated     — j.scheduled_date_time / fk_easyfixter_id set
+//   4. Work Progress    — j.checkin_date_time / status 2
+//   5. Under Audit      — j.checkout_date_time / status 10
+//   6. Billing Status   — terminal (status 3 / 5 / 22) or rejected (6)
 type Milestone = { key: string; label: string; reached: boolean; date: string | null };
 function buildTimeline(j: Job): Milestone[] {
   return [
     { key: 'created', label: 'Ticket Created',
-      reached: !!j.created_date_time,
-      date: j.created_date_time },
-    { key: 'scheduled', label: 'Scheduled',
-      reached: !!j.scheduled_date_time || j.job_status >= 1,
+      reached: !!(j.ticket_created_date_time || j.created_date_time),
+      date: j.ticket_created_date_time || j.created_date_time },
+    { key: 'cx_appointment', label: 'Cx Appointment',
+      reached: !!j.requested_date_time || j.job_status >= 1,
+      date: j.requested_date_time },
+    { key: 'tx_allocated', label: 'Tx Allocated',
+      reached: !!j.scheduled_date_time || !!j.easyfixer_name || j.job_status >= 1,
       date: j.scheduled_date_time },
-    { key: 'checkin', label: 'On Location',
-      reached: !!j.checkin_date_time,
+    { key: 'work_progress', label: 'Work Progress',
+      reached: !!j.checkin_date_time || j.job_status === 2 || j.job_status === 20,
       date: j.checkin_date_time },
-    { key: 'checkout', label: 'Work Done',
-      reached: !!j.checkout_date_time,
+    { key: 'under_audit', label: 'Under Audit',
+      reached: !!j.checkout_date_time || j.job_status === 10,
       date: j.checkout_date_time },
-    { key: 'approved', label: 'Approved',
-      reached: !!j.approved_on_date_time,
-      date: j.approved_on_date_time },
-    { key: 'closed', label: 'Closed',
+    { key: 'billing', label: 'Billing Status',
       reached: [3, 5, 6].includes(j.job_status),
       date: [3, 5].includes(j.job_status) ? j.checkout_date_time : null },
   ];
@@ -322,6 +357,29 @@ export default function JobDetailPage() {
     .filter((img) => (img.image_category || '').toLowerCase() === 'feedback')
     .sort((a, b) => b.image_id - a.image_id)[0] || null;
 
+  /*
+   * PO attachments — every tbl_job_image row tagged with image_category
+   * = 'PO'. Mirrors legacy Angular job-detail.component.ts#poopen which
+   * filters jobImages by `imageCategory === 'PO'` and opens each in a
+   * new tab on click. The button is gated on the job being Completed
+   * (status 3 or 5) — same predicate as the legacy `currentStatus ===
+   * 'Completed'` check on the HTML — and on at least one PO row being
+   * present, so a job with no PO uploaded shows no button.
+   */
+  const poImages = (j.images || [])
+    .filter((img) => (img.image_category || '').toLowerCase() === 'po')
+    .sort((a, b) => b.image_id - a.image_id);
+  const isCompleted = j.job_status === 3 || j.job_status === 5;
+  function openPo() {
+    // Pop a new tab per PO file — matches legacy forEach + window.open.
+    // Browsers may block subsequent tabs if the first opens off a
+    // single click; for completed jobs operators normally only have 1
+    // PO attached so this is fine in practice.
+    for (const img of poImages) {
+      window.open(imageSrc(img), '_blank', 'noopener,noreferrer');
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto pb-10 space-y-5">
       {/* Sticky top bar — Back link + title + status */}
@@ -365,68 +423,88 @@ export default function JobDetailPage() {
               <ClipboardList className="w-4 h-4" /> Jobsheet
             </a>
           )}
+          {/* PO button — only on Completed jobs that have at least one
+              PO image on tbl_job_image. Clicking pops a new tab per PO
+              file (legacy parity: forEach + window.open). Sits to the
+              right of Jobsheet so the two ops artefacts cluster
+              together at the end of the sticky header. */}
+          {isCompleted && poImages.length > 0 && (
+            <button
+              type="button"
+              onClick={openPo}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm shrink-0"
+              title={`Open PO${poImages.length > 1 ? ` (${poImages.length} files)` : ''}`}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              PO{poImages.length > 1 ? ` (${poImages.length})` : ''}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Hero — quick stats strip */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
-        <div className="p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-            <div className="min-w-0">
-              <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Reference IDs</div>
-              <div className="flex flex-wrap gap-2">
-                {j.job_reference_id && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-mono font-semibold">
-                    RefId · {j.job_reference_id}
-                  </span>
-                )}
-                {j.client_ref_id && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-mono font-semibold">
-                    Client Ref Id · {j.client_ref_id}
-                  </span>
-                )}
-                {j.job_type && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
-                    <Tag className="w-3 h-3" /> {j.job_type}
-                  </span>
-                )}
-                {j.source_type && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
-                    Source · {j.source_type}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* Sub-job / Parent-job navigation */}
-            {(j.sub_job_id || (j.primary_job_id && j.primary_job_id > 0)) && (
-              <div className="flex flex-col items-end gap-1 text-xs">
-                {j.primary_job_id && j.primary_job_id > 0 && (
-                  <Link href={`/jobs/${j.primary_job_id}`} className="text-primary hover:underline">
-                    ← Parent {j.primary_job_id}
-                  </Link>
-                )}
-                {j.sub_job_id && (
-                  <Link href={`/jobs/${j.sub_job_id}`} className="text-primary hover:underline">
-                    Revisit {j.sub_job_id} →
-                  </Link>
-                )}
-              </div>
+      {/* Reference chips row — slim, no big white card. The hero used
+          to host the quick-stats strip; with that gone we don't need
+          the heavy `rounded-2xl + p-6` container. A single horizontal
+          chip row reads as a meta-line for the page and aligns visually
+          with the sticky breadcrumb above. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2 items-center">
+          {j.job_reference_id && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-mono font-semibold">
+              RefId · {j.job_reference_id}
+            </span>
+          )}
+          {j.client_ref_id && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-mono font-semibold">
+              Client Ref Id · {j.client_ref_id}
+            </span>
+          )}
+          {j.job_type && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+              <Tag className="w-3 h-3" /> {j.job_type}
+            </span>
+          )}
+          {j.source_type && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
+              Source · {j.source_type}
+            </span>
+          )}
+          {/* Payment-mode chip — derived from tbl_job.collected_by.
+              Emerald for "Free for customer" (no charge to end user),
+              amber for "Paid by Customer" so a SPOC scanning the page
+              can spot at a glance which jobs will have a customer-
+              facing invoice attached. */}
+          {paymentModeLabel(j.collected_by) && (
+            <span className={cn(
+              'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold',
+              j.collected_by === 2
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+            )}>
+              <IndianRupee className="w-3 h-3" />
+              {paymentModeLabel(j.collected_by)}
+            </span>
+          )}
+        </div>
+        {/* Sub-job / Parent-job navigation */}
+        {(j.sub_job_id || (j.primary_job_id && j.primary_job_id > 0)) && (
+          <div className="flex items-center gap-3 text-xs">
+            {j.primary_job_id && j.primary_job_id > 0 && (
+              <Link href={`/jobs/${j.primary_job_id}`} className="text-primary hover:underline">
+                ← Parent {j.primary_job_id}
+              </Link>
+            )}
+            {j.sub_job_id && (
+              <Link href={`/jobs/${j.sub_job_id}`} className="text-primary hover:underline">
+                Revisit {j.sub_job_id} →
+              </Link>
             )}
           </div>
-
-          {/* Quick-stats — 4 cells with subtle dividers */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200">
-            <QuickStat icon={Calendar} label="Ticket Created" value={formatDateTime(j.ticket_created_date_time || j.created_date_time) || '—'} />
-            <QuickStat icon={Clock} label="Appointment" value={formatDateTime(j.requested_date_time) || '—'} sub={j.time_slot || undefined} />
-            <QuickStat icon={User} label="Customer" value={j.customer_name || '—'} sub={j.customer_mob_no || undefined} />
-            <QuickStat icon={HardHat} label="Technician" value={j.easyfixer_name || 'Not yet allocated'} accent={!!j.easyfixer_name} />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Status timeline */}
-      <Section title="Status Timeline" icon={Activity}>
+      <Section title="Order Lifecycle" icon={Activity}>
         <div className="relative overflow-x-auto pb-2">
           <div className="flex items-start min-w-max">
             {timeline.map((m, i) => (
@@ -470,8 +548,10 @@ export default function JobDetailPage() {
         </div>
       </Section>
 
-      {/* Two-column grid — Customer | Job Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Two-column grid — Customer | Job Info.
+          items-stretch (grid default) + h-full on Section makes both
+          cards align flush at the bottom regardless of field count. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
         {/* Customer & Address */}
         <Section title="Customer & Location" icon={User}>
           <dl className="space-y-3 text-sm">
@@ -515,11 +595,19 @@ export default function JobDetailPage() {
                 <span className="whitespace-pre-wrap">{j.full_fillment_reason}</span>
               </Field>
             )}
+            {j.efr_special_notes && (
+              <Field label="Special Comments" icon={MessageSquare}>
+                <span className="whitespace-pre-wrap">{j.efr_special_notes}</span>
+              </Field>
+            )}
           </dl>
         </Section>
       </div>
 
       {/* Services / Estimate */}
+      {e && (
+        <div id="estimate" />
+      )}
       {e && (
         <Section title="Estimate" icon={IndianRupee}
           titleRight={
@@ -606,6 +694,152 @@ export default function JobDetailPage() {
               <p className="text-rose-800">{j.approval_reject_reason}</p>
             </div>
           )}
+        </Section>
+      )}
+
+      {/* ─── Estimate Status banner ──────────────────────────────────
+          Mirrors legacy job-detail.component.html lines 709-771.
+          Three exclusive states driven by the timestamp columns on
+          tbl_job:
+            • approval_sent_on AND no action     → SENT (blue/grey card,
+                                                    "Estimate Sent for
+                                                    Approval", scroll-to-
+                                                    line-items "View" btn)
+            • approved_on present                → APPROVED (emerald card,
+                                                    Approved By + On)
+            • approval_reject_on present         → REJECTED (rose card,
+                                                    Rejected By + On +
+                                                    rejection reason)
+          Card is hidden when nothing has been sent yet (legacy parity). */}
+      {(() => {
+        const sent     = j.approval_sent_on_date_time;
+        const approved = j.approved_on_date_time;
+        const rejected = j.approval_reject_date_time;
+        if (!sent && !approved && !rejected) return null;
+        const state =
+          rejected ? 'rejected'
+          : approved ? 'approved'
+          : 'sent';
+        return (
+          <Section title="Estimate Status" icon={FileText}>
+            {state === 'sent' && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3">
+                <div className="flex items-center gap-2 text-blue-900">
+                  <Mail className="w-5 h-5 text-blue-600" />
+                  <span className="font-semibold">Estimate Sent for Approval</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <a
+                    href="#estimate"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-100"
+                  >
+                    View
+                  </a>
+                  <span className="text-blue-900/70 font-medium">
+                    {formatDateTime(sent)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {state === 'approved' && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-emerald-900">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <span className="font-semibold">Estimate Approved</span>
+                </div>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
+                  <div className="flex gap-2">
+                    <dt className="text-emerald-900/60 font-medium">Approved By:</dt>
+                    <dd className="text-emerald-900">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="text-emerald-900/60 font-medium">Approved On:</dt>
+                    <dd className="text-emerald-900">{formatDateTime(approved) || '—'}</dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+            {state === 'rejected' && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50/60 px-4 py-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-rose-900">
+                  <XCircle className="w-5 h-5 text-rose-600" />
+                  <span className="font-semibold">Estimate Rejected</span>
+                </div>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
+                  <div className="flex gap-2">
+                    <dt className="text-rose-900/60 font-medium">Rejected By:</dt>
+                    <dd className="text-rose-900">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="text-rose-900/60 font-medium">Rejected On:</dt>
+                    <dd className="text-rose-900">{formatDateTime(rejected) || '—'}</dd>
+                  </div>
+                </dl>
+                {j.approval_reject_reason && (
+                  <div className="mt-2 pl-7 text-sm">
+                    <div className="text-rose-900/60 font-medium uppercase tracking-wide text-[11px] mb-0.5">
+                      Reason Remark
+                    </div>
+                    <p className="text-rose-900 whitespace-pre-wrap">{j.approval_reject_reason}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
+        );
+      })()}
+
+      {/* ─── Estimate Lifecycle ──────────────────────────────────────
+          Vertical timeline mirroring legacy job-detail.component.html
+          lines 773-816. The new backend tracks ONE cycle on tbl_job
+          (sent / approved / rejected timestamps), so the timeline has
+          at most 2 entries — Sent + Action — newest first, matching
+          the legacy reverse() call in job-detail.model.ts:173. */}
+      {(j.approval_sent_on_date_time || j.approved_on_date_time || j.approval_reject_date_time) && (
+        <Section title="Estimate Lifecycle" icon={Activity}>
+          <ol className="relative border-l-2 border-slate-200 ml-3 space-y-5 pl-6 py-1">
+            {/* Newest event first */}
+            {(j.approved_on_date_time || j.approval_reject_date_time) && (
+              <li className="relative">
+                <span className={cn(
+                  'absolute -left-[34px] top-1 w-4 h-4 rounded-full grid place-items-center ring-2 ring-white',
+                  j.approval_reject_date_time
+                    ? 'bg-rose-500'
+                    : 'bg-emerald-500'
+                )}>
+                  {j.approval_reject_date_time
+                    ? <XCircle className="w-3 h-3 text-white" />
+                    : <CheckCircle2 className="w-3 h-3 text-white" />}
+                </span>
+                <div className="text-xs text-slate-500">
+                  {formatDateTime(j.approval_reject_date_time || j.approved_on_date_time)}
+                </div>
+                <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                  Estimate {j.approval_reject_date_time ? 'Rejected' : 'Approved'}
+                </div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  Action By: <span className="font-medium">{j.approved_by_contact_name || j.client_spoc_name || '—'}</span>
+                </div>
+              </li>
+            )}
+            {/* Sent event */}
+            {j.approval_sent_on_date_time && (
+              <li className="relative">
+                <span className="absolute -left-[34px] top-1 w-4 h-4 rounded-full bg-blue-500 grid place-items-center ring-2 ring-white">
+                  <Mail className="w-3 h-3 text-white" />
+                </span>
+                <div className="text-xs text-slate-500">
+                  {formatDateTime(j.approval_sent_on_date_time)}
+                </div>
+                <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                  Estimate Sent to Client
+                </div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  Sent By: <span className="font-medium">{j.owner_name || j.created_by_name || '—'}</span>
+                </div>
+              </li>
+            )}
+          </ol>
         </Section>
       )}
 
@@ -959,8 +1193,13 @@ function Section({
   titleRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // h-full + flex-col let two side-by-side sections in a CSS grid row
+  // stretch to the same height — the white card body fills the
+  // remaining space below the header, so the Customer & Location card
+  // and Job Information card line up flush at the bottom even when
+  // one has more fields than the other.
   return (
-    <div>
+    <div className="h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary/10 grid place-items-center">
@@ -970,7 +1209,7 @@ function Section({
         </div>
         {titleRight}
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex-1">
         {children}
       </div>
     </div>

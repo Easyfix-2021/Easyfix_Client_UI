@@ -347,24 +347,29 @@ export default function CommittedAppointmentsPage() {
           <thead>
             <tr>
               <th>Job ID</th>
+              {/* Headers ported 1:1 from legacy ClientTable in
+                  job-status.model.ts (lines 11-22). The last user
+                  column reads "Team EasyFix" (the SPOC's team member
+                  who owns the row) — driven by status: createdBy on
+                  status=0, scheduledBy on status=1/2/20 (legacy
+                  upcoming-appointments.component.html line 89-91). */}
               <th>Client Ref ID</th>
-              <th>Reference ID</th>
-              <th>Appointment</th>
+              <th>REF JOB ID</th>
+              <th>Appointment Day</th>
               <th>Customer</th>
               <th>City</th>
-              <th>Category</th>
+              <th>Services Delivery</th>
               <th>Client SPOC</th>
-              <th>{tab === 'unallocated' ? 'Created By' : 'Scheduled By'}</th>
+              <th>Team EasyFix</th>
               <th>Age</th>
-              <th className="w-16">View</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={11} className="text-center text-slate-500 py-8">Loading…</td></tr>
+              <tr><td colSpan={10} className="text-center text-slate-500 py-8">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={11} className="text-center text-slate-500 py-8">No appointments found.</td></tr>
+              <tr><td colSpan={10} className="text-center text-slate-500 py-8">No appointments found.</td></tr>
             )}
             {!loading && items.map((j) => {
               const age = ageInDays(j.ticket_created_date_time);
@@ -394,15 +399,6 @@ export default function CommittedAppointmentsPage() {
                   <td className="text-sm">{j.client_spoc_name || '—'}</td>
                   <td className="text-sm">{lastActorName}</td>
                   <td className="text-xs">{age != null ? `${age} Days` : '—'}</td>
-                  <td>
-                    <Link
-                      href={`/jobs/${j.job_id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:text-primary hover:bg-primary-50 transition"
-                      title="View details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Link>
-                  </td>
                 </tr>
               );
             })}

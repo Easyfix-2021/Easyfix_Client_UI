@@ -355,7 +355,12 @@ export default function NewOrderPage() {
         collected_by: form.payment === 'free' ? 2 : 1,
         additional_name:   form.alternate_name.trim() || '',
         additional_number: form.alternate_mob_no.trim() || '',
-        remarks: form.notes.trim() || null,
+        // "Notes for technician" — saved on tbl_job.efr_special_notes
+        // (the dedicated technician-facing notes column). `remarks` is
+        // reserved for the internal narrative comment thread; keeping
+        // them separate matches the legacy CRM and lets the technician
+        // app surface this exact field on the Job Sheet screen.
+        efr_special_notes: form.notes.trim() || null,
         custom_property: customProps
           .map((cp) => `${cp.label || cp.name}:${form.custom_props[cp.name] ?? ''}`)
           .filter((s) => !s.endsWith(':'))
