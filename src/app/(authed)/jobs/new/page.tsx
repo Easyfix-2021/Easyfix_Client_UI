@@ -101,9 +101,16 @@ const EMPTY: FormState = {
   appt_slot: '',
 };
 
+/*
+ * Greeting name — return the SPOC's full display name verbatim
+ * ("Mr. Rahul Jadhav") for the "Hello …" header on the New Order page.
+ * Legacy ACD splits on whitespace and grabs [0], which produced just
+ * "Mr." when the stored name carries a salutation. We render the full
+ * trimmed string instead so the greeting reads "Hello Mr. Rahul Jadhav".
+ */
 function firstNameOf(full?: string): string {
   if (!full) return '';
-  return full.trim().split(/\s+/)[0] ?? '';
+  return full.trim();
 }
 
 function humanize(name: string): string {

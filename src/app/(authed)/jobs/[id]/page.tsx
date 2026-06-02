@@ -22,13 +22,15 @@
  *   7. Comments / Remarks (read-only)
  */
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, AlertTriangle, Phone, Mail, MapPin, Calendar, Clock,
   User, Briefcase, HardHat, Tag, MessageSquare, ImageIcon,
   CheckCircle2, XCircle, Loader2, IndianRupee, Hash,
   Activity, FileText, X as XIcon, ClipboardList,
+  PhoneCall, Star, Flame, Headphones,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
@@ -188,6 +190,17 @@ export default function JobDetailPage() {
   const [showReject, setShowReject] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
 
+  // Contact + Escalate dialogs (legacy parity — Angular
+  // job-detail.component.{html,ts}). callDialog opens the "Who Would
+  // Need To Contact" picker; escalateDialog opens the reason + comment
+  // form. flashOk is a transient success toast shown after submit.
+  const [callDialog, setCallDialog] = useState(false);
+  const [escalateDialog, setEscalateDialog] = useState(false);
+  const [escalateReasons, setEscalateReasons] = useState<Array<{ id: number; label: string }>>([]);
+  const [escalateReasonId, setEscalateReasonId] = useState<number | ''>('');
+  const [escalateComment, setEscalateComment] = useState('');
+  const [flashOk, setFlashOk] = useState<string | null>(null);
+
   async function reloadBoth() {
     await Promise.allSettled([job.reload(), estimate.reload()]);
   }
@@ -211,6 +224,46 @@ export default function JobDetailPage() {
       await reloadBoth();
     } catch (err) {
       setActError(err instanceof ApiError ? err.message : 'Reject failed');
+    } finally { setActing(false); }
+  }
+
+  /*
+   * Open the Escalate dialog. Lazy-loads the reason list on first open
+   * (actionType=23, legacy `escalateActionType`). Subsequent opens reuse
+   * the cached list — it's a tiny lookup that rarely changes.
+   */
+  async function openEscalateDialog() {
+    setEscalateDialog(true);
+    setActError(null);
+    if (escalateReasons.length === 0) {
+      try {
+        const res = await api.get<Array<{ id: number; label: string }>>(
+          '/lookup/reasons?actionType=23'
+        );
+        setEscalateReasons(res);
+      } catch (err) {
+        setActError(err instanceof ApiError ? err.message : 'Failed to load reasons');
+      }
+    }
+  }
+
+  async function submitEscalate() {
+    if (!escalateReasonId) { setActError('Please select a reason'); return; }
+    if (escalateComment.trim().length < 3) { setActError('Please share a comment (min 3 chars)'); return; }
+    setActing(true); setActError(null);
+    try {
+      await api.post(`/jobs/${id}/escalate`, {
+        reasonId: Number(escalateReasonId),
+        comment: escalateComment.trim(),
+      });
+      setEscalateDialog(false);
+      setEscalateReasonId('');
+      setEscalateComment('');
+      setFlashOk('Job Escalate Successfull');
+      setTimeout(() => setFlashOk(null), 3000);
+      await reloadBoth();
+    } catch (err) {
+      setActError(err instanceof ApiError ? err.message : 'Escalate failed');
     } finally { setActing(false); }
   }
 
@@ -666,12 +719,206 @@ export default function JobDetailPage() {
         </Section>
       )}
 
+      {/* ─── Action buttons (legacy parity) ────────────────────────────
+          Three colored buttons matching Angular_ClientDashboard
+          job-detail.component.html lines 877-894:
+            • Contact       — purple #6D20BF, opens callDialog
+            • Send Feedback — dark teal #013249, amber star icon
+            • Escalate      — red #E31E25 (brand), opens escalateDialog
+          On terminal jobs (status 3/5 = Completed) the third button is
+          hidden so SPOCs don't escalate already-closed work. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <button
+          type="button"
+          onClick={() => setCallDialog(true)}
+          className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+          style={{ backgroundColor: '#6D20BF' }}
+        >
+          <PhoneCall className="w-4 h-4" />
+          Contact
+        </button>
+        <button
+          type="button"
+          onClick={() => setFlashOk('Feedback coming soon')}
+          className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+          style={{ backgroundColor: '#013249' }}
+        >
+          <Star className="w-4 h-4" style={{ color: '#FFAA1B', fill: '#FFAA1B' }} />
+          Send Feedback
+        </button>
+        {![3, 5].includes(j.job_status) && (
+          <button
+            type="button"
+            onClick={openEscalateDialog}
+            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+            style={{ backgroundColor: '#E31E25' }}
+          >
+            <Flame className="w-4 h-4" />
+            Escalate
+          </button>
+        )}
+      </div>
+
+      {/* Success flash — short toast under the action buttons */}
+      {flashOk && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 inline-flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          {flashOk}
+        </div>
+      )}
+
       {/* Error inline */}
       {actError && (
         <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {actError}
         </div>
       )}
+
+      {/* Contact dialog — "Who Would Need To Contact". Mirrors legacy
+          p-dialog at job-detail.component.html line 1095. The three sub-
+          buttons are tel: links so the browser's native dialer fires
+          (no Click2Call backend required). Sub-buttons are hidden when
+          the respective number isn't on file (Handyman, Easyfix Support). */}
+      <Modal open={callDialog} onClose={() => setCallDialog(false)}>
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
+          <h2 className="text-lg font-bold text-slate-900">Who Would Need To Contact</h2>
+          <button
+            type="button"
+            onClick={() => setCallDialog(false)}
+            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 space-y-3">
+          {j.customer_mob_no ? (
+            <a
+              href={`tel:${j.customer_mob_no}`}
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+              style={{ backgroundColor: '#6D20BF' }}
+            >
+              <User className="w-4 h-4" /> Call Customer
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-slate-400 bg-slate-100 font-semibold text-sm cursor-not-allowed"
+            >
+              <User className="w-4 h-4" /> Customer · no number on file
+            </button>
+          )}
+          {j.easyfixer_mobile ? (
+            <a
+              href={`tel:${j.easyfixer_mobile}`}
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+              style={{ backgroundColor: '#6D20BF' }}
+            >
+              <HardHat className="w-4 h-4" /> Call Handyman
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-slate-400 bg-slate-100 font-semibold text-sm cursor-not-allowed"
+            >
+              <HardHat className="w-4 h-4" /> Handyman · not yet allocated
+            </button>
+          )}
+          <a
+            href="tel:+918068499000"
+            className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
+            style={{ backgroundColor: '#6D20BF' }}
+          >
+            <Headphones className="w-4 h-4" /> Call Easyfix Support
+          </a>
+        </div>
+      </Modal>
+
+      {/* Escalate dialog — mirrors legacy p-dialog at line 939.
+          Reason dropdown + comment textarea, Submit / Cancel buttons.
+          Reasons load lazily (actionType=23) on first dialog open. */}
+      <Modal
+        open={escalateDialog}
+        onClose={() => setEscalateDialog(false)}
+        allowBackdropClose={!acting}
+      >
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
+          <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
+            <Flame className="w-5 h-5" style={{ color: '#E31E25' }} />
+            Escalate Job
+          </h2>
+          <button
+            type="button"
+            onClick={() => setEscalateDialog(false)}
+            disabled={acting}
+            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            aria-label="Close"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Reason <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={escalateReasonId}
+              onChange={(e) => setEscalateReasonId(e.target.value ? Number(e.target.value) : '')}
+              className="input w-full"
+              disabled={acting}
+            >
+              <option value="">Select your reason to escalate</option>
+              {escalateReasons.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+            {escalateReasons.length === 0 && (
+              <p className="text-[11px] text-slate-400 mt-1 inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading reasons…
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Comment <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={escalateComment}
+              onChange={(e) => setEscalateComment(e.target.value)}
+              className="input w-full resize-y min-h-[90px]"
+              placeholder="Please share comments for escalation"
+              disabled={acting}
+            />
+          </div>
+          {actError && (
+            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {actError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setEscalateDialog(false)}
+              disabled={acting}
+              className="px-4 py-2 rounded-md text-sm font-semibold border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+            >
+              No, Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submitEscalate}
+              disabled={acting}
+              className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5"
+            >
+              {acting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</> : 'Submit'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Image zoom modal */}
       {zoomImage && (
@@ -773,5 +1020,52 @@ function Field({
         <dd className="text-sm text-slate-800">{children}</dd>
       </div>
     </div>
+  );
+}
+
+/*
+ * Modal — portals the dialog overlay straight to document.body so it
+ * covers the full viewport regardless of any scroll containers,
+ * stacking contexts, or transformed ancestors. Without the portal the
+ * `fixed inset-0` backdrop is scoped to the nearest containing block,
+ * which lets the page show through above/below the dialog when the
+ * outer <main> scrolls (the bug the user was seeing).
+ *
+ * Also locks <body> scroll while the dialog is open and re-enables it
+ * on close, so the page underneath doesn't jiggle when the user
+ * scrolls inside the modal.
+ */
+function Modal({
+  open, onClose, children, allowBackdropClose = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  allowBackdropClose?: boolean;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+  if (!open || !mounted) return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={() => allowBackdropClose && onClose()}
+    >
+      <div
+        className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
   );
 }
