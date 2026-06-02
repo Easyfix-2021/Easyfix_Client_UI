@@ -953,42 +953,66 @@ export default function JobDetailPage() {
         </Section>
       )}
 
-      {/* ─── Action buttons (legacy parity) ────────────────────────────
-          Three colored buttons matching Angular_ClientDashboard
-          job-detail.component.html lines 877-894:
-            • Contact       — purple #6D20BF, opens callDialog
-            • Send Feedback — dark teal #013249, amber star icon
-            • Escalate      — red #E31E25 (brand), opens escalateDialog
-          On terminal jobs (status 3/5 = Completed) the third button is
-          hidden so SPOCs don't escalate already-closed work. */}
+      {/* ─── Action buttons — bold gradient cards ────────────────────
+          Refreshed 2026-06 v2. The white-card v1 read as "too subtle"
+          for enterprise SPOCs scanning the page quickly. v2 keeps the
+          icon-tile + label + subtitle pattern but switches to bold
+          gradient backgrounds with white text. Modern Stripe / Razorpay
+          / Klarna vibe — colourful + premium, not loud-and-flat like
+          the original purple/teal/red Material blocks.
+          Functions and legacy gate (status 3/5 hides Escalate) unchanged. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <button
           type="button"
           onClick={() => setCallDialog(true)}
-          className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-          style={{ backgroundColor: '#6D20BF' }}
+          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 overflow-hidden"
         >
-          <PhoneCall className="w-4 h-4" />
-          Contact
+          {/* Decorative sheen — sits behind the content, ignores clicks */}
+          <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
+          <div className="relative flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg bg-white/15 grid place-items-center shrink-0 backdrop-blur-sm ring-1 ring-white/20">
+              <PhoneCall className="w-5 h-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold">Contact</span>
+              <span className="block text-xs text-white/80 truncate">Call customer or technician</span>
+            </span>
+          </div>
         </button>
+
         <button
           type="button"
           onClick={() => setFlashOk('Feedback coming soon')}
-          className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-          style={{ backgroundColor: '#013249' }}
+          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 overflow-hidden"
         >
-          <Star className="w-4 h-4" style={{ color: '#FFAA1B', fill: '#FFAA1B' }} />
-          Send Feedback
+          <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
+          <div className="relative flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg bg-white/15 grid place-items-center shrink-0 backdrop-blur-sm ring-1 ring-white/20">
+              <Star className="w-5 h-5 fill-current" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold">Send Feedback</span>
+              <span className="block text-xs text-white/85 truncate">Share what worked or didn&apos;t</span>
+            </span>
+          </div>
         </button>
+
         {![3, 5].includes(j.job_status) && (
           <button
             type="button"
             onClick={openEscalateDialog}
-            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-            style={{ backgroundColor: '#E31E25' }}
+            className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-rose-500 via-red-500 to-red-600 overflow-hidden"
           >
-            <Flame className="w-4 h-4" />
-            Escalate
+            <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
+            <div className="relative flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-white/15 grid place-items-center shrink-0 backdrop-blur-sm ring-1 ring-white/20">
+                <Flame className="w-5 h-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold">Escalate</span>
+                <span className="block text-xs text-white/85 truncate">Flag this for urgent ops attention</span>
+              </span>
+            </div>
           </button>
         )}
       </div>

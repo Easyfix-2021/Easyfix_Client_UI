@@ -1,27 +1,31 @@
 'use client';
 
 /*
- * My Profile — single-column light layout (2026-05-29 v3).
+ * Client Profile — alternate view of the SPOC profile organised as
+ * inline tabs (Identity · Reporting · Workflow Settings) instead of
+ * the vertical stacked sections used on /profile.
  *
- * Sidebar removed (dark slate felt out-of-brand for enterprise clients).
- * Replaced with a top "hero card" carrying avatar + name + designation +
- * verified pills + quick-stats strip. Sections stack vertically beneath
- * with subtle dividers; brand red is the primary accent throughout.
+ * Loads + saves the same backend endpoints as /profile
+ *   GET /api/client/profile
+ *   PUT /api/client/profile
+ * so any edit made here is mirrored on the existing page (and vice
+ * versa). The original /profile page is intentionally left untouched
+ * — this is an additional surface accessible from the new sidebar
+ * entry that's labelled with the client's company name.
  *
- * Other patterns kept from v2:
- *  - Floating save bar that only appears when dirty
- *  - Toggle CARDS (not rows) with icon tiles
- *  - Designation = plain text input (no dropdown)
- *  - Read-only verified fields with a "request edit" pencil
- *
- * Backend contract unchanged: GET / PUT /api/client/profile.
+ * Layout:
+ *   1. Hero card  (identical to /profile — avatar, name, designation,
+ *                  verified pills, client logo on the right)
+ *   2. Tab bar    (horizontal underline tabs — only the active tab
+ *                  shows its body underneath)
+ *   3. Tab body   (form fields for the active tab)
+ *   4. Save bar   (floats up when dirty, mirrors /profile)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   User, Briefcase, Phone, Mail, Smartphone, Send, Network,
-  ShieldCheck, CreditCard, Check, Save,
-  Loader2, Pencil, Linkedin, Fingerprint,
-  BadgeCheck, BellRing, FileBadge, AtSign,
+  ShieldCheck, CreditCard, Check, Save, Loader2, Pencil,
+  Linkedin, Fingerprint, BadgeCheck, BellRing, FileBadge,
   Sparkles, Wallet, X, Search, ChevronDown,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -40,13 +44,13 @@ type Profile = {
   email_cc: string | null;
   payment_mode: number | null;
   approval_by_client: number | null;
-  // Parent-client brand block (populated by GET /profile)
   client_id?: number | null;
   client_name?: string | null;
   client_logo_url?: string | null;
 };
 
 type TeamMember = { id: number; name: string | null; email: string | null };
+type TabKey = 'identity' | 'reporting' | 'workflow';
 
 const PAYMENT_MODES: { value: number; label: string }[] = [
   { value: 0, label: '— Not set —' },
@@ -58,6 +62,12 @@ const PAYMENT_MODES: { value: number; label: string }[] = [
   { value: 6, label: 'Bank transfer' },
 ];
 
+const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: 'identity',  label: 'Identity',          icon: User },
+  { key: 'reporting', label: 'Reporting',         icon: Network },
+  { key: 'workflow',  label: 'Workflow Settings', icon: Sparkles },
+];
+
 function initialsOf(name?: string | null) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -66,7 +76,7 @@ function initialsOf(name?: string | null) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function ProfilePage() {
+export default function ClientProfilePage() {
   const { data, loading, error: fetchError } = useFetchOnce<Profile>('/profile');
   const team = useFetchOnce<{ items: TeamMember[] }>('/team?status=all');
 
@@ -75,16 +85,16 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [tab, setTab] = useState<TabKey>('identity');
 
   useEffect(() => {
     if (data) { setP(data); setSnapshot(data); }
     if (fetchError) setError(fetchError);
   }, [data, fetchError]);
 
-  // useMemo so the reference is stable across renders — without it,
-  // every render creates a new [] and the downstream `useMemo`
-  // recomputes for nothing (and risks an infinite loop in any future
-  // useEffect that depends on it).
+  // Stable reference — avoids the infinite-loop trap the /profile
+  // page also guards against (recreating [] every render would force
+  // every downstream useMemo to recompute).
   const managerOptions = useMemo<TeamMember[]>(() => team.data?.items ?? [], [team.data]);
   const currentManager = useMemo(
     () => p?.manager_id ? managerOptions.find((m) => m.id === p.manager_id) ?? null : null,
@@ -140,28 +150,19 @@ export default function ProfilePage() {
   }
 
   return (
-    <form onSubmit={save} className="max-w-4xl mx-auto pb-28 space-y-6">
+    <form onSubmit={save} className="max-w-5xl mx-auto pb-28 space-y-6">
 
-      {/* ─── HERO CARD ────────────────────────────────────────────
-          Single light card with a thin red accent strip on the left.
-          Holds avatar, name, designation, verified pills, plus a
-          horizontal quick-stats strip. Enterprise-friendly: zero
-          gradients, soft shadows, white background, brand-red accents
-          only where they earn attention. */}
+      {/* ─── HERO CARD (identical to /profile) ─────────────────── */}
       <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        {/* Thin red side stripe — subtle brand presence */}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
         <div className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-start gap-5">
-            {/* Avatar — initials tile (camera removed; photo upload is
-                deferred until storage backend is wired). */}
             <div className="shrink-0 mx-auto md:mx-0">
               <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-primary-dark grid place-items-center text-3xl font-extrabold text-white shadow-md shadow-primary/20 ring-4 ring-white">
                 {initialsOf(p.contact_name)}
               </div>
             </div>
 
-            {/* Identity block */}
             <div className="flex-1 min-w-0 text-center md:text-left">
               <h1 className="text-2xl font-bold text-slate-900 leading-tight">
                 {p.contact_name || 'Unnamed'}
@@ -169,24 +170,14 @@ export default function ProfilePage() {
               <p className="text-sm text-slate-500 mt-1">
                 {p.contact_desgn || 'No designation set'}
               </p>
-              {/* Verified pills */}
               <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-3">
-                <Pill icon={Fingerprint} tone="slate">
-                  ID #{p.id}
-                </Pill>
-                <Pill icon={ShieldCheck} tone="emerald">
-                  Email verified
-                </Pill>
-                <Pill icon={ShieldCheck} tone="blue">
-                  Mobile verified
-                </Pill>
+                <Pill icon={Fingerprint} tone="slate">ID #{p.id}</Pill>
+                <Pill icon={ShieldCheck} tone="emerald">Email verified</Pill>
+                <Pill icon={ShieldCheck} tone="blue">Mobile verified</Pill>
               </div>
             </div>
 
-            {/* Right-side client brand block — logo when available, name
-                tag underneath. Hidden until profile loads. Keeps the SPOC
-                anchored to their client identity on the page they spend
-                the most time on. */}
+            {/* Right-side client brand block (same as /profile) */}
             {(p.client_logo_url || p.client_name) && (
               <div className="shrink-0 mx-auto md:mx-0 flex flex-col items-center gap-1.5">
                 <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 shadow-sm grid place-items-center overflow-hidden p-2">
@@ -197,8 +188,6 @@ export default function ProfilePage() {
                       alt={p.client_name || 'Client logo'}
                       className="max-w-full max-h-full object-contain"
                       onError={(e) => {
-                        // Hide broken image — the name pill below still
-                        // shows the brand so the layout doesn't collapse.
                         (e.currentTarget as HTMLImageElement).style.display = 'none';
                       }}
                     />
@@ -216,134 +205,136 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-
-          {/* Quick stats strip — divider line above */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-slate-200 rounded-xl overflow-hidden mt-7 border border-slate-200">
-            <QuickStat label="Email" value={p.contact_email} icon={Mail} />
-            <QuickStat label="Mobile" value={p.contact_no} icon={Smartphone} />
-            <QuickStat
-              label="Reports to"
-              value={currentManager?.name || '—'}
-              icon={Network}
-            />
-          </div>
         </div>
       </div>
 
-      {/* ─── IDENTITY ───────────────────────────────────────────── */}
-      <Section
-        title="Identity"
-        hint="How you appear across orders, invoices and your team."
-        icon={User}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Full name" required icon={User}
-            value={p.contact_name || ''}
-            onChange={(v) => setP({ ...p, contact_name: v })}
-          />
-          <FormField
-            label="Designation" required icon={Briefcase}
-            value={p.contact_desgn || ''}
-            onChange={(v) => setP({ ...p, contact_desgn: v })}
-            placeholder="Intern, SPOC, Operations Lead…"
-          />
-          <FormField
-            className="sm:col-span-2"
-            label="LinkedIn profile" icon={Linkedin}
-            value={p.linkedIn_profile || ''}
-            onChange={(v) => setP({ ...p, linkedIn_profile: v })}
-            placeholder="https://linkedin.com/in/your-handle"
-          />
+      {/* ─── TAB BAR ──────────────────────────────────────────────
+          One horizontal row, brand-red underline on the active tab.
+          Each tab shows its icon + label inline. Buttons are
+          type=button so they don't trigger the form's onSubmit. */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div role="tablist" aria-label="Profile sections" className="flex items-center gap-1 px-2 border-b border-slate-200 overflow-x-auto">
+          {TABS.map((t) => {
+            const active = tab === t.key;
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.key)}
+                className={cn(
+                  'relative inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold transition whitespace-nowrap',
+                  active
+                    ? 'text-primary'
+                    : 'text-slate-500 hover:text-slate-800'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {t.label}
+                {active && (
+                  <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-primary rounded-t-full" />
+                )}
+              </button>
+            );
+          })}
         </div>
-      </Section>
 
-      {/* ─── COMMUNICATION ──────────────────────────────────────── */}
-      <Section
-        title="Communication"
-        hint="Verified contacts that EasyFix uses to reach you."
-        icon={AtSign}
-      >
-        <div className="space-y-3">
-          <ReadOnlyField
-            label="Email address" icon={Mail}
-            value={p.contact_email}
-          />
-          <ReadOnlyField
-            label="Contact number" icon={Smartphone}
-            value={p.contact_no}
-          />
-          <FormField
-            label="Alternate mobile" icon={Phone}
-            value={p.contact_alt_no || ''}
-            onChange={(v) => setP({ ...p, contact_alt_no: v })}
-            placeholder="10-digit backup number"
-          />
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-900 inline-flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
-            Email and mobile are verified. Contact ops to request a change.
-          </div>
-        </div>
-      </Section>
+        {/* Tab body — single panel per tab */}
+        <div className="p-6">
+          {tab === 'identity' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  label="Full name" required icon={User}
+                  value={p.contact_name || ''}
+                  onChange={(v) => setP({ ...p, contact_name: v })}
+                />
+                <FormField
+                  label="Designation" icon={Briefcase}
+                  value={p.contact_desgn || ''}
+                  onChange={(v) => setP({ ...p, contact_desgn: v })}
+                  placeholder="Intern, SPOC, Operations Lead…"
+                />
+                <ReadOnlyField
+                  label="Email address" icon={Mail}
+                  value={p.contact_email}
+                />
+                <ReadOnlyField
+                  label="Contact number" icon={Smartphone}
+                  value={p.contact_no}
+                />
+                <FormField
+                  label="Alternate phone number" icon={Phone}
+                  value={p.contact_alt_no || ''}
+                  onChange={(v) => setP({ ...p, contact_alt_no: v })}
+                  placeholder="10-digit backup number"
+                />
+                <FormField
+                  label="LinkedIn profile" icon={Linkedin}
+                  value={p.linkedIn_profile || ''}
+                  onChange={(v) => setP({ ...p, linkedIn_profile: v })}
+                  placeholder="https://linkedin.com/in/your-handle"
+                />
+              </div>
+              <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-900 inline-flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
+                Email and mobile are verified. Contact ops to request a change.
+              </div>
+            </div>
+          )}
 
-      {/* ─── REPORTING ──────────────────────────────────────────── */}
-      <Section
-        title="Reporting"
-        hint="Who approves your orders and gets notified."
-        icon={Network}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ManagerSelect
-            value={p.manager_id}
-            options={managerOptions.filter((m) => m.id !== p.id)}
-            onChange={(id) => setP({ ...p, manager_id: id })}
-          />
-          <FormField
-            label="Notify on each order" icon={Send}
-            value={p.email_cc || ''}
-            onChange={(v) => setP({ ...p, email_cc: v })}
-            placeholder={currentManager?.email || 'cc-email@company.com'}
-            hint="Auto-cc'd email on every order raised by you."
-          />
-        </div>
-      </Section>
+          {tab === 'reporting' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ManagerSelect
+                value={p.manager_id}
+                options={managerOptions.filter((m) => m.id !== p.id)}
+                onChange={(id) => setP({ ...p, manager_id: id })}
+              />
+              <FormField
+                label="Notify on each order" icon={Send}
+                value={p.email_cc || ''}
+                onChange={(v) => setP({ ...p, email_cc: v })}
+                placeholder={currentManager?.email || 'cc-email@company.com'}
+                hint="Auto-cc'd email on every order raised by you."
+              />
+            </div>
+          )}
 
-      {/* ─── WORKFLOW SETTINGS ──────────────────────────────────── */}
-      <Section
-        title="Workflow settings"
-        hint="Approval flow and payment defaults for your orders."
-        icon={Sparkles}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <ToggleCard
-            icon={FileBadge}
-            title="Manager approval"
-            hint="Each order needs sign-off from your reporting manager before processing."
-            checked={p.approval_by_client === 1}
-            onChange={(v) => setP({ ...p, approval_by_client: v ? 1 : 0 })}
-          />
-          <ToggleCard
-            icon={BadgeCheck}
-            title="Preapproved"
-            hint="Skip manager approval — orders flow directly to fulfilment."
-            checked={p.approval_by_client === 2}
-            onChange={(v) => setP({ ...p, approval_by_client: v ? 2 : 0 })}
-          />
-          <ToggleCard
-            icon={BellRing}
-            title="Email RM on every order"
-            hint="Auto-cc the reporting manager when an order is raised."
-            checked={!!p.email_cc}
-            onChange={(v) =>
-              setP({ ...p, email_cc: v ? (currentManager?.email || p.email_cc || '') : '' })
-            }
-          />
-          <PaymentCard
-            value={p.payment_mode ?? 0}
-            onChange={(v) => setP({ ...p, payment_mode: v })}
-          />
+          {tab === 'workflow' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ToggleCard
+                icon={FileBadge}
+                title="Manager approval"
+                hint="Each order needs sign-off from your reporting manager before processing."
+                checked={p.approval_by_client === 1}
+                onChange={(v) => setP({ ...p, approval_by_client: v ? 1 : 0 })}
+              />
+              <ToggleCard
+                icon={BadgeCheck}
+                title="Preapproved"
+                hint="Skip manager approval — orders flow directly to fulfilment."
+                checked={p.approval_by_client === 2}
+                onChange={(v) => setP({ ...p, approval_by_client: v ? 2 : 0 })}
+              />
+              <ToggleCard
+                icon={BellRing}
+                title="Email RM on every order"
+                hint="Auto-cc the reporting manager when an order is raised."
+                checked={!!p.email_cc}
+                onChange={(v) =>
+                  setP({ ...p, email_cc: v ? (currentManager?.email || p.email_cc || '') : '' })
+                }
+              />
+              <PaymentCard
+                value={p.payment_mode ?? 0}
+                onChange={(v) => setP({ ...p, payment_mode: v })}
+              />
+            </div>
+          )}
         </div>
-      </Section>
+      </div>
 
       {/* Error inline */}
       {error && (
@@ -352,14 +343,14 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Floating SAVE BAR — slides up only when dirty. */}
+      {/* Floating SAVE BAR — same shape as /profile */}
       <div
         className={cn(
           'fixed left-0 right-0 bottom-0 z-40 transition-transform duration-300',
           isDirty || saving ? 'translate-y-0' : 'translate-y-full'
         )}
       >
-        <div className="max-w-4xl mx-auto px-4 pb-4">
+        <div className="max-w-5xl mx-auto px-4 pb-4">
           <div className="bg-white border border-slate-200 shadow-xl rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div className="text-sm text-slate-600 inline-flex items-center gap-2 min-w-0">
               {savedFlash ? (
@@ -404,7 +395,9 @@ export default function ProfilePage() {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// Subcomponents
+// Subcomponents — kept local on purpose. The /profile page has its
+// own copies with the same shape; if these ever drift, refactor both
+// into src/components/profile-fields.tsx in a single follow-up.
 // ───────────────────────────────────────────────────────────────────
 
 function Pill({
@@ -426,47 +419,6 @@ function Pill({
       <Icon className="w-3 h-3" />
       {children}
     </span>
-  );
-}
-
-function QuickStat({
-  label, value, icon: Icon,
-}: { label: string; value: string; icon: React.ComponentType<{ className?: string }> }) {
-  return (
-    <div className="bg-white px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1 inline-flex items-center gap-1">
-        <Icon className="w-3 h-3" />
-        {label}
-      </div>
-      <div className="text-sm text-slate-800 truncate font-medium">
-        {value || '—'}
-      </div>
-    </div>
-  );
-}
-
-function Section({
-  title, hint, icon: Icon, children,
-}: {
-  title: string; hint: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="flex items-start gap-3 mb-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 grid place-items-center shrink-0">
-          <Icon className="w-4 h-4 text-primary" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{hint}</p>
-        </div>
-      </div>
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -529,24 +481,8 @@ function ReadOnlyField({
   );
 }
 
-/*
- * ManagerSelect — type-ahead combobox.
- *
- * Replaces the native <select> so users can search the team list by
- * typing instead of scrolling through every option. Filter matches
- * against name + email; arrow keys move the highlight, Enter selects.
- *
- * Keyboard:
- *   ↓ / ↑   — move highlighted row
- *   Enter   — select highlighted row
- *   Esc     — close popover (or clear search if open + has text)
- *   Click outside — close popover
- *
- * State:
- *   open    — popover visibility
- *   query   — current search text
- *   active  — keyboard-highlighted index within filtered list
- */
+// ManagerSelect — search-as-you-type combobox. Shape mirrors the
+// /profile page's component so behaviour is identical.
 function ManagerSelect({
   value, options, onChange,
 }: {
@@ -560,7 +496,6 @@ function ManagerSelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // Outside-click closes the popover. Listener attached only while open.
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
@@ -570,7 +505,6 @@ function ManagerSelect({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
-  // Reset query + highlight when popover toggles open.
   useEffect(() => {
     if (open) { setQuery(''); setActive(0); }
   }, [open]);
@@ -580,7 +514,6 @@ function ManagerSelect({
     [options, value]
   );
 
-  // Case-insensitive filter across name + email. Empty query shows all.
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return options;
@@ -590,7 +523,6 @@ function ManagerSelect({
     );
   }, [options, query]);
 
-  // Keep the highlighted row in view as the user arrows up/down.
   useEffect(() => {
     if (!open) return;
     const el = listRef.current?.children[active] as HTMLElement | undefined;
@@ -620,7 +552,6 @@ function ManagerSelect({
     }
   }
 
-  // Button label — when nothing selected we show the placeholder pill.
   const buttonLabel = selected
     ? (selected.email ? `${selected.name} · ${selected.email}` : selected.name || `User #${selected.id}`)
     : '— Pick a manager —';
@@ -632,8 +563,6 @@ function ManagerSelect({
         <span className="text-rose-500">*</span>
       </label>
 
-      {/* Trigger button — looks like the existing input style for visual
-          parity with other form fields on this page. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -664,8 +593,6 @@ function ManagerSelect({
         </span>
       </button>
 
-      {/* Popover — search input + filtered options. Positioned right
-          below the trigger; max-height keeps long team lists scrollable. */}
       {open && (
         <div className="absolute z-30 mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
           <div className="relative border-b border-slate-100 p-2">
@@ -712,14 +639,6 @@ function ManagerSelect({
               );
             })}
           </ul>
-          {/* Footer hint — only useful when there are many options */}
-          {filtered.length > 5 && (
-            <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
-              <kbd className="px-1 rounded bg-slate-100 font-mono">↑↓</kbd> navigate ·{' '}
-              <kbd className="px-1 rounded bg-slate-100 font-mono">Enter</kbd> select ·{' '}
-              <kbd className="px-1 rounded bg-slate-100 font-mono">Esc</kbd> close
-            </div>
-          )}
         </div>
       )}
     </div>

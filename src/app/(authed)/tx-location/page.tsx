@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   MapPin, Search, ChevronLeft, ChevronRight,
-  Filter, X, AlertTriangle, Eye, Activity,
+  Filter, X, AlertTriangle, Activity,
 } from 'lucide-react';
 import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
 import { useSpoc } from '@/lib/spoc-context';
@@ -249,34 +249,44 @@ export default function TxOnLocationPage() {
         </div>
       )}
 
-      {/* Table — legacy ClientTable column shape */}
+      {/* Table — headers ported 1:1 from legacy ClientTable in
+          job-status.model.ts (lines 11-22). Same shape used on Tx on
+          Location in the Angular dashboard via
+          tx-on-location.component.ts#clientColTable. 10 columns,
+          no Technician or View — drilling into a job uses the
+          #Job ID link. */}
       <div className="card overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
               <th>Job ID</th>
               <th>Client Ref ID</th>
-              <th>Reference ID</th>
-              <th>Appointment</th>
+              <th>REF JOB ID</th>
+              <th>Appointment Day</th>
               <th>Customer</th>
               <th>City</th>
-              <th>Category</th>
+              <th>Services Delivery</th>
               <th>Client SPOC</th>
-              <th>Scheduled By</th>
-              <th>Technician</th>
+              <th>Team EasyFix</th>
               <th>Age</th>
-              <th className="w-16">View</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={12} className="text-center text-slate-500 py-8">Loading…</td></tr>
+              <tr><td colSpan={10} className="text-center text-slate-500 py-8">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={12} className="text-center text-slate-500 py-8">No technicians on location right now.</td></tr>
+              <tr><td colSpan={10} className="text-center text-slate-500 py-8">No technicians on location right now.</td></tr>
             )}
             {!loading && items.map((j) => {
               const age = ageInDays(j.ticket_created_date_time);
+              // Legacy logic: status=0 → createdBy, status=1/2/20 → scheduledBy
+              // (tx-on-location.component.html line 78-79). Falls back to
+              // the other field when one is missing so the column is rarely
+              // empty.
+              const teamEasyfixName = j.job_status === 0
+                ? (j.created_by_name || j.scheduled_by_name || '—')
+                : (j.scheduled_by_name || j.created_by_name || '—');
               return (
                 <tr key={j.job_id} className="hover:bg-primary-50/50">
                   <td>
@@ -297,27 +307,8 @@ export default function TxOnLocationPage() {
                   <td>{j.city_name || '—'}</td>
                   <td className="text-sm">{j.service_category_name || '—'}</td>
                   <td className="text-sm">{j.client_spoc_name || '—'}</td>
-                  <td className="text-sm">{j.scheduled_by_name || j.created_by_name || '—'}</td>
-                  <td className="text-sm">
-                    {j.easyfixer_name ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {j.easyfixer_name}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
+                  <td className="text-sm">{teamEasyfixName}</td>
                   <td className="text-xs">{age != null ? `${age} Days` : '—'}</td>
-                  <td>
-                    <Link
-                      href={`/jobs/${j.job_id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:text-primary hover:bg-primary-50 transition"
-                      title="View details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Link>
-                  </td>
                 </tr>
               );
             })}
