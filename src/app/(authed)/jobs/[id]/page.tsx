@@ -381,10 +381,15 @@ export default function JobDetailPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-10 space-y-5">
-      {/* Sticky top bar — Back link + title + status */}
-      <div className="sticky top-16 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-slate-50/95 backdrop-blur border-b border-slate-200">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-3">
+    <div className="max-w-7xl mx-auto pb-10 space-y-4">
+      {/* Top breadcrumb bar — Back link + title + status.
+          Was previously `sticky top-16 -mx-4 md:-mx-6` which caused
+          ~250px of empty space above the bar on tall enterprise screens
+          (the sticky placeholder + negative-margin interaction). It's
+          now a plain inline header that sits flush at the top of the
+          page. The status pill + Jobsheet / PO buttons stay together
+          on the same row. */}
+      <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => router.back()}
             className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-primary"
@@ -439,14 +444,20 @@ export default function JobDetailPage() {
               PO{poImages.length > 1 ? ` (${poImages.length})` : ''}
             </button>
           )}
-        </div>
       </div>
 
       {/* Reference chips row — slim, no big white card. The hero used
           to host the quick-stats strip; with that gone we don't need
           the heavy `rounded-2xl + p-6` container. A single horizontal
           chip row reads as a meta-line for the page and aligns visually
-          with the sticky breadcrumb above. */}
+          with the sticky breadcrumb above.
+          Hidden entirely when the row has NO content — Call Later /
+          freshly-raised tickets often have no RefId / Source / payment
+          / sub-job links, and the empty div was eating ~40px of vertical
+          space via the parent's space-y-5 gap. */}
+      {(j.job_reference_id || j.client_ref_id || j.job_type || j.source_type
+        || paymentModeLabel(j.collected_by)
+        || j.sub_job_id || (j.primary_job_id && j.primary_job_id > 0)) && (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 items-center">
           {j.job_reference_id && (
@@ -502,6 +513,7 @@ export default function JobDetailPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Status timeline */}
       <Section title="Order Lifecycle" icon={Activity}>

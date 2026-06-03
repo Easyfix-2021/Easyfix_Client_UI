@@ -43,7 +43,7 @@ const SECTION_ONE: NavItem[] = [
   { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
   { href: '/tx-location',         label: 'Tx on Location',          icon: MapPin },
   { href: '/tickets/under-audit', label: 'Completed & Under Audit', icon: ClipboardCheck },
-  { href: '/ratecard',            label: 'Get My RateCard',         icon: ReceiptText },
+  { href: '/ratecard',            label: 'Ratecard',                icon: ReceiptText },
 ];
 
 const SECTION_TWO: NavItem[] = [
