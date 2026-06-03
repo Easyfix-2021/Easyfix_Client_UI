@@ -23,6 +23,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   Plus, X, AlertCircle, ChevronDown, Search, Check, Loader2,
@@ -30,6 +31,8 @@ import {
   Phone, Briefcase, FileText, CreditCard, Sparkles, AlertTriangle,
   Tag, ClipboardList, ImageIcon as ImageLucide,
   Calendar, Clock, CheckCircle2,
+  Home, Building, MapPinned, Crosshair,
+  Film, Play, File as FileGeneric,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -49,9 +52,19 @@ type FormState = {
   job_desc: string;
   job_types: { Installation: boolean; Repair: boolean; 'Un-Installation': boolean };
   payment: 'paid' | 'free' | '';
+  // Service-location block — flat for backend compat. The "Add
+  // Address Details" popup edits these and the form summary card
+  // renders them. All except gps_location + address_type land on
+  // tbl_address (backend insertAddress takes them verbatim);
+  // address_type is FE-only metadata prepended to `address` so the
+  // type tag is preserved without changing the backend schema.
   address: string;
   city_id: number | null;              // required by backend insertAddress
   pin_code: string;
+  building: string;                    // Society / Flat / Floor / Block Name
+  landmark: string;                    // Nearby Landmark
+  gps_location: string;                // "lat,lng"  (browser geolocation or manual)
+  address_type: 'Home' | 'Office' | 'Other' | '';
   client_ref_id: string;
   notes: string;
   custom_props: Record<string, string>;
@@ -94,6 +107,10 @@ const EMPTY: FormState = {
   address: '',
   city_id: null,
   pin_code: '',
+  building: '',
+  landmark: '',
+  gps_location: '',
+  address_type: '',
   client_ref_id: '',
   notes: '',
   custom_props: {},
@@ -137,6 +154,16 @@ export default function NewOrderPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [files, setFiles] = useState<File[]>([]);
   const [showAltModal, setShowAltModal] = useState(false);
+  // Two-step address flow:
+  //   1. selectAddressOpen → "Select Address" picker (saved list +
+  //      Use Current Location + Search). Opens when SPOC clicks the
+  //      address summary card.
+  //   2. addressDialogOpen → "Add Address Details" full form (map +
+  //      GPS + Pincode + City + Building + Landmark + Address Type).
+  //      Opens when SPOC picks Use Current Location, edits a saved
+  //      address, or chooses to add a brand-new one.
+  const [selectAddressOpen, setSelectAddressOpen] = useState(false);
+  const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -339,12 +366,18 @@ export default function NewOrderPage() {
           customer_email:   form.customer_email || undefined,
         },
         address: {
-          address:    form.address.trim(),
+          // Prepend "[Home]" / "[Office]" / "[Other]" tag so the
+          // address-type choice is preserved without needing a new
+          // backend column (tbl_address has no address_type field).
+          address: (form.address_type
+            ? `[${form.address_type}] ${form.address.trim()}`
+            : form.address.trim()),
           city_id:    form.city_id,
           pin_code:   form.pin_code || '',
-          building:   undefined,
-          landmark:   undefined,
+          building:   form.building.trim() || undefined,
+          landmark:   form.landmark.trim() || undefined,
           locality:   undefined,
+          gps_location: form.gps_location.trim() || undefined,
           mobile_number: form.customer_mob_no.trim(),
         },
         fk_service_catg_id: form.service_category_ids[0] || null,
@@ -654,46 +687,51 @@ export default function NewOrderPage() {
           <StepCard step={2} icon={MapPin} title="Service Location"
             subtitle="Where should the technician go?">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field
-                label="Address for technician" required
-                error={fieldErrors.address}
-                icon={MapPin}
-                className="md:col-span-2"
-                dataField="address"
-              >
-                <textarea
-                  rows={3}
-                  className={cn('input resize-y', fieldErrors.address && 'ring-1 ring-rose-300')}
-                  value={form.address}
-                  onChange={(e) => setField('address', e.target.value)}
-                  placeholder="Flat / Building / Street / Landmark"
-                />
-              </Field>
-
-              <Field
-                label="City" required
-                error={fieldErrors.city_id}
-                icon={MapPin}
-                dataField="city_id"
-              >
-                <CitySelect
-                  cities={cities}
-                  value={form.city_id}
-                  onChange={(id) => setField('city_id', id)}
-                  hasError={!!fieldErrors.city_id}
-                />
-              </Field>
-
-              <Field label="PIN code" icon={Hash}>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={form.pin_code}
-                  onChange={(e) => setField('pin_code', e.target.value.replace(/\D/g, ''))}
-                  placeholder="6-digit PIN"
-                />
-              </Field>
+              {/* Address picker — compact card mirroring the legacy
+                  "Address for Technician" preview (your image 1). Click
+                  anywhere → opens the SelectAddressDialog which lists
+                  the customer's saved addresses + "Use current
+                  location" + search. From there the Add-Details popup
+                  fires for editing / new entries. */}
+              <div className="md:col-span-2" data-field="address">
+                <button
+                  type="button"
+                  onClick={() => setSelectAddressOpen(true)}
+                  className={cn(
+                    'w-full text-left rounded-lg border bg-white px-4 py-3 transition',
+                    fieldErrors.address || fieldErrors.city_id
+                      ? 'border-rose-300 ring-1 ring-rose-200'
+                      : 'border-slate-200 hover:border-primary hover:bg-primary/5'
+                  )}
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1.5">
+                    Address for Technician
+                  </div>
+                  {form.address || form.building ? (
+                    <>
+                      <div className="text-sm text-slate-900 leading-snug">
+                        {[form.building, form.address].filter(Boolean).join(', ')}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {[cities.find((c) => c.id === form.city_id)?.name, form.pin_code, form.landmark]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-400 italic inline-flex items-center gap-2">
+                      <MapPinned className="w-4 h-4" />
+                      Click to select or add an address
+                    </div>
+                  )}
+                </button>
+                {(fieldErrors.address || fieldErrors.city_id) && (
+                  <p className="text-xs text-rose-600 mt-1.5 inline-flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {fieldErrors.address || fieldErrors.city_id}
+                  </p>
+                )}
+              </div>
 
               <Field
                 label="Brand's order reference ID" required
@@ -774,19 +812,25 @@ export default function NewOrderPage() {
             </div>
           </StepCard>
 
-          {/* STEP 4 — Attachments */}
+          {/* STEP 4 — Attachments (photos + videos) */}
           <StepCard step={4} icon={Camera} title="Attachments"
-            subtitle="Optional — photos or videos that help the technician prepare.">
+            subtitle="Optional — photos or short videos that help the technician prepare.">
             <div className={cn(
               'rounded-xl border-2 border-dashed p-5 transition',
               files.length > 0 ? 'border-primary/30 bg-primary-50/30' : 'border-slate-200 bg-slate-50/40'
             )}>
               {files.length === 0 ? (
                 <div className="text-center py-4">
-                  <ImageLucide className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500 mb-3">No files attached yet.</p>
+                  <div className="inline-flex items-center gap-2 mb-2">
+                    <ImageLucide className="w-9 h-9 text-slate-300" />
+                    <Film       className="w-9 h-9 text-slate-300" />
+                  </div>
+                  <p className="text-sm text-slate-500 mb-1">No files attached yet.</p>
+                  <p className="text-[11px] text-slate-400 mb-3">
+                    Photos (jpg/png/heic) or videos (mp4/mov) — up to 25 MB each.
+                  </p>
                   <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold cursor-pointer hover:bg-primary-dark transition shadow-sm">
-                    <Plus className="w-4 h-4" /> Add Files
+                    <Plus className="w-4 h-4" /> Add Photos / Videos
                     <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={onPickFiles} />
                   </label>
                 </div>
@@ -794,27 +838,11 @@ export default function NewOrderPage() {
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-3">
                     {files.map((f, i) => (
-                      <div
-                        key={`${f.name}-${i}`}
-                        className="aspect-square rounded-lg bg-white border border-slate-200 p-2 flex flex-col justify-between text-xs"
-                      >
-                        <div className="flex-1 grid place-items-center text-slate-400">
-                          <ImageLucide className="w-8 h-8" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="truncate flex-1 text-slate-700" title={f.name}>
-                            {f.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(i)}
-                            aria-label={`Remove ${f.name}`}
-                            className="text-slate-400 hover:text-rose-600 shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                      <FileTile
+                        key={`${f.name}-${f.size}-${i}`}
+                        file={f}
+                        onRemove={() => removeFile(i)}
+                      />
                     ))}
                   </div>
                   <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-primary text-sm font-semibold cursor-pointer hover:bg-primary-50 transition">
@@ -916,6 +944,103 @@ export default function NewOrderPage() {
         />
       )}
 
+      {selectAddressOpen && (
+        <SelectAddressDialog
+          customerMobile={form.customer_mob_no}
+          cities={cities}
+          onClose={() => setSelectAddressOpen(false)}
+          onPickPlace={(prefill) => {
+            // Google Place suggestion picked — seed the Add Details
+            // popup with everything Google gave us (address, gps, pin,
+            // city). The SPOC just fills building / landmark / type.
+            setForm((f) => ({
+              ...f,
+              address:      prefill.address      ?? f.address,
+              city_id:      prefill.city_id      ?? f.city_id,
+              pin_code:     prefill.pin_code     ?? f.pin_code,
+              gps_location: prefill.gps_location ?? f.gps_location,
+              // Clear flat / landmark / type — they're not in a Place
+              // result and shouldn't carry over from the previous edit.
+              building: '', landmark: '', address_type: '',
+            }));
+            setSelectAddressOpen(false);
+            setAddressDialogOpen(true);
+          }}
+          onPickSaved={(a) => {
+            // Saved address chosen → load values into the Add Details
+            // popup so the SPOC can confirm/tweak (especially the
+            // address_type and Society/Flat/Floor/Block Name). They
+            // can hit Continue without touching anything to accept
+            // the saved values as-is.
+            setForm((f) => ({
+              ...f,
+              address:      a.address || '',
+              city_id:      a.city_id ?? null,
+              pin_code:     a.pin_code || '',
+              building:     a.building || '',
+              landmark:     a.landmark || '',
+              gps_location: a.gps_location || '',
+              // Reset address_type so the SPOC explicitly picks one for
+              // this booking — it isn't carried over from history.
+              address_type: '',
+            }));
+            setFieldErrors((fe) => {
+              const next = { ...fe };
+              delete next.address;
+              delete next.city_id;
+              return next;
+            });
+            setSelectAddressOpen(false);
+            setAddressDialogOpen(true);
+          }}
+          onAddNew={() => {
+            // Hop to the full Add Details popup with a blank slate.
+            setForm((f) => ({
+              ...f,
+              address: '', city_id: null, pin_code: '',
+              building: '', landmark: '', gps_location: '', address_type: '',
+            }));
+            setSelectAddressOpen(false);
+            setAddressDialogOpen(true);
+          }}
+          onUseCurrentLocation={(gps) => {
+            // Use Current Location → seed GPS, then go to Add Details
+            // so the SPOC can fill the rest (building, landmark, type).
+            setForm((f) => ({ ...f, gps_location: gps }));
+            setSelectAddressOpen(false);
+            setAddressDialogOpen(true);
+          }}
+        />
+      )}
+
+      {addressDialogOpen && (
+        <AddressDialog
+          initial={{
+            address: form.address,
+            city_id: form.city_id,
+            pin_code: form.pin_code,
+            building: form.building,
+            landmark: form.landmark,
+            gps_location: form.gps_location,
+            address_type: form.address_type,
+          }}
+          cities={cities}
+          onClose={() => setAddressDialogOpen(false)}
+          onSave={(v) => {
+            setForm((f) => ({ ...f, ...v }));
+            // Clear address-related field errors now that fresh values
+            // are coming in — they'll re-validate on Book Now.
+            setFieldErrors((fe) => {
+              const next = { ...fe };
+              delete next.address;
+              delete next.city_id;
+              return next;
+            });
+            setAddressDialogOpen(false);
+          }}
+        />
+      )}
+
       {successJobId != null && (
         <SuccessModal
           jobId={successJobId}
@@ -932,6 +1057,239 @@ export default function NewOrderPage() {
 // ───────────────────────────────────────────────────────────────────
 // Subcomponents
 // ───────────────────────────────────────────────────────────────────
+
+/*
+ * PlacesAutocomplete — inline Google Places autocomplete input.
+ *
+ * Drop-in for the "Complete Address" field in the Add Address Details
+ * popup. As the SPOC types, fires GET /api/client/maps/autocomplete
+ * (debounced 300ms, 3-char minimum, AbortController to drop stale
+ * responses), then renders a dropdown of `{primary, secondary}` rows
+ * directly under the input. Picking a row hands the place_id back to
+ * the parent via onPickPlace, which does the geocode → fill flow.
+ *
+ * Matches the legacy CRM "Confirm & Schedule" page UX so SPOCs migrating
+ * from the old dashboard recognise the pattern immediately.
+ */
+function PlacesAutocomplete({
+  value, onTextChange, onPickPlace, geocoding,
+}: {
+  value: string;
+  onTextChange: (text: string) => void;
+  onPickPlace: (placeId: string, description: string) => void | Promise<void>;
+  geocoding?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<PlaceSuggestion[]>([]);
+  const [acLoading, setAcLoading] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Suppress the next fetch — set when we just picked a suggestion so
+  // the resulting onTextChange (which fills the field with the picked
+  // description) doesn't immediately re-open the dropdown.
+  const skipNextFetchRef = useRef(false);
+
+  useEffect(() => {
+    if (skipNextFetchRef.current) {
+      skipNextFetchRef.current = false;
+      return;
+    }
+    const q = value.trim();
+    if (q.length < 3) { setItems([]); setOpen(false); return; }
+    const ctl = new AbortController();
+    const t = setTimeout(async () => {
+      setAcLoading(true);
+      try {
+        const res = await api.get<{ items: PlaceSuggestion[] }>(
+          `/maps/autocomplete?q=${encodeURIComponent(q)}`,
+          { signal: ctl.signal }
+        );
+        setItems(res.items || []);
+        setOpen(true);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setItems([]); setOpen(false);
+        }
+      } finally {
+        setAcLoading(false);
+      }
+    }, 300);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [value]);
+
+  // Close on outside click. Single listener attached only when the
+  // dropdown is open so we don't run JS on every page-wide click.
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  async function pick(s: PlaceSuggestion) {
+    setResolving(true);
+    skipNextFetchRef.current = true;
+    setOpen(false);
+    try {
+      await onPickPlace(s.place_id, s.description);
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        className="input w-full pr-10"
+        value={value}
+        onChange={(e) => onTextChange(e.target.value)}
+        onFocus={() => { if (items.length > 0) setOpen(true); }}
+        placeholder='e.g. Ambience Mall, Gurugram'
+        autoFocus
+      />
+      {(acLoading || resolving || geocoding) && (
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          {resolving ? 'Loading…' : geocoding ? 'Filling…' : 'Searching…'}
+        </span>
+      )}
+
+      {open && items.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+          {items.map((s) => (
+            <button
+              key={s.place_id}
+              type="button"
+              onClick={() => pick(s)}
+              disabled={resolving}
+              className="w-full text-left flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 last:border-b-0 hover:bg-primary/5 transition disabled:opacity-50"
+            >
+              <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-slate-900 leading-snug truncate">
+                  {s.primary}
+                </div>
+                {s.secondary && (
+                  <div className="text-xs text-slate-500 mt-0.5 leading-snug truncate">
+                    {s.secondary}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/*
+ * FileTile — preview tile for the Attachments step.
+ *
+ * Handles three flavours of input:
+ *   - image/*  → renders a real thumbnail via URL.createObjectURL +
+ *                <img>; a tiny "IMG" badge marks the type.
+ *   - video/*  → renders the first frame via <video preload="metadata">
+ *                with a Play overlay + "VID" badge. Posters work
+ *                out of the box for mp4/mov in Chromium/Safari/Firefox.
+ *   - other    → falls back to a generic file icon (rare here — the
+ *                picker uses accept="image/*,video/*" so this is just
+ *                defence for drag-drop later).
+ *
+ * Lifecycle: the object URL is created once per file via useMemo and
+ * revoked in a cleanup effect so memory doesn't grow when the SPOC
+ * adds and removes a bunch of large videos.
+ */
+function FileTile({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+  const objectUrl = useMemo(
+    () => (isImage || isVideo ? URL.createObjectURL(file) : null),
+    [file, isImage, isVideo]
+  );
+  useEffect(() => {
+    if (!objectUrl) return;
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [objectUrl]);
+
+  // Human-readable size: 12.3 KB / 4.2 MB. Files this picker sees are
+  // < 100 MB in practice, so we don't bother with GB.
+  const sizeLabel = useMemo(() => {
+    const kb = file.size / 1024;
+    if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+    return `${(kb / 1024).toFixed(kb / 1024 < 10 ? 1 : 0)} MB`;
+  }, [file.size]);
+
+  const badge =
+    isImage ? { label: 'IMG', cls: 'bg-blue-500/90' }
+    : isVideo ? { label: 'VID', cls: 'bg-violet-500/90' }
+    : { label: 'FILE', cls: 'bg-slate-500/90' };
+
+  return (
+    <div className="relative aspect-square rounded-lg bg-white border border-slate-200 overflow-hidden group">
+      {/* Thumb */}
+      <div className="absolute inset-0 grid place-items-center bg-slate-100">
+        {isImage && objectUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={objectUrl}
+            alt={file.name}
+            className="w-full h-full object-cover"
+          />
+        ) : isVideo && objectUrl ? (
+          <>
+            <video
+              src={objectUrl}
+              preload="metadata"
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 grid place-items-center pointer-events-none">
+              <span className="w-10 h-10 rounded-full bg-white/70 backdrop-blur grid place-items-center shadow-lg">
+                <Play className="w-5 h-5 text-slate-900 ml-0.5" />
+              </span>
+            </div>
+          </>
+        ) : (
+          <FileGeneric className="w-10 h-10 text-slate-300" />
+        )}
+      </div>
+
+      {/* Type badge top-left */}
+      <span className={cn(
+        'absolute top-1.5 left-1.5 text-[9px] font-bold tracking-wider text-white px-1.5 py-0.5 rounded',
+        badge.cls
+      )}>
+        {badge.label}
+      </span>
+
+      {/* Remove × top-right */}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${file.name}`}
+        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 text-slate-700 hover:text-rose-600 hover:bg-white grid place-items-center shadow-sm opacity-0 group-hover:opacity-100 transition"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Filename + size strip */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-2 py-1.5 text-white">
+        <div className="text-[11px] font-medium leading-tight truncate" title={file.name}>
+          {file.name}
+        </div>
+        <div className="text-[9px] text-white/80 tracking-wider uppercase">
+          {sizeLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StepCard({
   step, icon: Icon, title, subtitle, children,
@@ -1372,6 +1730,810 @@ function SuccessModal({
           OK
         </button>
       </div>
+    </div>
+  );
+}
+
+/*
+ * SelectAddressDialog — "Select Address" picker (image 2 in the brief).
+ *
+ * First step of the two-step address flow:
+ *   1. Customer mobile is already on the form → we look up the
+ *      customer's address book via
+ *      GET /api/client/customers/mobile/:mobile/addresses
+ *      (scoped to the SPOC's own client, so we never leak addresses
+ *      from another brand's bookings).
+ *   2. SPOC picks one of the saved cards → onPickSaved fills the form.
+ *   3. OR clicks "Use current location" → browser geolocation fires,
+ *      onUseCurrentLocation forwards GPS to the Add-Details popup.
+ *   4. OR clicks "Add new" (when empty / when the search has no hit)
+ *      → onAddNew opens a blank Add-Details popup.
+ *
+ * Search filters the saved list client-side for now. Wiring it to
+ * Google Places Autocomplete would require the SPOC-scoped maps proxy
+ * the user said not to add — easy follow-up if requested later.
+ */
+type SavedAddress = {
+  address_id: number;
+  address: string | null;
+  building: string | null;
+  landmark: string | null;
+  locality: string | null;
+  city_id: number | null;
+  city_name?: string | null;
+  pin_code: string | null;
+  gps_location: string | null;
+  mobile_number: string | null;
+};
+
+type PlacePrefill = {
+  address?: string;
+  city_id?: number | null;
+  pin_code?: string;
+  gps_location?: string;
+};
+type PlaceSuggestion = {
+  place_id: string;
+  description: string;
+  primary: string;
+  secondary: string;
+};
+
+function SelectAddressDialog({
+  customerMobile, cities, onClose, onPickSaved, onAddNew, onUseCurrentLocation, onPickPlace,
+}: {
+  customerMobile: string;
+  cities: { id: number; name: string }[];
+  onClose: () => void;
+  onPickSaved: (a: SavedAddress) => void;
+  onAddNew: () => void;
+  onUseCurrentLocation: (gps: string) => void;
+  onPickPlace: (prefill: PlacePrefill) => void;
+}) {
+  const [items, setItems] = useState<SavedAddress[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Google Places autocomplete state. `suggestions` are remote results
+  // fired off after the SPOC types 3+ chars (debounced 300ms). They
+  // render above the saved-addresses list so the SPOC sees fresh
+  // Google matches first.
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [acLoading, setAcLoading] = useState(false);
+  const [resolving, setResolving] = useState(false); // true while we geocode a picked suggestion
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!/^\d{10}$/.test(customerMobile)) {
+      setItems([]);
+      return;
+    }
+    setLoading(true); setError(null);
+    api.get<{ items: SavedAddress[] }>(`/customers/mobile/${customerMobile}/addresses`)
+      .then((res) => { if (!cancelled) setItems(res.items || []); })
+      .catch((err) => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load addresses'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [customerMobile]);
+
+  // Debounced Places Autocomplete. <3 chars or empty → clear. >=3
+  // chars → wait 300ms, then call /maps/autocomplete. AbortController
+  // prevents stale responses from clobbering a newer query.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) { setSuggestions([]); return; }
+    const ctl = new AbortController();
+    const t = setTimeout(async () => {
+      setAcLoading(true);
+      try {
+        const res = await api.get<{ items: PlaceSuggestion[] }>(
+          `/maps/autocomplete?q=${encodeURIComponent(q)}`,
+          { signal: ctl.signal }
+        );
+        setSuggestions(res.items || []);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          // Don't blow up the modal — leave the saved list usable and
+          // show a small note.
+          setSuggestions([]);
+        }
+      } finally {
+        setAcLoading(false);
+      }
+    }, 300);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [query]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((a) => {
+      const hay = [a.address, a.building, a.landmark, a.city_name, a.pin_code]
+        .filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, query]);
+
+  function fireGeolocation() {
+    if (!navigator.geolocation) {
+      setError('Geolocation not available in this browser');
+      return;
+    }
+    setLocating(true); setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const gps = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`;
+        setLocating(false);
+        onUseCurrentLocation(gps);
+      },
+      (err) => {
+        setError(err.message || 'Could not get your location');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  /*
+   * SPOC clicked a Google suggestion → geocode its place_id to fetch
+   * lat/lng + formatted_address + components, then bubble all of it
+   * up via onPickPlace so the Add Details popup opens prefilled.
+   */
+  async function pickSuggestion(s: PlaceSuggestion) {
+    setResolving(true); setError(null);
+    try {
+      type GeocodeResponse = {
+        lat: number | null;
+        lng: number | null;
+        formatted_address: string;
+        address_components: {
+          postal_code?: string;
+          city?: string;
+        };
+      };
+      const out = await api.get<GeocodeResponse>(
+        `/maps/geocode?place_id=${encodeURIComponent(s.place_id)}`
+      );
+      const gps = (out.lat != null && out.lng != null)
+        ? `${Number(out.lat).toFixed(6)},${Number(out.lng).toFixed(6)}`
+        : '';
+      const pin = String(out.address_components?.postal_code || '').replace(/\D/g, '').slice(0, 6);
+      const rawCity = String(out.address_components?.city || '').toLowerCase();
+      let matchedId: number | null = null;
+      if (rawCity) {
+        const exact = cities.find((c) => (c.name || '').toLowerCase() === rawCity);
+        if (exact) matchedId = exact.id;
+        else {
+          const partial = cities.find((c) => {
+            const n = (c.name || '').toLowerCase();
+            return n.includes(rawCity) || rawCity.includes(n);
+          });
+          if (partial) matchedId = partial.id;
+        }
+      }
+      onPickPlace({
+        address:      out.formatted_address || s.description,
+        gps_location: gps,
+        pin_code:     pin,
+        city_id:      matchedId,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not resolve that place');
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4 py-8 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
+          <h2 className="text-xl font-bold text-slate-900">Select Address</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Search bar with right-side spinner */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="input w-full pl-9 pr-10"
+              placeholder="Search for a location (try “Ambience Mall” or “Sector 44 Gurgaon”)"
+            />
+            {acLoading && (
+              <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+            )}
+          </div>
+
+          {/* Google Places suggestions — only when there's a query */}
+          {query.trim().length >= 3 && (
+            <div>
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-2 inline-flex items-center gap-1.5">
+                <span>Suggestions</span>
+                <span className="text-[9px] font-medium text-slate-400 normal-case tracking-normal">
+                  powered by Google
+                </span>
+              </h3>
+              {suggestions.length === 0 && !acLoading && (
+                <div className="py-3 text-center text-xs text-slate-400">
+                  No places matched “{query}”.
+                </div>
+              )}
+              {suggestions.length > 0 && (
+                <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                  {suggestions.map((s) => (
+                    <li key={s.place_id}>
+                      <button
+                        type="button"
+                        onClick={() => pickSuggestion(s)}
+                        disabled={resolving}
+                        className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-white hover:border-primary hover:bg-primary/5 transition disabled:opacity-50"
+                      >
+                        <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-slate-900 leading-snug truncate">
+                            {s.primary}
+                          </div>
+                          {s.secondary && (
+                            <div className="text-xs text-slate-500 mt-0.5 leading-snug truncate">
+                              {s.secondary}
+                            </div>
+                          )}
+                        </div>
+                        {resolving && (
+                          <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin mt-1 shrink-0" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Use current location */}
+          <button
+            type="button"
+            onClick={fireGeolocation}
+            disabled={locating}
+            className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-emerald-50 transition disabled:opacity-50"
+          >
+            <span className="w-10 h-10 rounded-full bg-emerald-50 ring-1 ring-emerald-200 grid place-items-center shrink-0">
+              {locating
+                ? <Loader2 className="w-5 h-5 text-emerald-600 animate-spin" />
+                : <Crosshair className="w-5 h-5 text-emerald-600" />}
+            </span>
+            <span className="font-bold text-slate-900">
+              {locating ? 'Getting your location…' : 'Use current location'}
+            </span>
+          </button>
+
+          {error && (
+            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" /> {error}
+            </div>
+          )}
+
+          {/* Saved address list */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Saved Address
+              </h3>
+              <button
+                type="button"
+                onClick={onAddNew}
+                className="text-xs font-semibold text-primary hover:text-primary-dark inline-flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add new
+              </button>
+            </div>
+
+            {loading && (
+              <div className="py-6 text-center text-sm text-slate-500 inline-flex items-center justify-center gap-2 w-full">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading saved addresses…
+              </div>
+            )}
+
+            {!loading && filtered.length === 0 && (
+              <div className="py-6 text-center text-sm text-slate-500">
+                {items.length === 0
+                  ? (/^\d{10}$/.test(customerMobile)
+                      ? 'No saved addresses for this customer yet.'
+                      : 'Enter a customer mobile first to load saved addresses.')
+                  : `No saved address matches "${query}".`}
+              </div>
+            )}
+
+            {!loading && filtered.length > 0 && (
+              <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {filtered.map((a) => {
+                  // Heuristic icon — Office for buildings with bldg
+                  // hint, Home otherwise. SPOC can re-categorise via
+                  // address_type in the next step.
+                  const Icon = /office|tower|plot|sector|udyog|industri/i.test(a.building || a.address || '')
+                    ? Briefcase
+                    : Home;
+                  const line1 = [a.building, a.address].filter(Boolean).join(', ');
+                  const line2 = [a.city_name, a.pin_code, 'India'].filter(Boolean).join(', ');
+                  return (
+                    <li key={a.address_id}>
+                      <button
+                        type="button"
+                        onClick={() => onPickSaved(a)}
+                        className="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl border border-slate-200 bg-white hover:border-primary hover:bg-primary/5 transition"
+                      >
+                        <Icon className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-slate-900 leading-snug">
+                            {line1 || '—'}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5 leading-snug">
+                            {line2}
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/*
+ * AddressDialog — "Add Address Details" popup.
+ *
+ * Single modal that captures everything tbl_address needs (address,
+ * building, landmark, city_id, pin_code, gps_location, mobile_number)
+ * plus an FE-only address_type tag (Home/Office/Other) that's
+ * prepended to the address text on submit. Mirrors the legacy
+ * popup-driven flow with a google.com/maps embed showing the pin
+ * coordinates and a "Use my location" button (browser geolocation API,
+ * no Google API key required).
+ *
+ * Why iframe + browser geolocation instead of an interactive Maps JS
+ * widget: the backend's maps proxy is token-gated for magic-link
+ * sessions, and the user asked for zero backend changes here. An
+ * embed iframe + navigator.geolocation gives a visible map preview
+ * and one-click "current location" without needing the public API
+ * key exposed to this page. Drag-to-pin can be added later if ops
+ * want it — just swap the iframe for `@react-google-maps/api`.
+ */
+function AddressDialog({
+  initial, cities, onClose, onSave,
+}: {
+  initial: {
+    address: string;
+    city_id: number | null;
+    pin_code: string;
+    building: string;
+    landmark: string;
+    gps_location: string;
+    address_type: 'Home' | 'Office' | 'Other' | '';
+  };
+  cities: { id: number; name: string }[];
+  onClose: () => void;
+  onSave: (v: typeof initial) => void;
+}) {
+  const [v, setV] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+
+  function update<K extends keyof typeof v>(key: K, val: (typeof v)[K]) {
+    setV((s) => ({ ...s, [key]: val }));
+  }
+
+  function saveAndClose() {
+    if (!v.address.trim()) { setError('Address is required'); return; }
+    if (!v.city_id) { setError('Please pick a city'); return; }
+    onSave(v);
+  }
+
+  /*
+   * Auto-geocode when GPS lands but the descriptive fields are blank.
+   * Covers two flows:
+   *   1. SPOC picked a saved address whose row only has gps_location
+   *      saved (older bookings) — we look up the rest.
+   *   2. SPOC pasted lat,lng manually — same lookup fires.
+   * Guards:
+   *   - Only runs when address / pin_code / city_id are ALL empty so a
+   *     partially-typed entry isn't overwritten.
+   *   - Debounced 600ms so typing GPS doesn't fire requests per
+   *     keystroke.
+   *   - One-shot per coordinate via `lastGeocodedRef` so re-rendering
+   *     doesn't re-fire.
+   */
+  const lastGeocodedRef = useRef<string>('');
+  useEffect(() => {
+    const gps = v.gps_location.trim();
+    if (!/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(gps)) return;
+    if (gps === lastGeocodedRef.current) return;
+    // Only auto-fill when the SPOC clearly hasn't typed anything yet.
+    if (v.address.trim() || v.pin_code.trim() || v.city_id) return;
+
+    const t = setTimeout(async () => {
+      lastGeocodedRef.current = gps;
+      setGeocoding(true); setError(null);
+      try {
+        type GeocodeResponse = {
+          formatted_address: string;
+          address_components: {
+            postal_code?: string;
+            city?: string;
+            state?: string;
+            country?: string;
+            sublocality?: string;
+          };
+        };
+        const out = await api.get<GeocodeResponse>(
+          `/maps/reverse-geocode?latlng=${encodeURIComponent(gps)}`
+        );
+        const display = String(out.formatted_address || '');
+        const pin = String(out.address_components?.postal_code || '').replace(/\D/g, '').slice(0, 6);
+        const rawCity = String(out.address_components?.city || '').toLowerCase();
+        let matchedId: number | null = null;
+        if (rawCity) {
+          // Gurgaon ↔ Gurugram, Bengaluru ↔ Bangalore tolerance.
+          const exact = cities.find((c) => (c.name || '').toLowerCase() === rawCity);
+          if (exact) matchedId = exact.id;
+          else {
+            const partial = cities.find((c) => {
+              const n = (c.name || '').toLowerCase();
+              return n.includes(rawCity) || rawCity.includes(n);
+            });
+            if (partial) matchedId = partial.id;
+          }
+        }
+        // Only fill fields that are still empty — don't clobber any
+        // value the SPOC may have typed in the meantime.
+        setV((s) => ({
+          ...s,
+          address:  s.address.trim()  ? s.address  : display,
+          pin_code: s.pin_code.trim() ? s.pin_code : pin,
+          city_id:  s.city_id         ? s.city_id  : matchedId,
+        }));
+      } catch (err) {
+        setError(err instanceof ApiError
+          ? `Could not look up address: ${err.message}`
+          : 'Reverse-geocode failed — please fill the rest manually.');
+      } finally {
+        setGeocoding(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(t);
+  // Only re-run when the GPS string actually changes — adding the
+  // other deps would cause this to re-fire mid-typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.gps_location]);
+
+  // Map src — when gps_location is set, point the iframe there.
+  // Otherwise show a search for the typed address. Fallback: India.
+  const mapSrc = useMemo(() => {
+    if (v.gps_location.trim()) {
+      const [lat, lng] = v.gps_location.split(',').map((s) => s.trim());
+      if (lat && lng) {
+        return `https://www.google.com/maps?q=${encodeURIComponent(lat + ',' + lng)}&z=16&output=embed`;
+      }
+    }
+    if (v.address.trim()) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(v.address)}&z=15&output=embed`;
+    }
+    return `https://www.google.com/maps?q=India&z=5&output=embed`;
+  }, [v.gps_location, v.address]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4 py-6 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ─── Header — gradient strip + soft icon tile ──────────── */}
+        <div className="relative px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 via-white to-white">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 grid place-items-center shrink-0">
+                <MapPinned className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 leading-tight">
+                  Add Address Details
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Where should the technician be dispatched?
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Body — split: form (left) + map (right) ──────────── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
+            {/* LEFT — form fields */}
+            <div className="lg:col-span-3 p-6 space-y-5">
+              {/* SECTION 1: Location */}
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
+                  <span className="w-5 h-px bg-primary" /> Location
+                </div>
+
+                <div className="space-y-3">
+                  <DialogField label="Complete Address" required icon={MapPinned}>
+                    <PlacesAutocomplete
+                      value={v.address}
+                      onTextChange={(text) => update('address', text)}
+                      geocoding={geocoding}
+                      onPickPlace={async (placeId, description) => {
+                        // SPOC picked a Google suggestion → resolve to
+                        // lat/lng + components, then fill all relevant
+                        // fields in one go. building / landmark /
+                        // address_type stay as the SPOC typed them.
+                        try {
+                          type Geo = {
+                            lat: number | null;
+                            lng: number | null;
+                            formatted_address: string;
+                            address_components: { postal_code?: string; city?: string };
+                          };
+                          const out = await api.get<Geo>(
+                            `/maps/geocode?place_id=${encodeURIComponent(placeId)}`
+                          );
+                          const gps = (out.lat != null && out.lng != null)
+                            ? `${Number(out.lat).toFixed(6)},${Number(out.lng).toFixed(6)}`
+                            : '';
+                          const pin = String(out.address_components?.postal_code || '')
+                            .replace(/\D/g, '').slice(0, 6);
+                          const rawCity = String(out.address_components?.city || '').toLowerCase();
+                          let cityId: number | null = null;
+                          if (rawCity) {
+                            const exact = cities.find((c) => (c.name || '').toLowerCase() === rawCity);
+                            if (exact) cityId = exact.id;
+                            else {
+                              const partial = cities.find((c) => {
+                                const n = (c.name || '').toLowerCase();
+                                return n.includes(rawCity) || rawCity.includes(n);
+                              });
+                              if (partial) cityId = partial.id;
+                            }
+                          }
+                          setV((s) => ({
+                            ...s,
+                            address:      out.formatted_address || description,
+                            gps_location: gps,
+                            pin_code:     pin || s.pin_code,
+                            city_id:      cityId ?? s.city_id,
+                          }));
+                          // Bypass the auto-geocode-on-GPS-change effect
+                          // for this coordinate — we already have the
+                          // address from the Place result.
+                          lastGeocodedRef.current = gps;
+                        } catch (err) {
+                          setError(err instanceof ApiError
+                            ? `Could not resolve place: ${err.message}`
+                            : 'Could not resolve that place');
+                        }
+                      }}
+                    />
+                  </DialogField>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <DialogField label="GPS" required icon={Crosshair}>
+                      <input
+                        type="text"
+                        className="input w-full font-mono text-xs"
+                        value={v.gps_location}
+                        onChange={(e) => update('gps_location', e.target.value)}
+                        placeholder="lat, lng"
+                      />
+                    </DialogField>
+                    <DialogField label="Pincode" required icon={Hash}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        className="input w-full"
+                        value={v.pin_code}
+                        onChange={(e) => update('pin_code', e.target.value.replace(/\D/g, ''))}
+                        placeholder="6-digit"
+                      />
+                    </DialogField>
+                    <DialogField label="City" required icon={MapPin}>
+                      <CitySelect
+                        cities={cities}
+                        value={v.city_id}
+                        onChange={(id) => update('city_id', id)}
+                        hasError={false}
+                      />
+                    </DialogField>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: Property details */}
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
+                  <span className="w-5 h-px bg-primary" /> Property Details
+                </div>
+
+                <div className="space-y-3">
+                  <DialogField label="Society, Flat, Floor, Block Name" required icon={Building}>
+                    <input
+                      type="text"
+                      className="input w-full"
+                      value={v.building}
+                      onChange={(e) => update('building', e.target.value)}
+                      placeholder="e.g. ChannelPlay, Block A, Floor 3"
+                    />
+                  </DialogField>
+
+                  <DialogField label="Nearby Landmark" icon={MapPin}>
+                    <input
+                      type="text"
+                      className="input w-full"
+                      value={v.landmark}
+                      onChange={(e) => update('landmark', e.target.value)}
+                      placeholder="e.g. Opposite Big Bazaar"
+                    />
+                  </DialogField>
+                </div>
+              </div>
+
+              {/* SECTION 3: Type pills */}
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
+                  <span className="w-5 h-px bg-primary" /> Address Type <span className="text-rose-500">*</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { key: 'Home',   label: 'Home',   Icon: Home,      tone: 'emerald' },
+                    { key: 'Office', label: 'Office', Icon: Briefcase, tone: 'blue' },
+                    { key: 'Other',  label: 'Other',  Icon: Building,  tone: 'amber' },
+                  ] as const).map(({ key, label, Icon, tone }) => {
+                    const on = v.address_type === key;
+                    const onClass =
+                      tone === 'emerald' ? 'border-emerald-400 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                      : tone === 'blue'  ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+                      : 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => update('address_type', key)}
+                        className={cn(
+                          'rounded-xl border-2 p-3 flex flex-col items-center gap-1.5 transition',
+                          on
+                            ? onClass + ' shadow-sm scale-[1.02]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                        )}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="text-xs font-bold">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2 w-full">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT — map + use-location CTA (sticky on desktop) */}
+            <div className="lg:col-span-2 bg-slate-50 lg:border-l lg:border-slate-100 p-6">
+              <div className="lg:sticky lg:top-0 space-y-3">
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  <span className="w-5 h-px bg-primary" /> Map Preview
+                </div>
+
+                <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                  <iframe
+                    title="Location preview"
+                    src={mapSrc}
+                    className="w-full h-64 lg:h-[420px] border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  The map updates as you type the address or paste GPS coordinates.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Sticky footer ────────────────────────────────────── */}
+        <div className="px-6 py-3 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
+          <div className="text-xs text-slate-500">
+            <span className="text-rose-500">*</span> required fields
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={saveAndClose}
+              className="px-6 py-2 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary-dark shadow-sm shadow-primary/30 inline-flex items-center gap-1.5"
+            >
+              Continue <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/*
+ * DialogField — small label + icon + child input shell used by the
+ * Add Address Details popup. Keeps every field's chrome consistent
+ * (uppercase label, brand icon, slate-400 hint).
+ */
+function DialogField({
+  label, required, icon: Icon, children,
+}: {
+  label: string;
+  required?: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 inline-flex items-center gap-1">
+        <Icon className="w-3 h-3 text-slate-400" />
+        {label}
+        {required && <span className="text-rose-500">*</span>}
+      </label>
+      {children}
     </div>
   );
 }

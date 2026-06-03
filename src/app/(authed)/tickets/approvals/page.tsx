@@ -64,13 +64,21 @@ const TABS: Array<{
     key: 'approveEstimate',
     label: 'Approve Estimate',
     subtitle: 'The Easyfix professional has shared the estimate. Open each ticket to review and accept.',
-    statuses: [15], flag: '',
+    // flag is intentionally non-empty so the backend's auto-scope kicks
+    // in (routes/client/index.js:343 skips scope when `!ticketFlag`).
+    // The service-layer ticketFlag switch silently no-ops unrecognised
+    // values, so the only effect of sending this flag is the team
+    // scope — exactly what /client-delay/counts already applies, so
+    // the badge count and the table count finally agree.
+    statuses: [15], flag: 'approveestimate',
   },
   {
     key: 'fulfilmentOnHold',
     label: 'Fulfilment On Hold',
     subtitle: 'These open orders are currently on hold. Read the reason to understand the blocker.',
-    statuses: [21], flag: '',
+    // Same rationale as approveEstimate — non-empty flag to trigger
+    // team scoping on the list endpoint.
+    statuses: [21], flag: 'fulfilmentonhold',
   },
   {
     key: 'unauthorized',

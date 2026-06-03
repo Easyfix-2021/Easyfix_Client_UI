@@ -22,13 +22,15 @@
  *   4. Save bar   (floats up when dirty, mirrors /profile)
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   User, Briefcase, Phone, Mail, Smartphone, Send, Network,
   ShieldCheck, CreditCard, Check, Save, Loader2, Pencil,
   Linkedin, Fingerprint, BadgeCheck, BellRing, FileBadge,
   Sparkles, Wallet, X, Search, ChevronDown,
+  Users as UsersIcon, Plus, Upload, Download, AlertCircle,
 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, getToken } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +52,17 @@ type Profile = {
 };
 
 type TeamMember = { id: number; name: string | null; email: string | null };
-type TabKey = 'identity' | 'reporting' | 'workflow';
+type TabKey = 'identity' | 'reporting' | 'workflow' | 'contacts';
+
+type Contact = {
+  id: number;
+  contact_name: string;
+  contact_email: string;
+  contact_no: string;
+  contact_alt_no: string | null;
+  contact_desgn: string | null;
+  status: number | null;
+};
 
 const PAYMENT_MODES: { value: number; label: string }[] = [
   { value: 0, label: '— Not set —' },
@@ -66,6 +78,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ clas
   { key: 'identity',  label: 'Identity',          icon: User },
   { key: 'reporting', label: 'Reporting',         icon: Network },
   { key: 'workflow',  label: 'Workflow Settings', icon: Sparkles },
+  { key: 'contacts',  label: 'Contacts',          icon: UsersIcon },
 ];
 
 function initialsOf(name?: string | null) {
@@ -333,6 +346,8 @@ export default function ClientProfilePage() {
               />
             </div>
           )}
+
+          {tab === 'contacts' && <ContactsTab />}
         </div>
       </div>
 
@@ -689,6 +704,503 @@ function ToggleCard({
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">{hint}</p>
       </div>
     </label>
+  );
+}
+
+/*
+ * ContactsTab — Profile → Contacts tab body.
+ *
+ * Renders the client's contact directory (tbl_client_contacts scoped
+ * to the SPOC's client) as an editable table. Mirrors the legacy
+ * admin Clients → Contacts tab from CRM_UI: add, edit, delete,
+ * download XLSX template, bulk upload XLSX.
+ *
+ * State strategy:
+ *   - list           — fetched once on mount; mutations refetch
+ *   - editing        — { id, draft } when editing an existing row
+ *   - showAdd        — modal flag for the create form
+ *   - showBulk       — flag for the bulk upload dialog
+ *   - busy           — disables buttons during in-flight save / delete
+ *   - bulkReport     — last bulk-upload summary, shown inline
+ *
+ * Endpoints (added in routes/client/index.js):
+ *   GET    /api/client/contacts
+ *   POST   /api/client/contacts                { contactName, contactEmail, contactNo, ... }
+ *   PUT    /api/client/contacts/:id            { contact_name, contact_no, ... }
+ *   DELETE /api/client/contacts/:id
+ *   GET    /api/client/contacts/template       (xlsx download)
+ *   POST   /api/client/contacts/bulk-upload    (multipart)
+ */
+function ContactsTab() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Editor state — either editing an existing contact (id set) or
+  // adding a brand-new one (id === null).
+  type Draft = {
+    contactName: string;
+    contactEmail: string;
+    contactNo: string;
+    contactAltNo: string;
+    contactDesgn: string;
+  };
+  const EMPTY_DRAFT: Draft = {
+    contactName: '', contactEmail: '', contactNo: '',
+    contactAltNo: '', contactDesgn: '',
+  };
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [editorError, setEditorError] = useState<string | null>(null);
+
+  // Bulk upload state
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkReport, setBulkReport] = useState<{
+    summary: { total: number; created: number; skipped: number; invalid: number };
+    results: Array<{ rowNumber: number; status: string; errors?: string[]; reason?: string }>;
+  } | null>(null);
+
+  async function loadContacts() {
+    setLoading(true); setError(null);
+    try {
+      const res = await api.get<{ items: Contact[] }>('/contacts');
+      setContacts(res.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load contacts');
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { loadContacts(); }, []);
+
+  function openAdd() {
+    setEditingId(null);
+    setDraft(EMPTY_DRAFT);
+    setEditorError(null);
+    setEditorOpen(true);
+  }
+  function openEdit(c: Contact) {
+    setEditingId(c.id);
+    setDraft({
+      contactName:  c.contact_name || '',
+      contactEmail: c.contact_email || '',
+      contactNo:    c.contact_no || '',
+      contactAltNo: c.contact_alt_no || '',
+      contactDesgn: c.contact_desgn || '',
+    });
+    setEditorError(null);
+    setEditorOpen(true);
+  }
+
+  async function saveDraft() {
+    setEditorError(null);
+    if (!draft.contactName.trim()) { setEditorError('Name is required'); return; }
+    if (!draft.contactDesgn.trim()) { setEditorError('Designation is required'); return; }
+    if (!/.+@.+\..+/.test(draft.contactEmail)) { setEditorError('Valid email is required'); return; }
+    if (!/^[0-9]{10}$/.test(draft.contactNo)) { setEditorError('Phone must be 10 digits'); return; }
+    if (draft.contactAltNo && !/^[0-9]{10}$/.test(draft.contactAltNo)) {
+      setEditorError('Alt phone must be 10 digits'); return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        contactName:  draft.contactName.trim(),
+        contactEmail: draft.contactEmail.trim().toLowerCase(),
+        contactNo:    draft.contactNo.trim(),
+        contactAltNo: draft.contactAltNo.trim() || undefined,
+        contactDesgn: draft.contactDesgn.trim() || undefined,
+      };
+      if (editingId == null) {
+        await api.post('/contacts', payload);
+      } else {
+        await api.put(`/contacts/${editingId}`, payload);
+      }
+      setEditorOpen(false);
+      await loadContacts();
+    } catch (err) {
+      setEditorError(err instanceof ApiError ? err.message : 'Save failed');
+    } finally { setBusy(false); }
+  }
+
+  /*
+   * Soft-toggle a contact's active flag. tbl_client_contacts.status
+   * convention (matches admin):
+   *   1 = Active
+   *   0 = Inactive
+   * Inactive contacts can't log in / receive notifications but their
+   * historical job rows still reference them, so we never hard-delete
+   * — the operator chooses Active/Inactive instead of "remove".
+   *
+   * Number() coercion guards against the mysql2 driver returning
+   * TINYINT as a string on certain configs — `'1' === 1` is false
+   * in JS, which would make the toggle send the wrong target value.
+   */
+  async function toggleStatus(c: Contact) {
+    const currentlyActive = Number(c.status) === 1;
+    const next = currentlyActive ? 0 : 1;
+    const verb = next === 1 ? 'Activate' : 'Deactivate';
+    if (!confirm(`${verb} ${c.contact_name || 'this contact'}?`)) return;
+    setBusy(true); setError(null);
+    try {
+      const res = await api.put<{ updated?: boolean; affected?: number }>(
+        `/contacts/${c.id}`,
+        { status: next }
+      );
+      // Detect silent no-ops — if the BE says affected=0 something's
+      // off (column missing, route caching, etc.). Surface it.
+      if (res && 'affected' in res && res.affected === 0) {
+        setError('No rows changed — please refresh and try again.');
+      }
+      await loadContacts();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `${verb} failed`);
+    } finally { setBusy(false); }
+  }
+
+  // Template download — we hit the endpoint with a Bearer token via
+  // fetch (instead of <a>) so the JWT travels in the Authorization
+  // header. Same pattern as downloadBlob in src/lib/api.ts.
+  async function downloadTemplate() {
+    try {
+      const token = getToken();
+      const res = await fetch('/api/client/contacts/template', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'contacts-template.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    }
+  }
+
+  async function submitBulk() {
+    if (!bulkFile) { setError('Pick a file first'); return; }
+    setBusy(true); setError(null); setBulkReport(null);
+    try {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', bulkFile);
+      const res = await fetch('/api/client/contacts/bulk-upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok || json.isError) {
+        throw new Error(json.message || 'Upload failed');
+      }
+      setBulkReport(json.data);
+      await loadContacts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header — count + action buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-600">
+          <span className="font-semibold text-slate-900">{contacts.length}</span>{' '}
+          contact{contacts.length === 1 ? '' : 's'} in your directory
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+          >
+            <Download className="w-3.5 h-3.5" /> Template
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowBulk(true); setBulkFile(null); setBulkReport(null); }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+          >
+            <Upload className="w-3.5 h-3.5" /> Bulk Upload
+          </button>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-white bg-primary hover:bg-primary-dark shadow-sm shadow-primary/30 transition"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Contact
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+            <tr>
+              <th className="text-left px-4 py-2 font-semibold">Name</th>
+              <th className="text-left px-4 py-2 font-semibold">Phone</th>
+              <th className="text-left px-4 py-2 font-semibold">Email</th>
+              <th className="text-left px-4 py-2 font-semibold">Designation</th>
+              <th className="text-right px-4 py-2 font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {loading && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading contacts…
+              </td></tr>
+            )}
+            {!loading && contacts.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                No contacts yet. Click <span className="font-semibold">Add Contact</span> to start the directory.
+              </td></tr>
+            )}
+            {!loading && contacts.map((c) => {
+              // Number() guards against mysql2 returning TINYINT as
+              // a string in some setups (see toggleStatus comment).
+              const isActive = Number(c.status) === 1;
+              return (
+              <tr key={c.id} className={cn(
+                'transition',
+                isActive ? 'hover:bg-slate-50/60' : 'bg-slate-50/50 text-slate-400 hover:bg-slate-100/60'
+              )}>
+                <td className="px-4 py-2.5 font-medium">
+                  <span className={isActive ? 'text-slate-900' : 'text-slate-500'}>
+                    {c.contact_name || '—'}
+                  </span>
+                  {!isActive && (
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-600 uppercase tracking-wider">
+                      Inactive
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 font-mono">{c.contact_no || '—'}</td>
+                <td className="px-4 py-2.5">{c.contact_email || '—'}</td>
+                <td className="px-4 py-2.5">{c.contact_desgn || '—'}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <div className="inline-flex items-center gap-2">
+                    {/* Active/Inactive toggle — replaces the old delete
+                        button. tbl_client_contacts.status:
+                          1 = Active   (green pill, switch ON)
+                          0 = Inactive (slate pill, switch OFF)
+                        Soft-toggle so historical job rows that reference
+                        this contact keep working. */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isActive}
+                      onClick={() => toggleStatus(c)}
+                      disabled={busy}
+                      title={isActive ? 'Deactivate contact' : 'Activate contact'}
+                      className={cn(
+                        'relative inline-flex items-center w-10 h-5 rounded-full transition disabled:opacity-50',
+                        isActive ? 'bg-emerald-500' : 'bg-slate-300'
+                      )}
+                    >
+                      <span className={cn(
+                        'inline-block w-4 h-4 bg-white rounded-full shadow transition-transform',
+                        isActive ? 'translate-x-[22px]' : 'translate-x-0.5'
+                      )} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(c)}
+                      disabled={busy}
+                      title="Edit contact"
+                      className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition disabled:opacity-50"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Editor modal — portaled to document.body so the backdrop
+          always covers the full viewport (the parent `<main>` has its
+          own scroll container, which was clipping a non-portaled
+          fixed-inset-0 overlay). */}
+      {editorOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+          onClick={() => !busy && setEditorOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
+              <h2 className="text-lg font-bold text-slate-900">
+                {editingId == null ? 'Add Contact' : 'Edit Contact'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEditorOpen(false)}
+                disabled={busy}
+                className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                label="Full name" required icon={User}
+                value={draft.contactName}
+                onChange={(v) => setDraft({ ...draft, contactName: v })}
+              />
+              <FormField
+                label="Designation" required icon={Briefcase}
+                value={draft.contactDesgn}
+                onChange={(v) => setDraft({ ...draft, contactDesgn: v })}
+                placeholder="Manager, SPOC, …"
+              />
+              <FormField
+                label="Email" required icon={Mail}
+                value={draft.contactEmail}
+                onChange={(v) => setDraft({ ...draft, contactEmail: v })}
+                placeholder="name@company.com"
+              />
+              <FormField
+                label="Phone" required icon={Smartphone}
+                value={draft.contactNo}
+                onChange={(v) => setDraft({ ...draft, contactNo: v.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="10 digits"
+              />
+              <FormField
+                className="sm:col-span-2"
+                label="Alternate phone" icon={Phone}
+                value={draft.contactAltNo}
+                onChange={(v) => setDraft({ ...draft, contactAltNo: v.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="optional"
+              />
+              {editorError && (
+                <div className="sm:col-span-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" /> {editorError}
+                </div>
+              )}
+              <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditorOpen(false)}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveDraft}
+                  disabled={busy}
+                  className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary-dark inline-flex items-center gap-1.5 shadow-sm shadow-primary/30 disabled:opacity-60"
+                >
+                  {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <>{editingId == null ? 'Add Contact' : 'Save Changes'}</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Bulk upload modal — same portal trick as the editor */}
+      {showBulk && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+          onClick={() => !busy && setShowBulk(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
+              <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
+                <Upload className="w-5 h-5 text-primary" /> Bulk Upload Contacts
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowBulk(false)}
+                disabled={busy}
+                className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                Upload an <code className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.xlsx</code> file with one row per contact.
+                Don&apos;t have one? <button type="button" onClick={downloadTemplate} className="text-primary font-semibold hover:underline">Download the template</button>.
+              </p>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setBulkFile(e.target.files?.[0] ?? null)}
+                disabled={busy}
+                className="block w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary hover:file:bg-primary-100"
+              />
+              {bulkReport && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-sm">
+                  <div className="font-semibold text-slate-800">Result:</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="text-slate-600">Total: <span className="font-semibold text-slate-900">{bulkReport.summary.total}</span></div>
+                    <div className="text-emerald-700">Created: <span className="font-semibold">{bulkReport.summary.created}</span></div>
+                    <div className="text-amber-700">Skipped: <span className="font-semibold">{bulkReport.summary.skipped}</span></div>
+                    <div className="text-rose-700">Invalid: <span className="font-semibold">{bulkReport.summary.invalid}</span></div>
+                  </div>
+                  {bulkReport.results.some((r) => r.status !== 'created') && (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer text-slate-600 hover:text-slate-900">Show errors</summary>
+                      <ul className="mt-2 max-h-40 overflow-auto space-y-1">
+                        {bulkReport.results
+                          .filter((r) => r.status !== 'created')
+                          .map((r, i) => (
+                            <li key={i} className="text-slate-700">
+                              Row {r.rowNumber}: <span className="font-mono text-rose-700">{r.errors?.join(', ') || r.reason || r.status}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowBulk(false)}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={submitBulk}
+                  disabled={busy || !bulkFile}
+                  className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary-dark inline-flex items-center gap-1.5 shadow-sm shadow-primary/30 disabled:opacity-60"
+                >
+                  {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</> : 'Upload'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 

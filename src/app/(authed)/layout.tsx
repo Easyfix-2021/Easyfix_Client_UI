@@ -49,7 +49,7 @@ const SECTION_ONE: NavItem[] = [
 const SECTION_TWO: NavItem[] = [
   { href: '/team',         label: 'My Team',         icon: Users },
   { href: '/technicians',  label: 'My Technicians',  icon: HardHat },
-  { externalHref: 'https://www.easyfix.in/our-team', label: 'Connect Us', icon: ExternalLink },
+  { externalHref: 'https://www.easyfix.in/our-team', label: 'Contact Us', icon: ExternalLink },
 ];
 
 function initialsOf(name?: string) {
@@ -152,6 +152,10 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200',
+          // Warm brand-red gradient — keeps EasyFix's friendly identity
+          // front and centre. Subtle multi-stop gradient instead of a
+          // flat saturated red so the column has depth + reads as
+          // polished, not screaming.
           'bg-gradient-to-b from-[#d9212b] via-[#b91c1c] to-[#7f1d1d] text-white shadow-2xl',
           sidebarOpen ? 'w-64' : 'w-0 md:w-16 overflow-hidden'
         )}
@@ -176,8 +180,6 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
                   alt={spoc?.client_name || 'Client logo'}
                   className="max-w-full max-h-full object-contain"
                   onError={(e) => {
-                    // Broken / 403 image — hide so the initials fall-
-                    // back sibling renders cleanly.
                     (e.currentTarget as HTMLImageElement).style.display = 'none';
                   }}
                 />
@@ -232,11 +234,8 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           ))}
         </nav>
 
-        {/* "powered by EasyFix" footer — small "powered by" prefix
-            in muted white, brand name as bold white text so it stays
-            readable even at small sizes (the prior <img> at h-3 was
-            too tiny to register). Letter-spacing gives it a wordmark
-            feel without depending on the logo PNG. */}
+        {/* "powered by EasyFix" footer — bold white wordmark against the
+            red sidebar so the attribution stays legible. */}
         {sidebarOpen && (
           <div className="px-4 py-3 border-t border-white/15 flex items-center justify-center gap-1.5">
             <span className="text-[10px] text-white/60 uppercase tracking-wider">powered by</span>
