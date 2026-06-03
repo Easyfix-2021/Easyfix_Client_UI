@@ -6,7 +6,6 @@
  * top navbar with notifications and user avatar.
  */
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, getToken, setToken } from '@/lib/api';
@@ -157,25 +156,66 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           sidebarOpen ? 'w-64' : 'w-0 md:w-16 overflow-hidden'
         )}
       >
-        {/* Brand — full wordmark when expanded, square "EF" pill when collapsed */}
+        {/* Brand block — CLIENT brand first (their logo + company name).
+            Reads as a client portal, not an internal ops console. The
+            client_id is tucked into the logo tile's title attribute so
+            ops can still recover it via hover for debugging but SPOCs
+            see only their own company.
+            Collapsed mode shrinks to a square logo tile (falls back to
+            the company's initials when no logo is on file). */}
         {sidebarOpen ? (
-          <div className="px-4 py-5 flex items-center gap-3 border-b border-white/15">
-            <div className="bg-white rounded-md p-1.5 shrink-0">
-              <Image src="/logoTrans.png" alt="EasyFix" width={120} height={36} className="h-7 w-auto" />
+          <div className="px-4 py-5 flex flex-col items-center gap-2.5 border-b border-white/15 text-center">
+            <div
+              className="bg-white rounded-xl p-2 shadow-md w-20 h-20 grid place-items-center overflow-hidden"
+              title={`Client #${spoc?.client_id ?? '—'}`}
+            >
+              {spoc?.client_logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={spoc.client_logo_url}
+                  alt={spoc?.client_name || 'Client logo'}
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    // Broken / 403 image — hide so the initials fall-
+                    // back sibling renders cleanly.
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <span className="text-primary font-extrabold text-2xl tracking-tight">
+                  {(spoc?.client_name || 'EF').slice(0, 2).toUpperCase()}
+                </span>
+              )}
             </div>
-            <div className="min-w-0">
-              <div className="text-xs uppercase tracking-wider text-white/70">Service Dashboard</div>
-              <div className="text-sm font-semibold truncate">Client #{spoc?.client_id ?? '—'}</div>
+            <div className="text-base font-bold text-white leading-tight truncate max-w-full">
+              {spoc?.client_name || 'Client Portal'}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/70 font-semibold">
+              Service Portal
             </div>
           </div>
         ) : (
           <div className="py-4 flex items-center justify-center border-b border-white/15">
             <div
-              className="w-10 h-10 bg-white text-primary font-extrabold rounded-md flex items-center justify-center text-sm tracking-tight"
-              title={`EasyFix · Client #${spoc?.client_id ?? '—'}`}
-              aria-label="EasyFix"
+              className="w-10 h-10 bg-white rounded-md flex items-center justify-center overflow-hidden p-1"
+              title={`${spoc?.client_name || 'EasyFix'} · Client #${spoc?.client_id ?? '—'}`}
+              aria-label={spoc?.client_name || 'Client'}
             >
-              EF
+              {spoc?.client_logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={spoc.client_logo_url}
+                  alt={spoc?.client_name || 'Client logo'}
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <span className="text-primary font-extrabold text-sm tracking-tight">
+                  {(spoc?.client_name || 'EF').slice(0, 2).toUpperCase()}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -191,6 +231,20 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
             <SidebarLink key={item.label} item={item} active={isActive(item)} collapsed={!sidebarOpen} />
           ))}
         </nav>
+
+        {/* "powered by EasyFix" footer — small "powered by" prefix
+            in muted white, brand name as bold white text so it stays
+            readable even at small sizes (the prior <img> at h-3 was
+            too tiny to register). Letter-spacing gives it a wordmark
+            feel without depending on the logo PNG. */}
+        {sidebarOpen && (
+          <div className="px-4 py-3 border-t border-white/15 flex items-center justify-center gap-1.5">
+            <span className="text-[10px] text-white/60 uppercase tracking-wider">powered by</span>
+            <span className="text-xs font-extrabold text-white tracking-tight">
+              EasyFix
+            </span>
+          </div>
+        )}
       </aside>
 
       {/* Main column: navbar + content.

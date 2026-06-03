@@ -15,10 +15,15 @@ export type Spoc = {
   client_id: number;
   email?: string;
   // client_name surfaced from tbl_client.client_name via findSpocById;
-  // used by the sidebar to label the Client Profile nav entry with the
-  // actual company name (e.g. "ABC Pvt Ltd"). Optional so older tokens
-  // without the field don't crash the FE.
+  // used by the sidebar to label the brand block with the actual
+  // company name (e.g. "Decathlon"). Optional so older tokens without
+  // the field don't crash the FE.
   client_name?: string | null;
+  // client_logo_url comes from /me which resolves tbl_client.logo_id
+  // through the shared resolveClientDocumentUrl helper. Rendered as
+  // the primary brand in the sidebar (client-first, not platform-
+  // first). Null when the client hasn't uploaded a logo yet.
+  client_logo_url?: string | null;
 };
 
 export const SpocContext = createContext<Spoc | null>(null);

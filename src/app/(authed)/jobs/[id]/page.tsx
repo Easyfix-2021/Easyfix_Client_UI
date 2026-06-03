@@ -604,98 +604,11 @@ export default function JobDetailPage() {
         </Section>
       </div>
 
-      {/* Services / Estimate */}
-      {e && (
-        <div id="estimate" />
-      )}
-      {e && (
-        <Section title="Estimate" icon={IndianRupee}
-          titleRight={
-            <span className="text-xs">
-              {e.already_approved && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 font-semibold">
-                  <CheckCircle2 className="w-3 h-3" /> Approved
-                </span>
-              )}
-              {e.already_rejected && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-semibold">
-                  <XCircle className="w-3 h-3" /> Rejected
-                </span>
-              )}
-            </span>
-          }
-        >
-          {e.services.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
-              No services awaiting approval on this job.
-            </p>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Service</th>
-                      <th className="!text-right">Qty</th>
-                      <th className="!text-right">Unit ₹</th>
-                      <th className="!text-right">Material ₹</th>
-                      <th className="!text-right">Line Total ₹</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {e.services.map((s) => (
-                      <tr key={s.job_service_id}>
-                        <td>{s.service_name || '—'}</td>
-                        <td className="text-right font-mono">{num(s.quantity)}</td>
-                        <td className="text-right font-mono">{num(s.total_charge).toFixed(2)}</td>
-                        <td className="text-right font-mono">{num(s.material_charge).toFixed(2)}</td>
-                        <td className="text-right font-mono font-semibold">{num(s.line_total).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-slate-50 font-bold text-primary">
-                      <td colSpan={4} className="text-right">Grand Total</td>
-                      <td className="text-right font-mono inline-flex items-center justify-end gap-0.5">
-                        <IndianRupee className="w-3.5 h-3.5" />
-                        {num(e.totals.grand_total).toFixed(2)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {showEstimateActions && (
-                <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-100">
-                  <button
-                    onClick={approve}
-                    disabled={acting}
-                    className="btn-primary disabled:opacity-60"
-                  >
-                    {acting
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Working…</>
-                      : <><CheckCircle2 className="w-4 h-4" /> Approve Estimate</>}
-                  </button>
-                  <button
-                    onClick={() => setShowReject(true)}
-                    disabled={acting}
-                    className="btn-outline text-rose-600 border-rose-200 hover:bg-rose-50"
-                  >
-                    <XCircle className="w-4 h-4" /> Reject
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {j.approval_reject_reason && (
-            <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-sm">
-              <div className="text-xs font-semibold text-rose-900 uppercase tracking-wide mb-1">
-                Rejection Reason
-              </div>
-              <p className="text-rose-800">{j.approval_reject_reason}</p>
-            </div>
-          )}
-        </Section>
-      )}
+      {/* Estimate section removed — the line-item table + Approve /
+          Reject buttons lived here. The Estimate Status banner +
+          Lifecycle timeline below still surface the workflow state,
+          and the All-Services section further down lists every job
+          service for reference. */}
 
       {/* ─── Estimate Status banner ──────────────────────────────────
           Mirrors legacy job-detail.component.html lines 709-771.
