@@ -171,7 +171,11 @@ export default function ClientProfilePage() {
         <div className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-start gap-5">
             <div className="shrink-0 mx-auto md:mx-0">
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-primary-dark grid place-items-center text-3xl font-extrabold text-white shadow-md shadow-primary/20 ring-4 ring-white">
+              {/* Profile avatar — pink/violet gradient matching the
+                  navbar avatar so the SPOC's identity treatment stays
+                  consistent across the dashboard. Same fuchsia → pink
+                  → violet ramp, just sized up for the hero card. */}
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 grid place-items-center text-3xl font-extrabold text-white shadow-md shadow-pink-500/20 ring-4 ring-white">
                 {initialsOf(p.contact_name)}
               </div>
             </div>

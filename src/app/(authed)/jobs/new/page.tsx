@@ -138,8 +138,53 @@ function humanize(name: string): string {
     .join(' ');
 }
 
+/*
+ * Indian mobile pattern check — used by the auto-customer-lookup
+ * effect (lookup only fires on a structurally valid number to avoid
+ * thrashing the BE on every keystroke). NOT enough on its own at
+ * submit time — see isValidMobile below for the junk-pattern check.
+ */
 function isTenDigits(v: string) {
   return /^[6-9]\d{9}$/.test(v.trim());
+}
+
+/*
+ * Submit-time validation: structurally valid AND not an obvious junk
+ * pattern. Operators routinely type "9999999999" / "8888888888" /
+ * "9876543210" as placeholders when the customer's real number isn't
+ * handy — those then propagate as ghost customers in tbl_customer and
+ * break the auto-fill / address-book / notification flows downstream.
+ *
+ * Rejects:
+ *   - All same digit       (e.g. 9999999999, 8888888888, 1111111111)
+ *   - Sequential ascending (e.g. 1234567890, 6234567890)
+ *   - Sequential descending(e.g. 9876543210, 0987654321)
+ *   - Pair-repeat          (e.g. 9090909090, 8989898989) — these are
+ *                          almost always fake-data shortcuts
+ * Returns:
+ *   { ok: true } | { ok: false, reason: '…' }
+ */
+function isValidMobile(v: string): { ok: true } | { ok: false; reason: string } {
+  const m = v.trim();
+  if (!isTenDigits(m)) return { ok: false, reason: 'Enter a valid 10-digit mobile' };
+  if (/^(\d)\1{9}$/.test(m)) {
+    return { ok: false, reason: 'Mobile cannot be the same digit repeated 10 times' };
+  }
+  // Sequential — check that consecutive digits differ by +1 or by -1
+  // every step. Holds true for both 1234567890-style ascending and
+  // 9876543210-style descending sequences.
+  const allAsc = m.split('').every((d, i, a) =>
+    i === 0 || (Number(d) - Number(a[i - 1]) + 10) % 10 === 1);
+  const allDesc = m.split('').every((d, i, a) =>
+    i === 0 || (Number(a[i - 1]) - Number(d) + 10) % 10 === 1);
+  if (allAsc || allDesc) {
+    return { ok: false, reason: 'Sequential digits aren’t a real mobile number' };
+  }
+  // Pair-repeat — ABABABABAB pattern.
+  if (m.length === 10 && /^(\d)(\d)\1\2\1\2\1\2\1\2$/.test(m)) {
+    return { ok: false, reason: 'That looks like a placeholder, not a real number' };
+  }
+  return { ok: true };
 }
 
 export default function NewOrderPage() {
@@ -285,7 +330,7 @@ export default function NewOrderPage() {
   // Live required-field checklist for the summary rail + bottom bar.
   const requiredChecks = useMemo(() => {
     const checks: { key: string; label: string; ok: boolean }[] = [
-      { key: 'customer_mob_no', label: 'Customer mobile',  ok: isTenDigits(form.customer_mob_no) },
+      { key: 'customer_mob_no', label: 'Customer mobile',  ok: isValidMobile(form.customer_mob_no).ok },
       { key: 'customer_name',   label: 'Contact name',     ok: form.customer_name.trim().length > 0 },
       { key: 'service_category_ids', label: 'Service category', ok: form.service_category_ids.length > 0 },
       { key: 'job_desc',        label: 'Problem description', ok: form.job_desc.trim().length > 0 },
@@ -310,16 +355,24 @@ export default function NewOrderPage() {
   // the new value).
   function validate(): Record<string, string> {
     const errs: Record<string, string> = {};
-    if (!form.customer_mob_no.trim()) errs.customer_mob_no = 'Mobile number is required';
-    else if (!isTenDigits(form.customer_mob_no)) errs.customer_mob_no = 'Enter a valid 10-digit mobile';
+    if (!form.customer_mob_no.trim()) {
+      errs.customer_mob_no = 'Mobile number is required';
+    } else {
+      const v = isValidMobile(form.customer_mob_no);
+      if (!v.ok) errs.customer_mob_no = v.reason;
+    }
     if (!form.customer_name.trim()) errs.customer_name = 'Contact name is required';
     if (form.service_category_ids.length === 0) errs.service_category_ids = 'Pick at least one service category';
     if (!form.job_desc.trim()) errs.job_desc = 'Describe the problem';
     if (!form.address.trim()) errs.address = 'Address is required';
     if (!form.city_id)        errs.city_id = 'Pick a city';
     if (!form.client_ref_id.trim()) errs.client_ref_id = "Brand's order reference ID is required";
-    if (form.alternate_mob_no && !isTenDigits(form.alternate_mob_no)) {
-      errs.alternate_mob_no = 'Enter a valid 10-digit alternate mobile';
+    if (form.alternate_mob_no) {
+      const v = isValidMobile(form.alternate_mob_no);
+      if (!v.ok) errs.alternate_mob_no = v.reason.replace('Mobile', 'Alternate mobile');
+    }
+    if (form.alternate_mob_no && form.alternate_mob_no === form.customer_mob_no) {
+      errs.alternate_mob_no = 'Alternate mobile must be different from the primary mobile';
     }
     if (!form.appt_date)      errs.appt_date = 'Pick an appointment date';
     else if (form.appt_date < todayLocalISO()) errs.appt_date = 'Appointment date cannot be in the past';
@@ -450,28 +503,30 @@ export default function NewOrderPage() {
   }
 
   return (
-    <form onSubmit={submit} className="max-w-6xl mx-auto pb-28">
+    <form onSubmit={submit} className="max-w-6xl mx-auto pb-32 px-1 sm:px-0">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-slate-500 mb-3">
+      <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 mb-3">
         <Link href="/dashboard" className="hover:text-primary">Dashboard</Link>
         <ChevronRight className="w-3 h-3 text-slate-300" />
         <span className="font-semibold text-slate-800">New Order</span>
       </div>
 
-      {/* Hero card with brand-red side stripe */}
-      <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-5">
+      {/* Hero card with brand-red side stripe — stacks on mobile, side-
+          by-side from sm:. Smaller padding and heading on phones so the
+          required-fields pill doesn't crowd the greeting. */}
+      <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-4 sm:mb-5">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
-        <div className="p-5 md:p-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              Hello {firstNameOf(spoc.contact_name) || 'there'} 👋
+        <div className="p-4 sm:p-5 md:p-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 inline-flex items-center gap-2 leading-tight">
+              <Sparkles className="w-5 h-5 text-primary shrink-0" />
+              <span className="truncate">Hello {firstNameOf(spoc.contact_name) || 'there'} 👋</span>
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Tell us about the work and we&apos;ll dispatch a technician right away.
             </p>
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold self-start sm:self-auto shrink-0">
             <ClipboardList className="w-4 h-4" />
             {filledCount} / {requiredChecks.length} required filled
           </div>
@@ -905,10 +960,18 @@ export default function NewOrderPage() {
         </aside>
       </div>
 
-      {/* Sticky bottom action bar */}
-      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-30 bg-white border-t border-slate-200 shadow-xl">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-end gap-3">
-          <div className="flex items-center gap-2">
+      {/* Sticky bottom action bar — safe-area aware on iPhone, two-row
+          layout on tight mobile widths so the "Book Now" CTA stays
+          finger-sized and never gets squeezed under Cancel. */}
+      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-30 bg-white border-t border-slate-200 shadow-xl pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 flex items-center justify-between sm:justify-end gap-2">
+          {/* Mobile-only required-fields summary so the SPOC sees
+              progress without scrolling up to the hero pill. */}
+          <div className="sm:hidden text-[11px] font-semibold text-slate-600 inline-flex items-center gap-1.5">
+            <ClipboardList className="w-3.5 h-3.5 text-primary" />
+            {filledCount}/{requiredChecks.length}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={reset}
@@ -916,11 +979,11 @@ export default function NewOrderPage() {
             >
               Reset
             </button>
-            <Link href="/dashboard" className="btn-outline">Cancel</Link>
+            <Link href="/dashboard" className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2">Cancel</Link>
             <button
               type="submit"
               disabled={submitting}
-              className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+              className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking…</>
@@ -1304,11 +1367,13 @@ function StepCard({
   // positioned inside this card and was being clipped by a parent
   // overflow. The header still looks clean inside the rounded card
   // thanks to its own rounded-t styling.
+  // Mobile: tighter px-4/py-3 on header and p-4 on body so the form
+  // fields keep more horizontal room on narrow phones.
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+      <div className="flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
         <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-primary text-white grid place-items-center font-bold text-sm shadow-md shadow-primary/30">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary text-white grid place-items-center font-bold text-sm shadow-md shadow-primary/30">
             {step}
           </div>
           <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white grid place-items-center ring-2 ring-white">
@@ -1316,11 +1381,11 @@ function StepCard({
           </div>
         </div>
         <div className="min-w-0">
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
-          <p className="text-xs text-slate-500">{subtitle}</p>
+          <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">{title}</h2>
+          <p className="text-[11px] sm:text-xs text-slate-500 leading-snug">{subtitle}</p>
         </div>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }
@@ -1928,15 +1993,15 @@ function SelectAddressDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4 py-8 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-8 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden my-auto"
+        className="w-full max-w-xl rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden sm:my-auto max-h-[95vh] sm:max-h-none flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
-          <h2 className="text-xl font-bold text-slate-900">Select Address</h2>
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-slate-100 shrink-0">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Select Address</h2>
           <button
             type="button"
             onClick={onClose}
@@ -1947,7 +2012,7 @@ function SelectAddressDialog({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
           {/* Search bar with right-side spinner */}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -2248,28 +2313,28 @@ function AddressDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4 py-6 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-6 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh]"
+        className="w-full max-w-5xl rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden sm:my-auto flex flex-col max-h-[95vh] sm:max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ─── Header — gradient strip + soft icon tile ──────────── */}
-        <div className="relative px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 via-white to-white">
+        <div className="relative px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 via-white to-white">
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 grid place-items-center shrink-0">
-                <MapPinned className="w-5 h-5 text-primary" />
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary/10 grid place-items-center shrink-0">
+                <MapPinned className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 leading-tight">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
                   Add Address Details
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
                   Where should the technician be dispatched?
                 </p>
               </div>
@@ -2277,7 +2342,7 @@ function AddressDialog({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
@@ -2289,7 +2354,7 @@ function AddressDialog({
         <div className="flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
             {/* LEFT — form fields */}
-            <div className="lg:col-span-3 p-6 space-y-5">
+            <div className="lg:col-span-3 p-4 sm:p-6 space-y-5">
               {/* SECTION 1: Location */}
               <div>
                 <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
@@ -2461,7 +2526,7 @@ function AddressDialog({
             </div>
 
             {/* RIGHT — map + use-location CTA (sticky on desktop) */}
-            <div className="lg:col-span-2 bg-slate-50 lg:border-l lg:border-slate-100 p-6">
+            <div className="lg:col-span-2 bg-slate-50 lg:border-l lg:border-slate-100 p-4 sm:p-6">
               <div className="lg:sticky lg:top-0 space-y-3">
                 <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
                   <span className="w-5 h-px bg-primary" /> Map Preview
@@ -2471,7 +2536,7 @@ function AddressDialog({
                   <iframe
                     title="Location preview"
                     src={mapSrc}
-                    className="w-full h-64 lg:h-[420px] border-0"
+                    className="w-full h-48 sm:h-64 lg:h-[420px] border-0"
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
                   />
@@ -2486,22 +2551,22 @@ function AddressDialog({
         </div>
 
         {/* ─── Sticky footer ────────────────────────────────────── */}
-        <div className="px-6 py-3 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
-          <div className="text-xs text-slate-500">
-            <span className="text-rose-500">*</span> required fields
+        <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-white flex items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="text-[11px] sm:text-xs text-slate-500 shrink-0">
+            <span className="text-rose-500">*</span> required
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+              className="px-3 py-2 sm:px-4 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={saveAndClose}
-              className="px-6 py-2 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary-dark shadow-sm shadow-primary/30 inline-flex items-center gap-1.5"
+              className="px-4 py-2 sm:px-6 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary-dark shadow-sm shadow-primary/30 inline-flex items-center gap-1.5"
             >
               Continue <ChevronRight className="w-4 h-4" />
             </button>

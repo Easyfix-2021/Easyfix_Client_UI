@@ -65,7 +65,22 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [spoc, setSpoc] = useState<Spoc | null>(null);
   const [loading, setLoading] = useState(true);
+  // Default sidebar OPEN on desktop, CLOSED on mobile.
+  // We can't read window at SSR/render time, so initialise to true and
+  // immediately collapse on first client mount if the viewport is below
+  // the `md` breakpoint (768px). Prevents the 256px-wide sidebar from
+  // hiding the hamburger toggle on phones.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  }, []);
+  // Auto-close the sidebar after a nav click on mobile so the SPOC
+  // sees the new page without a tap on the backdrop.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  }, [pathname]);
   const bootedRef = useRef(false);
 
   useEffect(() => {
@@ -145,6 +160,17 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   return (
     <SpocContext.Provider value={spoc}>
     <div className="min-h-screen bg-slate-50">
+      {/* Mobile backdrop — only when sidebar is open and viewport is
+          below md (768px). Tap to close. Pointer-events-none on desktop
+          so it never blocks anything there. */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm md:hidden"
+        />
+      )}
       {/* Sidebar — fixed on every breakpoint so it stays visible while
           the main column scrolls. Mobile keeps the overlay behaviour
           (no margin push); desktop pushes the main column right via
@@ -169,26 +195,12 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
             the company's initials when no logo is on file). */}
         {sidebarOpen ? (
           <div className="px-4 py-5 flex flex-col items-center gap-2.5 border-b border-white/15 text-center">
-            <div
-              className="bg-white rounded-xl p-2 shadow-md w-20 h-20 grid place-items-center overflow-hidden"
-              title={`Client #${spoc?.client_id ?? '—'}`}
-            >
-              {spoc?.client_logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={spoc.client_logo_url}
-                  alt={spoc?.client_name || 'Client logo'}
-                  className="max-w-full max-h-full object-contain"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <span className="text-primary font-extrabold text-2xl tracking-tight">
-                  {(spoc?.client_name || 'EF').slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </div>
+            <ClientLogoTile
+              url={spoc?.client_logo_url}
+              name={spoc?.client_name}
+              clientId={spoc?.client_id}
+              size="lg"
+            />
             <div className="text-base font-bold text-white leading-tight truncate max-w-full">
               {spoc?.client_name || 'Client Portal'}
             </div>
@@ -198,27 +210,12 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           </div>
         ) : (
           <div className="py-4 flex items-center justify-center border-b border-white/15">
-            <div
-              className="w-10 h-10 bg-white rounded-md flex items-center justify-center overflow-hidden p-1"
-              title={`${spoc?.client_name || 'EasyFix'} · Client #${spoc?.client_id ?? '—'}`}
-              aria-label={spoc?.client_name || 'Client'}
-            >
-              {spoc?.client_logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={spoc.client_logo_url}
-                  alt={spoc?.client_name || 'Client logo'}
-                  className="max-w-full max-h-full object-contain"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <span className="text-primary font-extrabold text-sm tracking-tight">
-                  {(spoc?.client_name || 'EF').slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </div>
+            <ClientLogoTile
+              url={spoc?.client_logo_url}
+              name={spoc?.client_name}
+              clientId={spoc?.client_id}
+              size="sm"
+            />
           </div>
         )}
 
@@ -265,13 +262,22 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           </button>
 
           <div className="ml-auto flex items-center gap-3 md:gap-5">
+            {/* Notification bell — amber/gold treatment matching the
+                target mock. Soft amber tile background, deep amber
+                stroke + matching fill so the bell reads as gold; red
+                indicator dot stays brand-rose for instant
+                "unread" recognition. */}
             <button
               type="button"
               aria-label="Notifications"
-              className="relative p-2 rounded hover:bg-slate-100 text-slate-700"
+              className="relative p-2 rounded-full bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200 transition"
             >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 inline-flex h-2 w-2 rounded-full bg-primary" />
+              <Bell
+                className="w-5 h-5 text-amber-500"
+                strokeWidth={2}
+                fill="#FBBF24"
+              />
+              <span className="absolute top-0.5 right-0.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
             </button>
 
             <Link
@@ -279,14 +285,20 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
               className="flex items-center gap-2 hover:opacity-90"
               aria-label="Open profile"
             >
-              <span className="w-9 h-9 rounded-full bg-primary text-white font-bold flex items-center justify-center text-sm ring-2 ring-primary/20">
+              {/* Avatar — pink→violet gradient matching the mock, one
+                  size bigger (h-11 w-11) with a soft white ring so it
+                  reads as the "primary identity chip" in the top bar.
+                  The gradient tone is intentionally warm (fuchsia → purple)
+                  so it stands distinct from the brand-red logo + amber
+                  bell sitting next to it. */}
+              <span className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-base ring-2 ring-white shadow-md shadow-pink-500/20">
                 {initials}
               </span>
               <span className="hidden md:block text-sm leading-tight">
-                <span className="block font-semibold text-slate-800 truncate max-w-[160px]">
+                <span className="block font-bold text-slate-900 truncate max-w-[180px]">
                   {spoc?.contact_name ?? 'User'}
                 </span>
-                <span className="block text-xs text-slate-500 truncate max-w-[160px]">
+                <span className="block text-xs text-slate-500 truncate max-w-[180px]">
                   {spoc?.email ?? `Client #${spoc?.client_id ?? '—'}`}
                 </span>
               </span>
@@ -321,6 +333,58 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
       />
     </div>
     </SpocContext.Provider>
+  );
+}
+
+/*
+ * ClientLogoTile — sidebar brand block tile.
+ *
+ * Prefers the actual client logo image (Nginx-served URL from
+ * `spoc.client_logo_url`). If the image fails to load (404, CORS,
+ * file removed, etc.), flips to a `broken` state and renders the
+ * client's INITIALS — same fallback we use when no logo is on file.
+ * Avoids the "blank white square" failure mode the previous inline
+ * onError → hide handler was causing.
+ *
+ * Two sizes:
+ *   "lg" → 80×80 rounded-xl tile for the expanded sidebar.
+ *   "sm" → 40×40 rounded-md tile for the collapsed rail.
+ */
+function ClientLogoTile({
+  url, name, clientId, size,
+}: {
+  url?: string | null;
+  name?: string | null;
+  clientId?: number | null;
+  size: 'lg' | 'sm';
+}) {
+  const [broken, setBroken] = useState(false);
+  const initials = (name || 'EF').slice(0, 2).toUpperCase();
+  const titleAttr = size === 'lg'
+    ? `Client #${clientId ?? '—'}`
+    : `${name || 'EasyFix'} · Client #${clientId ?? '—'}`;
+
+  const tileClass = size === 'lg'
+    ? 'bg-white rounded-xl p-2 shadow-md w-20 h-20 grid place-items-center overflow-hidden'
+    : 'w-10 h-10 bg-white rounded-md flex items-center justify-center overflow-hidden p-1';
+  const initialsClass = size === 'lg'
+    ? 'text-primary font-extrabold text-2xl tracking-tight'
+    : 'text-primary font-extrabold text-sm tracking-tight';
+
+  return (
+    <div className={tileClass} title={titleAttr} aria-label={name || 'Client'}>
+      {url && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={name || 'Client logo'}
+          className="max-w-full max-h-full object-contain"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <span className={initialsClass}>{initials}</span>
+      )}
+    </div>
   );
 }
 

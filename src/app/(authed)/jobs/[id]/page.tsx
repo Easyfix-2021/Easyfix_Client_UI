@@ -30,7 +30,7 @@ import {
   User, Briefcase, HardHat, Tag, MessageSquare, ImageIcon,
   CheckCircle2, XCircle, Loader2, IndianRupee, Hash,
   Activity, FileText, X as XIcon, ClipboardList,
-  PhoneCall, Star, Flame, Headphones, ShoppingCart,
+  PhoneCall, Star, Flame, Headphones, ShoppingCart, Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
@@ -146,6 +146,24 @@ function statusBadgeClass(status: number) {
     case 21: return 'bg-slate-100 text-slate-700 ring-slate-200';
     default: return 'bg-slate-100 text-slate-700 ring-slate-200';
   }
+}
+
+/*
+ * Nginx-served file URL conventions (CRM, /var/www/html/easydoc/...).
+ * Both artefacts are keyed only by job_id, so we don't need a DB row
+ * to surface them. The Jobsheet image-category lookup is kept as a
+ * fallback in case ops uploads a custom feedback PDF manually.
+ *
+ * `FILE_BASE_URL` overrides — set NEXT_PUBLIC_FILE_BASE_URL at build
+ * time if your deploy serves these from a CDN (e.g.
+ * https://files.easyfix.in). Defaults to '/easydoc' (proxied by Nginx).
+ */
+const FILE_BASE = (process.env.NEXT_PUBLIC_FILE_BASE_URL || '/easydoc').replace(/\/+$/, '');
+function estimatePdfUrl(jobId: number): string {
+  return `${FILE_BASE}/estimateapproval/Estimate_Approval_${jobId}.pdf`;
+}
+function jobsheetPdfUrl(jobId: number): string {
+  return `${FILE_BASE}/feedback_jobs/feedback${jobId}.pdf`;
 }
 
 function formatDateTime(iso: string | null) {
@@ -344,10 +362,32 @@ export default function JobDetailPage() {
 
   // Resolve image src — relative paths go through our SPOC-scoped image
   // endpoint (which 302s to S3 or streams from disk). Absolute URLs
-  // pass through unchanged.
+  /*
+   * Resolve a tbl_job_image row to a browser-loadable URL.
+   *
+   * Resolution order (cheapest → most expensive):
+   *   1. Already absolute       — already an https://… URL, pass through.
+   *   2. Already has a slash    — looks like a stored path / S3 key
+   *                                (Job_Images/foo.jpg, JobSupportings/x).
+   *                                Route through the backend image
+   *                                endpoint which handles S3 presigned
+   *                                + Nginx fallback uniformly.
+   *   3. Bare filename          — Nginx convention:
+   *                                /easydoc/upload_jobs/{filename}
+   *                                Skips the backend round-trip entirely.
+   *   4. Anything else / empty  — backend endpoint as a safety net.
+   *
+   * Net effect: typical CRM-stored filenames like
+   *   479925_checkin_20260422113009.jpg
+   * load straight from Nginx, while legacy S3 / oddly-keyed rows still
+   * resolve through the BE so we never break those.
+   */
   function imageSrc(img: { image_id: number; image: string }): string {
-    if (img.image && img.image.startsWith('http')) return img.image;
-    return `/api/client/jobs/${j.job_id}/images/${img.image_id}`;
+    const raw = String(img.image || '').trim();
+    if (!raw) return `/api/client/jobs/${j.job_id}/images/${img.image_id}`;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.includes('/'))    return `/api/client/jobs/${j.job_id}/images/${img.image_id}`;
+    return `${FILE_BASE}/upload_jobs/${raw}`;
   }
 
   // Jobsheet = the feedback-category image. Case-insensitive match
@@ -412,14 +452,16 @@ export default function JobDetailPage() {
               {STATUS_LABELS[j.job_status] || `Status ${j.job_status}`}
             </span>
           </div>
-          {/* Jobsheet button — opens the feedback artefact in a new
-              tab. Most rows are PDFs (signed customer feedback /
-              jobsheet), so we let the browser handle them natively
-              rather than forcing them into the image-zoom modal.
-              Legacy SQL: image_category LIKE 'feedback'. */}
-          {feedbackImage && (
+          {/* Jobsheet button — points at the Nginx-served signed PDF
+              convention:  /easydoc/feedback_jobs/feedback{jobId}.pdf
+              Visible on terminal-state jobs (Completed = 3 or 5) where
+              the signed feedback artefact exists. The older
+              feedbackImage fallback (j.images where image_category=
+              'feedback') is still kept below for jobs whose PDFs were
+              uploaded under a non-standard filename. */}
+          {(isCompleted || feedbackImage) && (
             <a
-              href={imageSrc(feedbackImage)}
+              href={feedbackImage ? imageSrc(feedbackImage) : jobsheetPdfUrl(j.job_id)}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-primary shrink-0"
@@ -457,7 +499,7 @@ export default function JobDetailPage() {
           space via the parent's space-y-5 gap. */}
       {(j.job_reference_id || j.client_ref_id || j.job_type || j.source_type
         || paymentModeLabel(j.collected_by)
-        || j.sub_job_id || (j.primary_job_id && j.primary_job_id > 0)) && (
+        || (j.sub_job_id ?? 0) > 0 || (j.primary_job_id ?? 0) > 0) && (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 items-center">
           {j.job_reference_id && (
@@ -497,15 +539,17 @@ export default function JobDetailPage() {
             </span>
           )}
         </div>
-        {/* Sub-job / Parent-job navigation */}
-        {(j.sub_job_id || (j.primary_job_id && j.primary_job_id > 0)) && (
+        {/* Sub-job / Parent-job navigation — guard with `> 0` (not just
+            truthy) because the DB stores 0 for "no link", and React
+            renders the literal number 0 when you do `{0 && <X/>}`. */}
+        {((j.sub_job_id ?? 0) > 0 || (j.primary_job_id ?? 0) > 0) && (
           <div className="flex items-center gap-3 text-xs">
-            {j.primary_job_id && j.primary_job_id > 0 && (
+            {(j.primary_job_id ?? 0) > 0 && (
               <Link href={`/jobs/${j.primary_job_id}`} className="text-primary hover:underline">
                 ← Parent {j.primary_job_id}
               </Link>
             )}
-            {j.sub_job_id && (
+            {(j.sub_job_id ?? 0) > 0 && (
               <Link href={`/jobs/${j.sub_job_id}`} className="text-primary hover:underline">
                 Revisit {j.sub_job_id} →
               </Link>
@@ -654,23 +698,39 @@ export default function JobDetailPage() {
                   <span className="font-semibold">Estimate Sent for Approval</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
-                  <a
-                    href="#estimate"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-100"
-                  >
-                    View
-                  </a>
                   <span className="text-blue-900/70 font-medium">
                     {formatDateTime(sent)}
                   </span>
+                  {/* Open the Nginx-served Estimate PDF in a new tab.
+                      Convention: /easydoc/estimateapproval/Estimate_Approval_{jobId}.pdf */}
+                  <a
+                    href={estimatePdfUrl(j.job_id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open Estimate PDF"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
                 </div>
               </div>
             )}
             {state === 'approved' && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-emerald-900">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <span className="font-semibold">Estimate Approved</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-emerald-900">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span className="font-semibold">Estimate Approved</span>
+                  </div>
+                  <a
+                    href={estimatePdfUrl(j.job_id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open Estimate PDF"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
@@ -686,9 +746,20 @@ export default function JobDetailPage() {
             )}
             {state === 'rejected' && (
               <div className="rounded-lg border border-rose-200 bg-rose-50/60 px-4 py-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-rose-900">
-                  <XCircle className="w-5 h-5 text-rose-600" />
-                  <span className="font-semibold">Estimate Rejected</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-rose-900">
+                    <XCircle className="w-5 h-5 text-rose-600" />
+                    <span className="font-semibold">Estimate Rejected</span>
+                  </div>
+                  <a
+                    href={estimatePdfUrl(j.job_id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open Estimate PDF"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-rose-200 text-rose-700 hover:bg-rose-100 transition"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
