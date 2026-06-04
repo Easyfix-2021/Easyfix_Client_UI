@@ -99,6 +99,12 @@ export default function ClientProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [tab, setTab] = useState<TabKey>('identity');
+  // OTP-protected change flow for the read-only login identifiers
+  // (contact_no, contact_email). null = closed. The modal handles
+  // both steps (enter new value → enter OTP) internally so we just
+  // need to know which kind is open here.
+  const [changeFlow, setChangeFlow] = useState<'phone' | 'email' | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) { setP(data); setSnapshot(data); }
@@ -127,6 +133,32 @@ export default function ClientProfilePage() {
   async function save(e?: React.FormEvent) {
     e?.preventDefault();
     if (!p) return;
+    // Alt phone — same junk-pattern guard the New Order form uses so
+    // placeholder numbers (1111111111, 9999999999, 1234567890,
+    // 9090909090, etc.) can't be saved to tbl_client_contacts.contact_alt_no.
+    if (p.contact_alt_no) {
+      const v = isValidMobile(p.contact_alt_no);
+      if (!v.ok) {
+        setError(`Alternate phone: ${v.reason}`);
+        return;
+      }
+      if (p.contact_alt_no === p.contact_no) {
+        setError('Alternate phone must be different from your primary contact number');
+        return;
+      }
+    }
+    // LinkedIn URL — must be an actual linkedin.com profile, not random
+    // text. Accepts the four canonical shapes the FE placeholder hints
+    // at ("https://linkedin.com/in/your-handle") plus the regional
+    // subdomains (in.linkedin.com / uk.linkedin.com / etc.) and the
+    // older /pub/ legacy paths.
+    if (p.linkedIn_profile && p.linkedIn_profile.trim()) {
+      const l = isValidLinkedInUrl(p.linkedIn_profile);
+      if (!l.ok) {
+        setError(`LinkedIn profile: ${l.reason}`);
+        return;
+      }
+    }
     setSaving(true); setError(null);
     try {
       await api.put('/profile', {
@@ -145,6 +177,64 @@ export default function ClientProfilePage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Save failed');
     } finally { setSaving(false); }
+  }
+
+  /*
+   * Mobile validator — copied from src/app/(authed)/jobs/new/page.tsx so
+   * both forms enforce the same junk-pattern rejection rules. Worth
+   * extracting to src/lib/validators.ts if we add a third caller.
+   *
+   * Rejects:
+   *   - Wrong format / not 10 digits / wrong prefix
+   *   - All same digit       9999999999
+   *   - Sequential asc / desc 1234567890 / 9876543210
+   *   - Pair-repeat          9090909090
+   */
+  function isValidMobile(v: string): { ok: true } | { ok: false; reason: string } {
+    const m = v.trim();
+    if (!/^[6-9]\d{9}$/.test(m)) {
+      return { ok: false, reason: 'Enter a valid 10-digit mobile starting 6–9' };
+    }
+    if (/^(\d)\1{9}$/.test(m)) {
+      return { ok: false, reason: 'Cannot be the same digit repeated 10 times' };
+    }
+    const allAsc = m.split('').every((d, i, a) =>
+      i === 0 || (Number(d) - Number(a[i - 1]) + 10) % 10 === 1);
+    const allDesc = m.split('').every((d, i, a) =>
+      i === 0 || (Number(a[i - 1]) - Number(d) + 10) % 10 === 1);
+    if (allAsc || allDesc) {
+      return { ok: false, reason: 'Sequential digits aren’t a real mobile number' };
+    }
+    if (/^(\d)(\d)\1\2\1\2\1\2\1\2$/.test(m)) {
+      return { ok: false, reason: 'Looks like a placeholder, not a real number' };
+    }
+    return { ok: true };
+  }
+
+  /*
+   * LinkedIn URL validator. Accepts the shapes a SPOC actually pastes:
+   *   - https://linkedin.com/in/<handle>
+   *   - https://www.linkedin.com/in/<handle>
+   *   - https://in.linkedin.com/in/<handle>   (regional subdomain)
+   *   - linkedin.com/in/<handle>              (no protocol)
+   *   - https://www.linkedin.com/pub/<id>     (legacy public profile)
+   *   - https://www.linkedin.com/company/<x>  (company page — kept
+   *     permissive in case ops uses the company URL as a placeholder)
+   *
+   * Rejects:
+   *   - Random text ("looking for a job")
+   *   - Non-linkedin URLs (https://google.com/foo)
+   *   - linkedin.com root with no profile path
+   */
+  function isValidLinkedInUrl(v: string): { ok: true } | { ok: false; reason: string } {
+    const u = v.trim();
+    // Must contain linkedin.com (with optional protocol + subdomain)
+    // AND have a non-empty path segment after it (the handle).
+    const pattern = /^(https?:\/\/)?(www\.|in\.|[a-z]{2}\.)?linkedin\.com\/(in|pub|company|profile)\/[A-Za-z0-9._%-]+\/?(\?.*)?$/i;
+    if (!pattern.test(u)) {
+      return { ok: false, reason: 'Enter a full LinkedIn profile URL (e.g. https://linkedin.com/in/your-handle)' };
+    }
+    return { ok: true };
   }
 
   if (loading) {
@@ -277,15 +367,22 @@ export default function ClientProfilePage() {
                 <ReadOnlyField
                   label="Email address" icon={Mail}
                   value={p.contact_email}
+                  onEditClick={() => setChangeFlow('email')}
                 />
                 <ReadOnlyField
                   label="Contact number" icon={Smartphone}
                   value={p.contact_no}
+                  onEditClick={() => setChangeFlow('phone')}
                 />
                 <FormField
                   label="Alternate phone number" icon={Phone}
                   value={p.contact_alt_no || ''}
-                  onChange={(v) => setP({ ...p, contact_alt_no: v })}
+                  // Strip non-digits and cap at 10 as the SPOC types so
+                  // the field can never hold "12 abc" or 12+ digits.
+                  // The junk-pattern check (all-same / sequential /
+                  // pair-repeat) still fires on Save — this is just
+                  // the on-the-fly typing guard.
+                  onChange={(v) => setP({ ...p, contact_alt_no: v.replace(/\D/g, '').slice(0, 10) })}
                   placeholder="10-digit backup number"
                 />
                 <FormField
@@ -297,7 +394,7 @@ export default function ClientProfilePage() {
               </div>
               <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-900 inline-flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
-                Email and mobile are verified. Contact ops to request a change.
+                Email and mobile are verified. Tap the pencil to change — we'll send an OTP to confirm.
               </div>
             </div>
           )}
@@ -409,6 +506,31 @@ export default function ClientProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* OTP change-flow modal. Rendered conditionally so it doesn't
+          live in the DOM when unused. onUpdated optimistically patches
+          the displayed identifier so the user sees the new value
+          immediately — the next /me fetch on navigation will pull the
+          canonical row anyway. */}
+      {changeFlow && p && (
+        <ChangeIdentifierModal
+          kind={changeFlow}
+          oldValue={changeFlow === 'phone' ? p.contact_no : p.contact_email}
+          onClose={() => setChangeFlow(null)}
+          onUpdated={(v) => {
+            const patched = changeFlow === 'phone'
+              ? { ...p, contact_no: v }
+              : { ...p, contact_email: v };
+            setP(patched);
+            setSnapshot(patched); // keep dirty-state honest — this change is already persisted
+            setChangeFlow(null);
+            setSuccessMsg(changeFlow === 'phone' ? 'Number updated' : 'Email updated');
+          }}
+        />
+      )}
+      {successMsg && (
+        <SuccessToastModal message={successMsg} onClose={() => setSuccessMsg(null)} />
+      )}
     </form>
   );
 }
@@ -472,10 +594,11 @@ function FormField({
 }
 
 function ReadOnlyField({
-  label, value, icon: Icon,
+  label, value, icon: Icon, onEditClick,
 }: {
   label: string; value: string;
   icon: React.ComponentType<{ className?: string }>;
+  onEditClick?: () => void;
 }) {
   return (
     <div>
@@ -488,15 +611,332 @@ function ReadOnlyField({
         <div className="w-full pl-10 pr-12 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-mono">
           {value || '—'}
         </div>
-        <button
-          type="button"
-          title="Request edit (contact ops)"
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-md grid place-items-center text-slate-400 hover:text-primary hover:bg-primary-50 transition"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {onEditClick && (
+          <button
+            type="button"
+            onClick={onEditClick}
+            title={`Change ${label.toLowerCase()}`}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-md grid place-items-center text-slate-500 hover:text-primary hover:bg-primary-50 transition"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+/*
+ * ChangeIdentifierModal — small OTP-protected popup for switching
+ * `contact_no` or `contact_email`. Mirrors the legacy SweetAlert flow
+ * but with a modern mobile-style layout based on the reference at
+ * Downloads/modern_otp_verification_mobile.html.
+ *
+ * Two steps:
+ *   1. enter new value → POST /profile/change-phone|email/send-otp
+ *      Backend rejects with 409 if the new value is already taken
+ *      across tbl_client_contacts ∪ tbl_user.
+ *   2. enter 4-digit OTP → POST .../verify-otp
+ *      On success we call onUpdated(newValue) so the parent can
+ *      refresh /me and the input field, then close.
+ *
+ * Resend reissues a fresh OTP (5-min TTL) by re-hitting send-otp with
+ * the same target. We keep a 30-second cooldown on the button to
+ * stop trigger-happy users from flooding the SMS/email channels.
+ */
+function ChangeIdentifierModal({
+  kind, oldValue, onClose, onUpdated,
+}: {
+  kind: 'phone' | 'email';
+  oldValue: string;
+  onClose: () => void;
+  onUpdated: (newValue: string) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const [step, setStep] = useState<'enter' | 'otp'>('enter');
+  const [newValue, setNewValue] = useState('');
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0); // seconds until Resend re-enables
+  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  // Resend cooldown timer — re-arms every time send-otp succeeds.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  // Auto-focus the first OTP cell when we hit step 2 — saves a tap
+  // on mobile where the input would otherwise need to be tapped.
+  useEffect(() => {
+    if (step === 'otp') {
+      setTimeout(() => otpRefs.current[0]?.focus(), 50);
+    }
+  }, [step]);
+
+  const isPhone = kind === 'phone';
+  const label = isPhone ? 'phone number' : 'email address';
+  const Title = isPhone ? 'Change your number' : 'Change your email';
+  const targetPath = isPhone ? 'change-phone' : 'change-email';
+  const payloadKey = isPhone ? 'new_phone' : 'new_email';
+
+  function setOtpAt(i: number, v: string) {
+    // Accept only the first digit if the user paste-spammed multiple
+    // chars into one cell, then jump to the next field.
+    const d = v.replace(/\D/g, '').slice(0, 1);
+    setOtp((prev) => prev.map((c, idx) => (idx === i ? d : c)));
+    if (d && i < 3) otpRefs.current[i + 1]?.focus();
+  }
+  function handleOtpKey(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    // Backspace on an empty cell jumps to the previous cell so the
+    // user can correct a wrong digit with a single Backspace + retype.
+    if (e.key === 'Backspace' && !otp[i] && i > 0) {
+      otpRefs.current[i - 1]?.focus();
+    }
+  }
+  function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    // If the SPOC pastes the OTP from SMS/email, distribute the 4
+    // digits across the cells in one shot.
+    const txt = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    if (txt.length === 0) return;
+    e.preventDefault();
+    const next = ['', '', '', ''];
+    for (let i = 0; i < txt.length; i++) next[i] = txt[i];
+    setOtp(next);
+    otpRefs.current[Math.min(txt.length, 3)]?.focus();
+  }
+
+  async function sendOtp(isResend = false) {
+    setErr(null); setInfo(null); setBusy(true);
+    try {
+      const v = isPhone
+        ? newValue.replace(/\D/g, '').trim()
+        : newValue.trim().toLowerCase();
+      if (!v) throw new Error(`Enter a ${label}.`);
+      await api.post(`/profile/${targetPath}/send-otp`, { [payloadKey]: v });
+      setStep('otp');
+      setResendIn(30);
+      setInfo(`OTP sent to ${v}.`);
+      if (isResend) setOtp(['', '', '', '']);
+    } catch (e) {
+      // Surface the backend's friendly message verbatim — they're
+      // already crafted for end users (e.g. "This number is already
+      // registered with another account").
+      setErr(e instanceof ApiError ? e.message : 'Could not send OTP. Please try again.');
+    } finally { setBusy(false); }
+  }
+
+  async function verify() {
+    setErr(null); setBusy(true);
+    try {
+      const code = Number(otp.join(''));
+      if (!Number.isInteger(code) || code < 1000 || code > 9999) {
+        throw new Error('Enter the 4-digit code.');
+      }
+      const v = isPhone
+        ? newValue.replace(/\D/g, '').trim()
+        : newValue.trim().toLowerCase();
+      await api.post(`/profile/${targetPath}/verify-otp`, { [payloadKey]: v, otp: code });
+      onUpdated(v);
+    } catch (e) {
+      // Backend returns reason codes (OTP_MISMATCH, OTP_EXPIRED, …) —
+      // translate to short, human copy. Anything else falls through
+      // to the raw message so we don't swallow useful detail.
+      const msg = e instanceof ApiError ? e.message : String(e);
+      if (msg === 'OTP_MISMATCH')    setErr('Incorrect code — please re-check.');
+      else if (msg === 'OTP_EXPIRED')setErr('Code expired. Tap Resend to get a new one.');
+      else if (msg === 'NO_OTP_ISSUED') setErr('No OTP was issued. Tap Resend.');
+      else setErr(msg);
+    } finally { setBusy(false); }
+  }
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+        {/* Header — gradient hero with icon. Matches the reference
+            design but in our brand palette instead of blue. */}
+        <div className="bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 px-5 pt-5 pb-6 text-center relative">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 grid place-items-center text-white transition"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur grid place-items-center shadow-lg">
+            {isPhone ? <Smartphone className="w-7 h-7 text-white" /> : <Mail className="w-7 h-7 text-white" />}
+          </div>
+          <h2 className="mt-3 text-lg font-bold text-white">{Title}</h2>
+          <p className="mt-0.5 text-xs text-white/80 whitespace-nowrap">
+            {step === 'enter'
+              ? `Enter your new ${label}. We'll send a one-time code to verify.`
+              : `Enter the 4-digit code we sent to your new ${label}.`}
+          </p>
+        </div>
+
+        <div className="px-5 py-5 space-y-4">
+          {/* Previous-value reminder. Same input-style box as the
+              "New phone number" field below it (matched pair — old
+              above, new below) but greyed-out + read-only so the SPOC
+              sees it's the *current* value, not editable. */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+              Previous {label}
+            </label>
+            <div className="w-full px-3 py-2.5 text-sm font-mono font-bold text-slate-700 border border-slate-200 rounded-lg bg-slate-50">
+              {oldValue || '—'}
+            </div>
+          </div>
+
+          {step === 'enter' && (
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                New {label}
+              </label>
+              <input
+                type={isPhone ? 'tel' : 'email'}
+                inputMode={isPhone ? 'numeric' : 'email'}
+                autoFocus
+                value={newValue}
+                onChange={(e) => {
+                  // Phone: digits-only, capped at 10. Email: free text
+                  // (we lowercase on submit, not on every keystroke, so
+                  // the cursor doesn't jump if they hit Shift mid-type).
+                  if (isPhone) setNewValue(e.target.value.replace(/\D/g, '').slice(0, 10));
+                  else setNewValue(e.target.value);
+                }}
+                placeholder={isPhone ? '10-digit mobile number' : 'name@company.com'}
+                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+              />
+            </div>
+          )}
+
+          {step === 'otp' && (
+            <div>
+              <label className="text-xs font-semibold text-slate-700 mb-2 block text-center">
+                Verification code
+              </label>
+              <div className="flex items-center justify-center gap-2">
+                {otp.map((d, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { otpRefs.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={d}
+                    onChange={(e) => setOtpAt(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKey(i, e)}
+                    onPaste={handleOtpPaste}
+                    className="w-12 h-14 text-center text-xl font-bold border-2 border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                  />
+                ))}
+              </div>
+              <div className="mt-3 text-center text-xs">
+                {resendIn > 0 ? (
+                  <span className="text-slate-500">Resend code in {resendIn}s</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendOtp(true)}
+                    disabled={busy}
+                    className="text-indigo-600 hover:text-indigo-800 font-semibold disabled:opacity-60"
+                  >
+                    Resend code
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {info && step === 'otp' && (
+            <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-xs text-indigo-900">
+              {info}
+            </div>
+          )}
+          {err && (
+            <div className="rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-900 inline-flex items-start gap-2 w-full">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-rose-600" />
+              <span>{err}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            {step === 'enter' ? (
+              <button
+                type="button"
+                onClick={() => sendOtp(false)}
+                disabled={busy || !newValue}
+                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send code
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={verify}
+                disabled={busy || otp.some((c) => !c)}
+                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Update
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/*
+ * SuccessToastModal — tiny celebratory popup we render after a
+ * successful number / email change. The user explicitly asked for a
+ * "popup [saying] number is updated" so we keep it as a deliberate
+ * dialog (not a corner toast) — clearer feedback that the OTP flow
+ * completed successfully.
+ */
+function SuccessToastModal({
+  message, onClose,
+}: {
+  message: string; onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  // Auto-dismiss after 1.8 seconds — long enough to read, short
+  // enough that the SPOC doesn't need to hunt for a close button.
+  useEffect(() => {
+    const t = setTimeout(onClose, 1800);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  if (!mounted) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl px-6 py-5 max-w-xs text-center animate-in fade-in zoom-in-95">
+        <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 grid place-items-center">
+          <Check className="w-6 h-6 text-emerald-600" />
+        </div>
+        <div className="mt-3 text-sm font-semibold text-slate-800">{message}</div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

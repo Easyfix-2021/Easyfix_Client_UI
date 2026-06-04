@@ -183,7 +183,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           // flat saturated red so the column has depth + reads as
           // polished, not screaming.
           'bg-gradient-to-b from-[#d9212b] via-[#b91c1c] to-[#7f1d1d] text-white shadow-2xl',
-          sidebarOpen ? 'w-64' : 'w-0 md:w-16 overflow-hidden'
+          sidebarOpen ? 'w-60' : 'w-0 md:w-16 overflow-hidden'
         )}
       >
         {/* Brand block — CLIENT brand first (their logo + company name).
@@ -194,17 +194,20 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
             Collapsed mode shrinks to a square logo tile (falls back to
             the company's initials when no logo is on file). */}
         {sidebarOpen ? (
-          <div className="px-4 py-5 flex flex-col items-center gap-2.5 border-b border-white/15 text-center">
+          /* Compact brand block — 14px tile + tighter padding so the
+             expanded sidebar fits all 10 nav items + powered-by footer
+             without scrolling on a 720px viewport. */
+          <div className="px-3 py-3 flex flex-col items-center gap-1.5 border-b border-white/15 text-center">
             <ClientLogoTile
               url={spoc?.client_logo_url}
               name={spoc?.client_name}
               clientId={spoc?.client_id}
               size="lg"
             />
-            <div className="text-base font-bold text-white leading-tight truncate max-w-full">
+            <div className="text-sm font-bold text-white leading-tight truncate max-w-full">
               {spoc?.client_name || 'Client Portal'}
             </div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/70 font-semibold">
+            <div className="text-[9px] uppercase tracking-[0.18em] text-white/70 font-semibold">
               Service Portal
             </div>
           </div>
@@ -249,7 +252,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           the sidebar overlays instead of pushing. */}
       <div className={cn(
         'flex flex-col min-w-0 transition-[margin] duration-200',
-        sidebarOpen ? 'md:ml-64' : 'ml-0 md:ml-16'
+        sidebarOpen ? 'md:ml-60' : 'ml-0 md:ml-16'
       )}>
         <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center px-4 md:px-6 gap-4">
           <button
@@ -364,11 +367,13 @@ function ClientLogoTile({
     ? `Client #${clientId ?? '—'}`
     : `${name || 'EasyFix'} · Client #${clientId ?? '—'}`;
 
+  // lg shrunk from 80px → 56px so the whole nav fits without scroll on
+  // a standard 720-768px screen. sm collapsed-rail size unchanged.
   const tileClass = size === 'lg'
-    ? 'bg-white rounded-xl p-2 shadow-md w-20 h-20 grid place-items-center overflow-hidden'
+    ? 'bg-white rounded-lg p-1.5 shadow-md w-14 h-14 grid place-items-center overflow-hidden'
     : 'w-10 h-10 bg-white rounded-md flex items-center justify-center overflow-hidden p-1';
   const initialsClass = size === 'lg'
-    ? 'text-primary font-extrabold text-2xl tracking-tight'
+    ? 'text-primary font-extrabold text-lg tracking-tight'
     : 'text-primary font-extrabold text-sm tracking-tight';
 
   return (
