@@ -756,14 +756,18 @@ export default function OrderHistoryPage() {
                   <Link
                     href={`/jobs/${j.job_id}`}
                     className={cn(
-                      'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition',
+                      // whitespace-nowrap keeps "Reopen Invoice" on a
+                      // single line — the column is narrow enough that
+                      // the default wrapping broke "Reopen" / "Invoice"
+                      // across two lines.
+                      'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap',
                       j.job_reopen_flag === 1
                         ? 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
                         : 'bg-primary text-white hover:bg-primary-dark'
                     )}
                     title={j.job_reopen_flag === 1 ? 'Invoice was reopened' : 'Reopen invoice'}
                   >
-                    <RotateCcw className="w-3 h-3" />
+                    <RotateCcw className="w-3 h-3 shrink-0" />
                     {j.job_reopen_flag === 1 ? 'Reopened' : 'Reopen'} Invoice
                   </Link>
                 </td>
