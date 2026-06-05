@@ -116,6 +116,40 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // ─── Unread-notice count for the bell badge ────────────────────────
+  // Polled once on mount + every 60s while the tab is foregrounded.
+  // We deliberately avoid SSE/WebSockets here — a single GET every
+  // minute is a few hundred bytes and saves us a long-lived connection.
+  // The /notifications page itself triggers an immediate refresh via
+  // a `window`-level event (see refreshUnread below) so a "Mark all as
+  // read" tap doesn't have to wait up to 60s for the bell to clear.
+  const [unread, setUnread] = useState<number>(0);
+  useEffect(() => {
+    if (!spoc) return;
+    let cancelled = false;
+    async function refreshUnread() {
+      try {
+        const r = await api.get<{ count: number }>('/notices/unread-count');
+        if (!cancelled) setUnread(Number(r?.count) || 0);
+      } catch {
+        // Silent — the badge just won't update. Avoid spamming the
+        // console on an offline laptop.
+      }
+    }
+    refreshUnread();
+    const id = window.setInterval(refreshUnread, 60_000);
+    // Cross-component invalidation: pages that mutate read state
+    // (e.g. /notifications "Mark all as read") dispatch this event
+    // so the bell repaints instantly.
+    function onInvalidate() { refreshUnread(); }
+    window.addEventListener('notices:invalidate', onInvalidate);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.removeEventListener('notices:invalidate', onInvalidate);
+    };
+  }, [spoc]);
+
   async function performLogout() {
     setLoggingOut(true);
     try {
@@ -270,9 +304,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
                 stroke + matching fill so the bell reads as gold; red
                 indicator dot stays brand-rose for instant
                 "unread" recognition. */}
-            <button
-              type="button"
-              aria-label="Notifications"
+            {/* Notifications bell → /notifications. The count comes from
+                the unread-count poll above (initial fetch + 60s tick,
+                plus an event-driven refresh when the notifications
+                page mutates read state). Hides the badge when zero so
+                an idle inbox doesn't show a stale "0" pill. */}
+            <Link
+              href="/notifications"
+              aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
               className="relative p-2 rounded-full bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200 transition"
             >
               <Bell
@@ -280,8 +319,15 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
                 strokeWidth={2}
                 fill="#FBBF24"
               />
-              <span className="absolute top-0.5 right-0.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
-            </button>
+              {unread > 0 && (
+                // Numeric badge when there's a count; collapses to a
+                // bare dot for 1-digit counts to keep the bell compact.
+                // Caps at 99+ so two-digit counts don't break the layout.
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 ring-2 ring-white text-[10px] font-bold text-white leading-none">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </Link>
 
             <Link
               href="/profile"
