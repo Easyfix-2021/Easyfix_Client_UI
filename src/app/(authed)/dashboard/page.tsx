@@ -586,9 +586,40 @@ export default function OrderHistoryPage() {
         </div>
       )}
 
-      {/* TABLE */}
-      <div className="card overflow-x-auto">
-        <table className="data-table">
+      {/* TABLE — fluid: no horizontal scroll. Explicit per-column
+          widths via <colgroup> + `table-fixed w-full` so unbreakable
+          strings (long client-ref-ids, mobile numbers) truncate with
+          an ellipsis instead of bleeding into the next column. The
+          badge cells use a smaller text size + can wrap on spaces. */}
+      <div className="card">
+        <table className="data-table table-fixed w-full">
+          {tab === 'otherOrders' ? (
+            <colgroup>
+              <col className="w-[7%]"  />{/* Job ID */}
+              <col className="w-[9%]"  />{/* Ref ID */}
+              <col className="w-[11%]" />{/* Client Ref ID */}
+              <col className="w-[9%]"  />{/* City */}
+              <col className="w-[12%]" />{/* Customer */}
+              <col className="w-[10%]" />{/* Appointment */}
+              <col className="w-[13%]" />{/* Status Of Order */}
+              <col className="w-[13%]" />{/* Bucket */}
+              <col className="w-[10%]" />{/* Source */}
+              <col className="w-[6%]"  />{/* Age */}
+            </colgroup>
+          ) : (
+            <colgroup>
+              <col className="w-[8%]"  />{/* Job ID */}
+              <col className="w-[12%]" />{/* Client Ref ID */}
+              <col className="w-[10%]" />{/* City */}
+              <col className="w-[7%]"  />{/* OTA */}
+              <col className="w-[7%]"  />{/* TAT */}
+              <col className="w-[12%]" />{/* Appointment */}
+              <col className="w-[12%]" />{/* App Start */}
+              <col className="w-[10%]" />{/* Billing Value */}
+              <col className="w-[8%]"  />{/* Rating */}
+              <col className="w-[14%]" />{/* Action */}
+            </colgroup>
+          )}
           <thead>
             {tab === 'otherOrders' ? (
               <tr>
@@ -637,11 +668,15 @@ export default function OrderHistoryPage() {
                       ) : null}
                     </Link>
                   </td>
-                  <td className="text-xs font-mono">{j.job_reference_id || '—'}</td>
-                  <td className="text-xs font-mono">{j.client_ref_id || '—'}</td>
-                  <td>{j.city_name || '—'}</td>
-                  <td>
-                    <div className="text-slate-800">{j.customer_name || '—'}</div>
+                  <td className="text-xs font-mono truncate" title={j.job_reference_id || ''}>
+                    {j.job_reference_id || '—'}
+                  </td>
+                  <td className="text-xs font-mono truncate" title={j.client_ref_id || ''}>
+                    {j.client_ref_id || '—'}
+                  </td>
+                  <td className="truncate" title={j.city_name || ''}>{j.city_name || '—'}</td>
+                  <td className="truncate" title={j.customer_name || ''}>
+                    <div className="text-slate-800 truncate">{j.customer_name || '—'}</div>
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
@@ -650,7 +685,7 @@ export default function OrderHistoryPage() {
                         (CommonUtils.java#getBucketStatusForJob).
                         Examples: status 3/5 → "Completed", 9 → "New Ticket". */}
                     <span className={cn(
-                      'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 leading-tight text-center',
                       statusBadgeClass(j.job_status)
                     )}>
                       {getBucketStatusForJob(j.job_status) || '—'}
@@ -669,7 +704,7 @@ export default function OrderHistoryPage() {
                       const label = getBucketCurrentStatusForJob(j) || getBucketStatusForJob(j.job_status) || '—';
                       return (
                         <span className={cn(
-                          'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 whitespace-nowrap',
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 leading-tight text-center',
                           bucketBadgeClass(label)
                         )}>
                           {label}
@@ -721,14 +756,18 @@ export default function OrderHistoryPage() {
                   <Link
                     href={`/jobs/${j.job_id}`}
                     className={cn(
-                      'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition',
+                      // whitespace-nowrap keeps "Reopen Invoice" on a
+                      // single line — the column is narrow enough that
+                      // the default wrapping broke "Reopen" / "Invoice"
+                      // across two lines.
+                      'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap',
                       j.job_reopen_flag === 1
                         ? 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
                         : 'bg-primary text-white hover:bg-primary-dark'
                     )}
                     title={j.job_reopen_flag === 1 ? 'Invoice was reopened' : 'Reopen invoice'}
                   >
-                    <RotateCcw className="w-3 h-3" />
+                    <RotateCcw className="w-3 h-3 shrink-0" />
                     {j.job_reopen_flag === 1 ? 'Reopened' : 'Reopen'} Invoice
                   </Link>
                 </td>

@@ -6,6 +6,51 @@
   body {
     @apply bg-slate-50 text-slate-900 font-sans;
   }
+
+  /*
+   * Modern scrollbar — replaces the chunky default Windows / older
+   * Chrome scrollbar with a thin, rounded, semi-transparent track
+   * matching the Stripe / Linear / Notion aesthetic.
+   *
+   * Two layers because no single property covers every browser:
+   *   - `scrollbar-width: thin` + `scrollbar-color` → Firefox / modern
+   *     specs (works in Chrome 121+ too).
+   *   - `::-webkit-scrollbar-*` → Chrome / Edge / Safari fallback for
+   *     the same visual.
+   *
+   * Tone: slate-300 thumb at rest, slate-400 on hover. Transparent
+   * track so the scrollbar disappears against any background colour.
+   * Width: 8px — slim enough to feel modern, wide enough that a
+   * trackpad-less user can still grab it.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.55);
+    border-radius: 9999px;
+    /* Tiny transparent border so the pill doesn't kiss the track
+       edges — gives it the floating-pill look the modern apps use. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.75);
+    background-clip: padding-box;
+  }
+  /* Corner where horizontal + vertical scrollbars meet — keep it
+     transparent so it doesn't show as a square block. */
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 @layer components {
