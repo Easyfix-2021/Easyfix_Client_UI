@@ -24,7 +24,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  HardHat, Search, ChevronLeft, ChevronRight,
+  HardHat, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   MapPin, Star, Wrench, Award,
   Shield, ShieldOff, Briefcase,
 } from 'lucide-react';
@@ -41,7 +41,8 @@ type Technician = {
   skill_rating: number | string | null;   // 0-10 from CRM
   tool_rating: number | string | null;    // 0-10 from CRM
   city: string | null;
-  service_types: string | null;           // CSV
+  service_types: string | null;           // CSV (granular service types)
+  service_categories: string | null;      // CSV (parent categories — Carpentry, Electrician, …) what we render on the card
   // mysql2 returns DECIMAL columns as strings by default — keep both
   // shapes typed so the rest of the component stays defensive.
   avg_rating: number | string | null;     // 1-5 customer average
@@ -127,9 +128,14 @@ function StatusBadge({ status }: { status: number | null }) {
 }
 
 function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }) {
+  // Click to expand → reveals the hidden chips inline. Collapses back
+  // to the truncated view on a second click. Avoids the dim native
+  // `title` tooltip — users couldn't tell the +N chip was interactive.
+  const [expanded, setExpanded] = useState(false);
+
   if (!csv) return <span className="text-xs text-slate-400">No services</span>;
   const all = csv.split(',').map((s) => s.trim()).filter(Boolean);
-  const shown = all.slice(0, max);
+  const shown = expanded ? all : all.slice(0, max);
   const hidden = all.length - shown.length;
   return (
     <div className="flex flex-wrap gap-1">
@@ -143,12 +149,22 @@ function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }
         </span>
       ))}
       {hidden > 0 && (
-        <span
-          className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold"
-          title={all.slice(max).join(', ')}
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer transition"
         >
           +{hidden} more
-        </span>
+        </button>
+      )}
+      {expanded && all.length > max && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer transition"
+        >
+          Show less
+        </button>
       )}
     </div>
   );
@@ -159,7 +175,9 @@ export default function MyTechniciansPage() {
   const [q, setQ] = useState('');
   const debouncedQ = useDebouncedValue(q, 300);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  // 12 instead of 10 so the 3-column grid fills cleanly without
+  // leaving 2 empty cells on the last row (10 % 3 = 1).
+  const [pageSize, setPageSize] = useState(12);
   const [cityIds, setCityIds] = useState<number[]>([]);
 
   // Reset to page 1 whenever any filter changes
@@ -246,23 +264,10 @@ export default function MyTechniciansPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <div className="min-w-[180px]">
-          <MultiSelect
-            label="All Cities"
-            options={cityOptions}
-            value={cityIds}
-            onChange={setCityIds}
-          />
-        </div>
-        <select
-          className="input max-w-[140px]"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as StatusFilter)}
-        >
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-          <option value="all">All</option>
-        </select>
+        {/* City + Status filters removed per design — keep only the
+            free-text search and the per-page selector. status defaults
+            to 'true' (Active) and stays pinned at that value via the
+            useState initializer; city filter is dropped entirely. */}
         <select
           className="input max-w-[140px]"
           value={pageSize}
@@ -273,12 +278,12 @@ export default function MyTechniciansPage() {
             <option key={n} value={n}>{n} per page</option>
           ))}
         </select>
-        {(cityIds.length > 0 || q || status !== 'true') && (
+        {q && (
           <button
             type="button"
-            onClick={() => { setCityIds([]); setQ(''); setStatus('true'); }}
+            onClick={() => setQ('')}
             className="btn-outline text-xs"
-            title="Clear all filters"
+            title="Clear search"
           >
             Reset
           </button>
@@ -331,7 +336,7 @@ export default function MyTechniciansPage() {
 
                   {/* Service-type chips */}
                   <div className="mb-3 pb-3 border-b border-slate-100">
-                    <ServiceTypeChips csv={t.service_types} max={4} />
+                    <ServiceTypeChips csv={t.service_categories} max={4} />
                   </div>
 
                   {/* Ratings + stats — 3-col grid */}
@@ -370,18 +375,54 @@ export default function MyTechniciansPage() {
             <span className="font-semibold">{total.toLocaleString('en-IN')}</span>
           </span>
           <div className="flex items-center gap-1">
+            {/* First page — jump to page 1 in one tap. Useful when the
+                SPOC has paged deep into a 37-page list and wants to
+                start over without 30+ back-clicks. */}
+            <button
+              type="button"
+              onClick={() => setPage(1)}
+              disabled={page <= 1}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="First page"
+              title="First page"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               className="btn-outline disabled:cursor-not-allowed"
               aria-label="Previous page"
+              title="Previous page"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-3 py-1.5">
-              Page <span className="font-semibold">{page}</span> of{' '}
-              <span className="font-semibold">{pageCount}</span>
+            {/* Direct page-number input. Type a number + Enter (or
+                blur) to jump straight there. Clamped on submit so
+                negative / over-pageCount values land on a valid page. */}
+            <span className="px-2 py-1.5 inline-flex items-center gap-1.5">
+              Page
+              <input
+                type="number"
+                min={1}
+                max={pageCount}
+                value={page}
+                onChange={(e) => {
+                  // Allow live editing — clamp only on commit so the
+                  // user can type "12" without it snapping to "1" mid-keystroke.
+                  const v = Number(e.target.value);
+                  if (Number.isInteger(v) && v >= 1 && v <= pageCount) setPage(v);
+                }}
+                onBlur={(e) => {
+                  // Final clamp on blur — covers paste / out-of-range entries.
+                  const v = Math.max(1, Math.min(pageCount, Number(e.target.value) || 1));
+                  setPage(v);
+                }}
+                className="w-14 px-2 py-1 text-center border border-slate-300 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                aria-label="Go to page"
+              />
+              of <span className="font-semibold">{pageCount}</span>
             </span>
             <button
               type="button"
@@ -389,8 +430,21 @@ export default function MyTechniciansPage() {
               disabled={page >= pageCount}
               className="btn-outline disabled:cursor-not-allowed"
               aria-label="Next page"
+              title="Next page"
             >
               <ChevronRight className="w-4 h-4" />
+            </button>
+            {/* Last page — symmetric counterpart to First. One tap
+                from anywhere in the list to the final page. */}
+            <button
+              type="button"
+              onClick={() => setPage(pageCount)}
+              disabled={page >= pageCount}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="Last page"
+              title="Last page"
+            >
+              <ChevronsRight className="w-4 h-4" />
             </button>
           </div>
         </div>

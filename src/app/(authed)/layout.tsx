@@ -36,6 +36,9 @@ type NavItem = {
   match?: string[];
 };
 
+// Section 1 — operational workflow items the SPOC works through daily.
+// Ratecard moved OUT to section 2 so the divider line falls ABOVE it,
+// grouping the "reference / admin" entries together at the bottom.
 const SECTION_ONE: NavItem[] = [
   { href: '/dashboard',           label: 'History',                 icon: History, match: ['/jobs'] },
   { href: '/tickets/new',         label: 'New Tickets',             icon: Ticket },
@@ -43,10 +46,10 @@ const SECTION_ONE: NavItem[] = [
   { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
   { href: '/tx-location',         label: 'Tx on Location',          icon: MapPin },
   { href: '/tickets/under-audit', label: 'Completed & Under Audit', icon: ClipboardCheck },
-  { href: '/ratecard',            label: 'Ratecard',                icon: ReceiptText },
 ];
 
 const SECTION_TWO: NavItem[] = [
+  { href: '/ratecard',     label: 'Ratecard',        icon: ReceiptText },
   { href: '/team',         label: 'My Team',         icon: Users },
   { href: '/technicians',  label: 'My Technicians',  icon: HardHat },
   { externalHref: 'https://www.easyfix.in/our-team', label: 'Contact Us', icon: ExternalLink },
