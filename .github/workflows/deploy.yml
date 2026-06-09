@@ -3,7 +3,11 @@
 # Targets:
 #   QA branch         → AWS EC2 at 10.30.2.30 (QA_INSTANCE_ID secret)
 #                                              SHARED VM with EasyFix_Backend + Easyfix_CRM_UI
-#   Production branch → AWS EC2 (PROD_INSTANCE_ID)  (when prod is ready)
+#   Production branch → AWS EC2 (PROD_FRONTEND_INSTANCE_ID) — dedicated
+#                       prod UI host shared with Easyfix_CRM_UI (CRM UI +
+#                       Client UI + dozzle, no backend). The prod backend
+#                       lives on a separate EC2 (PROD_BACKEND_INSTANCE_ID)
+#                       deployed by EasyFix_Backend.
 #
 # Pipeline per push:
 #   1. Typecheck on github-hosted runner (cheap fail-fast)
@@ -24,7 +28,7 @@
 #
 # Required GitHub Environment (org-level, name "Organisation Level Secrets") secrets:
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
-#   QA_INSTANCE_ID, PROD_INSTANCE_ID
+#   QA_INSTANCE_ID, PROD_FRONTEND_INSTANCE_ID
 #   QA_API_URL                https://qa.backend.easyfix.in/api  (must end with /api)
 #   PROD_API_URL              (when prod is ready — must end with /api)
 #   ECR_REGISTRY              902810393464.dkr.ecr.ap-south-1.amazonaws.com
@@ -42,11 +46,17 @@
 # CRM_UI workflows. The environment name is verbatim as configured in
 # GitHub (spaces are valid; YAML quoting is required).
 #
-# EC2 PREREQUISITE: /opt/easyfix/docker-compose.yml on the shared VM
-# must include a `client-ui` service (parallel to `crm-ui` and `backend`)
-# bound to port 5181 and consuming `${CLIENT_UI_IMAGE}` from
-# /opt/easyfix/.env. See AWS_QA_BOOTSTRAP.md or the existing crm-ui
-# service for the template.
+# EC2 PREREQUISITE (per env):
+#   QA   — /opt/easyfix/docker-compose.yml is shipped by EasyFix_Backend
+#          (combined stack). This workflow REQUIRES the file to pre-exist
+#          on the QA box; it does not write it. Bootstrap via the BE
+#          deploy first.
+#   PROD — /opt/easyfix/docker-compose.yml is shipped by THIS workflow
+#          (and by Easyfix_CRM_UI's identical sibling) from
+#          deploy/docker-compose.prod-frontend.yml. No BE deploy targets
+#          the prod UI host, so the UI repos are the writers. Both UI
+#          repos ship a byte-identical file — last deploy wins,
+#          idempotent.
 
 name: Deploy Client_UI (CI build → ECR → SSM pull)
 
@@ -234,14 +244,37 @@ jobs:
         run: |
           # Fallback for QA only — instance ID is public-info, hardcoding
           # avoids a transient secret-access misconfig blocking deploys.
-          # Prod stays strict (no fallback) because there's no prod box yet
-          # and a wrong instance ID would be a much bigger blast radius.
+          # Prod stays strict (no fallback) — wrong prod target = big blast.
+          #
+          # 2026-06-03: PROD_INSTANCE_ID split per host (BE vs UI now
+          # target different EC2s). This file reads PROD_FRONTEND_INSTANCE_ID
+          # (shared with Easyfix_CRM_UI — same prod UI box). The BE repo
+          # reads PROD_BACKEND_INSTANCE_ID. QA stays unified — all three
+          # repos deploy to the same shared QA box (i-032aa9d2942305364).
           ENV_NAME="${{ needs.build-and-push.outputs.env_name }}"
           if [[ "$ENV_NAME" == "qa" ]]; then
             echo "instance_id=${{ secrets.QA_INSTANCE_ID || 'i-032aa9d2942305364' }}"  >> "$GITHUB_OUTPUT"
           else
-            echo "instance_id=${{ secrets.PROD_INSTANCE_ID }}" >> "$GITHUB_OUTPUT"
+            echo "instance_id=${{ secrets.PROD_FRONTEND_INSTANCE_ID }}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Encode prod-frontend docker-compose.yml
+        id: compose
+        # Only the prod path needs to ship a compose file — on QA the
+        # combined stack's compose is shipped by EasyFix_Backend's deploy.
+        # On prod, no BE deploy targets the UI host, so this workflow
+        # (and Easyfix_CRM_UI's twin) is the one that writes
+        # /opt/easyfix/docker-compose.yml. Base64 transport avoids every
+        # shell-escape layer when piping through SSM.
+        if: needs.build-and-push.outputs.env_name == 'production'
+        run: |
+          COMPOSE_FILE="deploy/docker-compose.prod-frontend.yml"
+          if [[ ! -f "$COMPOSE_FILE" ]]; then
+            echo "::error::$COMPOSE_FILE missing in the repo"
+            exit 1
+          fi
+          B64=$(base64 -w0 "$COMPOSE_FILE")
+          echo "compose_b64=$B64" >> "$GITHUB_OUTPUT"
 
       - name: SSM compose pull + up
         id: ssm
@@ -261,26 +294,123 @@ jobs:
           IMAGE_URI="${REGISTRY}/${REPO}:${IMAGE_TAG}"
 
           if [[ -z "$INSTANCE_ID" ]]; then
-            echo "::error::INSTANCE_ID resolution failed even with fallback — should not happen for QA"
+            echo "::error::INSTANCE_ID resolution failed — confirm QA_INSTANCE_ID or PROD_FRONTEND_INSTANCE_ID exists in the 'Organisation Level Secrets' environment"
             exit 1
           fi
+
+          # COMPOSE_B64 is only populated for prod (the encode step is
+          # gated on env_name == production). Empty on QA — the remote
+          # script's prod-only branch skips the write in that case.
+          COMPOSE_B64="${{ steps.compose.outputs.compose_b64 }}"
 
           REMOTE_SCRIPT=$(cat <<EOF
           set -euo pipefail
           cd /opt/easyfix
 
-          for required in /opt/easyfix/.env /opt/easyfix/backend.env /opt/easyfix/docker-compose.yml; do
-            if [[ ! -f "\$required" ]]; then
-              echo "::error::\$required missing — see AWS_QA_BOOTSTRAP.md"
+          # Preflight differs by env:
+          #   QA   — combined-stack compose is shipped by EasyFix_Backend;
+          #          REQUIRE it to pre-exist (this workflow won't write it).
+          #   PROD — the UI host has NO backend deploy targeting it, so this
+          #          workflow writes /opt/easyfix/docker-compose.yml from
+          #          deploy/docker-compose.prod-frontend.yml below. We still
+          #          require .env (image-tag interpolation) but NOT
+          #          backend.env (no backend container here).
+          if [[ "$ENV_NAME" == "qa" ]]; then
+            for required in /opt/easyfix/.env /opt/easyfix/backend.env /opt/easyfix/docker-compose.yml; do
+              if [[ ! -f "\$required" ]]; then
+                echo "::error::\$required missing — see AWS_QA_BOOTSTRAP.md (bootstrap QA via the EasyFix_Backend deploy first)"
+                exit 1
+              fi
+            done
+          else
+            if [[ ! -f /opt/easyfix/.env ]]; then
+              echo "::error::/opt/easyfix/.env missing — bootstrap the prod UI host before first deploy"
               exit 1
             fi
-          done
+            # Atomic rewrite via a temp file → mv so a half-written file
+            # never confuses a concurrent compose invocation. The
+            # Easyfix_CRM_UI sibling workflow ships a byte-identical
+            # prod-frontend.yml — whichever lands last wins, idempotent.
+            echo "$COMPOSE_B64" | base64 -d > /opt/easyfix/.docker-compose.yml.new
+            mv /opt/easyfix/.docker-compose.yml.new /opt/easyfix/docker-compose.yml
+          fi
 
           # Update CLIENT_UI_IMAGE in .env. Append if first run.
           if grep -q '^CLIENT_UI_IMAGE=' /opt/easyfix/.env; then
             sed -i "s|^CLIENT_UI_IMAGE=.*|CLIENT_UI_IMAGE=$IMAGE_URI|" /opt/easyfix/.env
           else
             echo "CLIENT_UI_IMAGE=$IMAGE_URI" >> /opt/easyfix/.env
+          fi
+
+          # ─── ECR credential-helper auto-bootstrap (idempotent) ─────────
+          # The "pull access denied / no basic auth credentials" symptom is
+          # ALWAYS one of three causes:
+          #   1. EC2 instance role lacks the ECR pull policy (IAM — can't
+          #      self-fix; needs Console / IaC work).
+          #   2. amazon-ecr-credential-helper not installed on the host.
+          #   3. /root/.docker/config.json missing the credHelpers entry.
+          #
+          # Cause #1 needs human IAM access. Causes #2 and #3 we CAN
+          # self-fix on every deploy run — idempotently. The block below
+          # is a no-op when the helper is already installed and wired.
+          # Skipped silently on QA (the helper has been there for months);
+          # only the prod hosts hit the install path on their first run.
+          REGISTRY_HOST="${REGISTRY}"
+          BOOTSTRAP_RAN=0
+          if ! command -v docker-credential-ecr-login >/dev/null 2>&1; then
+            echo "▶ Installing amazon-ecr-credential-helper (first-time bootstrap)"
+            BOOTSTRAP_RAN=1
+            if command -v dnf >/dev/null 2>&1; then
+              sudo dnf install -y amazon-ecr-credential-helper
+            elif command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install -y amazon-ecr-credential-helper
+            elif command -v amazon-linux-extras >/dev/null 2>&1; then
+              sudo amazon-linux-extras install -y amazon-ecr-credential-helper
+            else
+              echo "::error::No supported package manager found — install amazon-ecr-credential-helper manually. See docs/ECR_AUTH_BOOTSTRAP.md."
+              exit 1
+            fi
+          fi
+          # Write the credHelpers entry if missing. Use printf rather than
+          # a heredoc — nested heredocs inside the outer EOF block require
+          # the closing delimiter to be flush-left, which conflicts with
+          # the YAML's leading indentation here. Single-quoted bash -c
+          # body sidesteps quote-nesting issues with the printf format
+          # string; positional \$1 keeps the registry host as data, not
+          # interpolated into the script body.
+          if ! sudo grep -q "\$REGISTRY_HOST" /root/.docker/config.json 2>/dev/null; then
+            echo "▶ Wiring /root/.docker/config.json to use ecr-login helper"
+            BOOTSTRAP_RAN=1
+            sudo mkdir -p /root/.docker
+            sudo bash -c 'printf "{\n  \"credHelpers\": {\n    \"%s\": \"ecr-login\"\n  }\n}\n" "\$1" > /root/.docker/config.json' bash "\$REGISTRY_HOST"
+            sudo chmod 600 /root/.docker/config.json
+          fi
+
+          # Smoke-test ONLY when we just bootstrapped — otherwise it's
+          # a redundant pull on every deploy. The compose pull below
+          # validates auth anyway; we only need an explicit test here
+          # to print an ACTIONABLE error when bootstrap can't fully
+          # recover (i.e. when cause #1 — missing IAM role — is at play).
+          if [[ "\$BOOTSTRAP_RAN" -eq 1 ]]; then
+            echo "▶ Smoke-test ECR auth after bootstrap"
+            if ! sudo docker pull "$IMAGE_URI" >/dev/null 2>&1; then
+              cat <<MSG
+          ::error::ECR pull still fails after credential-helper bootstrap.
+
+          The amazon-ecr-credential-helper is installed + wired (verified
+          by this script). The remaining cause is the EC2 instance role
+          missing the ECR read policy. Fix:
+
+            AWS Console → EC2 → Instances → pick this host
+              → Actions → Security → Modify IAM role
+              → attach the role with the AWS managed policy
+                  AmazonEC2ContainerRegistryReadOnly
+
+          Then re-run this workflow. Full diagnosis + alternative IAM
+          paths in EasyFix_Backend/docs/ECR_AUTH_BOOTSTRAP.md.
+          MSG
+              exit 1
+            fi
           fi
 
           # \$IMAGE_URI is substituted at heredoc-build time on the runner;
@@ -396,7 +526,16 @@ jobs:
           [[ "$STATUS" == "Success" ]] || { aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text; exit 1; }
 
       - name: Notify on failure
-        if: failure()
+        # Skip when MAIL_USERNAME isn't configured — otherwise the action
+        # itself errors with `Input required and not supplied: from`,
+        # which masks the underlying deploy failure in the log and
+        # double-fails the job (the deploy step already exited non-zero;
+        # we don't need a second red checkmark from a missing optional).
+        # MAIL_USERNAME/MAIL_PASSWORD are documented as optional in the
+        # header comment at the top of this file.
+        if: failure() && env.MAIL_USERNAME != ''
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
