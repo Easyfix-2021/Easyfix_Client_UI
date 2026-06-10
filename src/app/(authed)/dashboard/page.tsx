@@ -24,6 +24,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus, Upload, Download, AlertTriangle, Search,
   ChevronLeft, ChevronRight, Star, Filter, X, RotateCcw,
@@ -363,8 +364,21 @@ export default function OrderHistoryPage() {
     return { ok: true, reason: '' };
   }, [staged.startDate, staged.endDate]);
 
+  // Popup-style notice. Replaces the silent "disabled button does
+  // nothing" behaviour — when the export gate rejects (no date range,
+  // > 60 days, etc.), we surface the reason in a modal the user
+  // actually sees instead of a tooltip they have to hover to discover.
+  const [gateNotice, setGateNotice] = useState<string | null>(null);
+
   async function handleExport() {
-    if (!exportGate.ok) { setExportError(exportGate.reason); return; }
+    if (!exportGate.ok) {
+      // Show the gate reason in a centred popup AND keep the legacy
+      // setExportError banner — covers both at-glance and scroll-up
+      // surfaces. Returning early stops the download from firing.
+      setGateNotice(exportGate.reason);
+      setExportError(exportGate.reason);
+      return;
+    }
     setExporting(true); setExportError(null);
     try {
       const params = new URLSearchParams();
@@ -390,7 +404,17 @@ export default function OrderHistoryPage() {
       const qs = params.toString().replace(/%2C/g, ',');
       await downloadBlob(`/export/jobs?${qs}`, `OrderHistory_${ts}.xlsx`);
     } catch (err) {
-      setExportError(err instanceof ApiError ? err.message : 'Export failed');
+      // The backend returns a structured 404 when the filter set
+      // matches zero jobs (see /export/jobs route). We surface that
+      // case in the SAME amber popup the date-range gate uses, so
+      // the user has one consistent "why didn't I get a file?"
+      // surface. Everything else (network failure, 5xx) falls
+      // through to the existing inline error banner.
+      const msg = err instanceof ApiError ? err.message : 'Export failed';
+      if (err instanceof ApiError && err.status === 404) {
+        setGateNotice(msg);
+      }
+      setExportError(msg);
     } finally {
       setExporting(false);
     }
@@ -424,10 +448,14 @@ export default function OrderHistoryPage() {
           <Link href="/jobs/upload" className="btn-outline" title="Bulk-upload orders via .xlsx">
             <Upload className="w-4 h-4" /> Bulk Upload
           </Link>
+          {/* Stays clickable even when the gate fails — the click now
+              opens an explanatory popup instead of being silently
+              swallowed by HTML `disabled`. `exporting` still hard-
+              disables while a download is in-flight to stop double-fires. */}
           <button
             type="button"
             onClick={handleExport}
-            disabled={exporting || !exportGate.ok}
+            disabled={exporting}
             className="btn-outline disabled:cursor-not-allowed disabled:opacity-60"
             title={exportGate.ok
               ? 'Download Excel using the current filter inputs (date range mandatory, max 60 days)'
@@ -811,6 +839,88 @@ export default function OrderHistoryPage() {
           </div>
         </div>
       )}
+
+      {/* Export gate popup — opens when handleExport finds the gate
+          failed (no date range or > 60 days). Replaces the
+          easy-to-miss tooltip with an explicit centred dialog. */}
+      {gateNotice && (
+        <ExportGatePopup
+          message={gateNotice}
+          onClose={() => setGateNotice(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/*
+ * ExportGatePopup — small centred modal that explains why an export
+ * was blocked. Portaled to <body> so it escapes any local stacking
+ * context (the dashboard table has its own z-index). Escape key +
+ * backdrop click close the dialog.
+ */
+function ExportGatePopup({
+  message, onClose,
+}: {
+  message: string; onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // Escape closes the popup — standard accessibility behaviour.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Amber header — "warning, not error" tone. Same gradient
+            family as the rest of our modals so the dashboard feels
+            consistent. */}
+        <div className="bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 px-5 pt-5 pb-6 text-center relative">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 grid place-items-center text-white transition"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur grid place-items-center shadow-lg">
+            <AlertTriangle className="w-7 h-7 text-white" />
+          </div>
+          <h2 className="mt-3 text-lg font-bold text-white">Nothing to export</h2>
+        </div>
+
+        <div className="px-5 py-5">
+          <p className="text-sm text-slate-700 leading-relaxed text-center">
+            {message}
+          </p>
+          <div className="mt-5 flex justify-center">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:shadow-md transition"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

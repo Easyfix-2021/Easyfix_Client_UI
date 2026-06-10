@@ -29,6 +29,7 @@ import {
   Linkedin, Fingerprint, BadgeCheck, BellRing, FileBadge,
   Sparkles, Wallet, X, Search, ChevronDown,
   Users as UsersIcon, Plus, Upload, Download, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { api, ApiError, getToken } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
@@ -1181,6 +1182,26 @@ function ContactsTab() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // ─── Pagination ────────────────────────────────────────────────
+  // Client-side slicing of the full contacts list. The backend's
+  // /contacts endpoint already returns the entire roster (typically
+  // tens, not hundreds of rows), so paginating in-memory avoids an
+  // extra round-trip and keeps the toggle/edit flows simple — they
+  // mutate `contacts` directly and the slice re-derives.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const pageCount = Math.max(1, Math.ceil(contacts.length / pageSize));
+  // Re-clamp the current page whenever the dataset shrinks below it
+  // (e.g. last row deleted, page-size bumped). Prevents the table
+  // from showing an empty page after a contact is removed.
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+  const offset = (page - 1) * pageSize;
+  const visibleContacts = contacts.slice(offset, offset + pageSize);
+  const firstIdx = contacts.length === 0 ? 0 : offset + 1;
+  const lastIdx  = Math.min(offset + pageSize, contacts.length);
+
   // Editor state — either editing an existing contact (id set) or
   // adding a brand-new one (id === null).
   type Draft = {
@@ -1410,7 +1431,7 @@ function ContactsTab() {
                 No contacts yet. Click <span className="font-semibold">Add Contact</span> to start the directory.
               </td></tr>
             )}
-            {!loading && contacts.map((c) => {
+            {!loading && visibleContacts.map((c) => {
               // Number() guards against mysql2 returning TINYINT as
               // a string in some setups (see toggleStatus comment).
               const isActive = Number(c.status) === 1;
@@ -1474,6 +1495,98 @@ function ContactsTab() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination footer — first/prev/page-input/next/last + the
+          "showing X–Y of Z" range. Same control set as the Dashboard
+          and My Technicians pages so the SPOC's mental model stays
+          consistent across the app. Hidden when fewer than pageSize
+          contacts exist (nothing to paginate). */}
+      {!loading && contacts.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 pt-3 border-t border-slate-100">
+          <span>
+            Showing <span className="font-semibold">{firstIdx}</span>–
+            <span className="font-semibold">{lastIdx}</span> of{' '}
+            <span className="font-semibold">{contacts.length.toLocaleString('en-IN')}</span>
+          </span>
+          <div className="flex items-center gap-1">
+            <select
+              className="input max-w-[120px] mr-2"
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              aria-label="Rows per page"
+            >
+              {[5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>{n} per page</option>
+              ))}
+            </select>
+            {/* First-page jump — useful when the SPOC has paged into a
+                long contact roster and wants to start over. */}
+            <button
+              type="button"
+              onClick={() => setPage(1)}
+              disabled={page <= 1}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="First page"
+              title="First page"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="Previous page"
+              title="Previous page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {/* Direct page-number input. Live editing is clamped only
+                on commit (blur / change) so the SPOC can type "12"
+                without it snapping to "1" mid-keystroke. */}
+            <span className="px-2 py-1.5 inline-flex items-center gap-1.5">
+              Page
+              <input
+                type="number"
+                min={1}
+                max={pageCount}
+                value={page}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isInteger(v) && v >= 1 && v <= pageCount) setPage(v);
+                }}
+                onBlur={(e) => {
+                  const v = Math.max(1, Math.min(pageCount, Number(e.target.value) || 1));
+                  setPage(v);
+                }}
+                className="w-14 px-2 py-1 text-center border border-slate-300 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                aria-label="Go to page"
+              />
+              of <span className="font-semibold">{pageCount}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={page >= pageCount}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="Next page"
+              title="Next page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage(pageCount)}
+              disabled={page >= pageCount}
+              className="btn-outline disabled:cursor-not-allowed"
+              aria-label="Last page"
+              title="Last page"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Editor modal — portaled to document.body so the backdrop
           always covers the full viewport (the parent `<main>` has its

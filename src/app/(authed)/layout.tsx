@@ -376,7 +376,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
         onClose={() => setLogoutOpen(false)}
         onConfirm={performLogout}
         title="Sign out?"
-        message={`You'll be returned to the sign-in screen. ${spoc?.contact_name ? `See you soon, ${spoc.contact_name.split(' ')[0]}.` : ''}`}
+        message={`You'll be returned to the sign-in screen. ${spoc?.contact_name ? `See you soon, ${spoc.contact_name.trim()}.` : ''}`}
         confirmLabel="Sign out"
         cancelLabel="Cancel"
         tone="primary"
