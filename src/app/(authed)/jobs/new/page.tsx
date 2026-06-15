@@ -8,7 +8,7 @@
  *   - Three NUMBERED section cards (Customer / Location / Attachments)
  *     each with a step circle + icon so the form scans like a wizard
  *     without forcing pagination
- *   - Sticky live SUMMARY rail on desktop (right side) — updates as
+ *   - Sticky live SUMMARY rail  on desktop (right side) — updates as
  *     fields fill, showing "what's about to be booked" + a required-
  *     field tick list. Mobile collapses it.
  *   - Sticky bottom action bar (Reset · Cancel · Book Now) with a

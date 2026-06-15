@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, getToken, setToken } from '@/lib/api';
 import { SpocContext, type Spoc } from '@/lib/spoc-context';
 import {
+  Home,
   History,
   Ticket,
   Clock4,
@@ -39,8 +40,14 @@ type NavItem = {
 // Section 1 — operational workflow items the SPOC works through daily.
 // Ratecard moved OUT to section 2 so the divider line falls ABOVE it,
 // grouping the "reference / admin" entries together at the bottom.
+//
+// Home (Summary Dashboard) is the post-login landing page. Order
+// History was split out from /dashboard into its own /history route
+// when the Summary was introduced — kept right after Home so the
+// SPOC's mental model "Home → drill into details" stays intact.
 const SECTION_ONE: NavItem[] = [
-  { href: '/dashboard',           label: 'History',                 icon: History, match: ['/jobs'] },
+  { href: '/dashboard',           label: 'Home',                    icon: Home },
+  { href: '/history',             label: 'Order History',           icon: History, match: ['/jobs'] },
   { href: '/tickets/new',         label: 'New Tickets',             icon: Ticket },
   { href: '/tickets/approvals',   label: 'Client Delay',            icon: Clock4 },
   { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
