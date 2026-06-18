@@ -15,12 +15,11 @@
  * UX additions over legacy (which was just a flat table):
  *   - Search input filters across all four text fields
  *   - Group-by-category toggle (collapsible sections with sub-totals)
- *   - CSV download of the current filtered view
  *   - Rate-amount badges (₹) for quick scanning
  */
 import { useMemo, useState } from 'react';
 import {
-  ReceiptText, Search, Download, LayoutGrid, FolderTree,
+  ReceiptText, Search, LayoutGrid, FolderTree,
   ChevronRight, IndianRupee, Tag, Wrench, FileText,
 } from 'lucide-react';
 import { useFetchOnce } from '@/lib/hooks';
@@ -39,34 +38,6 @@ type ViewMode = 'flat' | 'grouped';
 
 // INR formatter — no decimals (legacy showed bare integers).
 const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-
-function csvEscape(v: unknown): string {
-  if (v == null) return '';
-  const s = String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function downloadCsv(rows: RateCardRow[]) {
-  const headers = ['S.No', 'Service Category', 'Service Type', 'Rate Card Name', 'Total Amount'];
-  const lines = [headers.join(',')];
-  rows.forEach((r, i) => {
-    lines.push([
-      i + 1,
-      csvEscape(r.service_category_name),
-      csvEscape(r.service_type_name),
-      csvEscape(r.rate_card_name),
-      r.total_amount ?? '',
-    ].join(','));
-  });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `RateCard_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 export default function RateCardPage() {
   const [view, setView] = useState<ViewMode>('flat');
@@ -159,15 +130,6 @@ export default function RateCardPage() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => downloadCsv(filtered)}
-            disabled={filtered.length === 0}
-            className="btn-outline disabled:cursor-not-allowed disabled:opacity-60"
-            title="Download the current view as CSV"
-          >
-            <Download className="w-4 h-4" /> Download CSV
-          </button>
         </div>
       </div>
 
