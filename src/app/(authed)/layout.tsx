@@ -147,7 +147,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
       }
     }
     refreshUnread();
-    const id = window.setInterval(refreshUnread, 60_000);
+    // Poll every 60s, but SKIP the request while the tab is hidden — a
+    // backgrounded tab doesn't need a live badge, and at scale this saves
+    // N-users × one needless request per minute. Refreshes the instant the
+    // tab regains focus.
+    const tick = () => { if (!document.hidden) refreshUnread(); };
+    const id = window.setInterval(tick, 60_000);
+    function onVisible() { if (!document.hidden) refreshUnread(); }
+    document.addEventListener('visibilitychange', onVisible);
     // Cross-component invalidation: pages that mutate read state
     // (e.g. /notifications "Mark all as read") dispatch this event
     // so the bell repaints instantly.
@@ -156,6 +163,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('notices:invalidate', onInvalidate);
     };
   }, [spoc]);

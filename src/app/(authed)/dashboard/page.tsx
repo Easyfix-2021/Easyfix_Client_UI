@@ -31,12 +31,20 @@ import Link from 'next/link';
 import { useFetchOnce } from '@/lib/hooks';
 import { useSpoc } from '@/lib/spoc-context';
 import {
-  Loader2, BellRing, ArrowUpRight,
-  TicketIcon, PlayCircle, CheckCircle2, XCircle, AlertTriangle,
+  Loader2, BellRing, ArrowUpRight, Plus,
+  TicketIcon, Clock, AlarmClock, CheckCircle2, XCircle, AlertTriangle,
   Users as UsersIcon,
 } from 'lucide-react';
 
 type Summary = {
+  // Home-page KPI boxes — see /api/client/dashboard-summary.
+  boxes: {
+    newTickets:           number;
+    waitingForAllocation: number;
+    runningLate:          number;
+    estimateApproved:     number;
+    estimateRejected:     number;
+  };
   counts: {
     newTickets: number;
     inProgress: number;
@@ -103,10 +111,10 @@ export default function SummaryDashboardPage() {
           </p>
         </div>
         <Link
-          href="/history"
-          className="px-3 py-2 text-sm font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 inline-flex items-center gap-1.5 transition"
+          href="/jobs/new"
+          className="px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-white hover:opacity-90 inline-flex items-center gap-1.5 transition shadow-sm"
         >
-          Open Order History <ArrowUpRight className="w-4 h-4" />
+          <Plus className="w-4 h-4" /> New Order
         </Link>
       </div>
 
@@ -114,37 +122,38 @@ export default function SummaryDashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         <KPICard
           label="New Tickets"
-          value={data.counts.newTickets}
+          value={data.boxes.newTickets}
           icon={TicketIcon}
           tone="amber"
           href="/tickets/new"
         />
         <KPICard
-          label="In Progress"
-          value={data.counts.inProgress}
-          icon={PlayCircle}
+          label="Waiting for Allocation"
+          value={data.boxes.waitingForAllocation}
+          icon={Clock}
           tone="violet"
-          href="/tx-location"
+          href="/appointments"
         />
         <KPICard
-          label="Completed"
-          value={data.counts.completed}
+          label="Running Late"
+          value={data.boxes.runningLate}
+          icon={AlarmClock}
+          tone="orange"
+          href="/appointments"
+        />
+        <KPICard
+          label="Estimate Approved"
+          value={data.boxes.estimateApproved}
           icon={CheckCircle2}
           tone="emerald"
           href="/tickets/under-audit"
         />
         <KPICard
-          label="Cancelled"
-          value={data.counts.cancelled}
+          label="Estimate Rejected"
+          value={data.boxes.estimateRejected}
           icon={XCircle}
           tone="rose"
-        />
-        <KPICard
-          label="Escalated"
-          value={data.counts.escalated}
-          icon={AlertTriangle}
-          tone="orange"
-          href="/tickets/escalated"
+          href="/tickets/under-audit"
         />
       </div>
 

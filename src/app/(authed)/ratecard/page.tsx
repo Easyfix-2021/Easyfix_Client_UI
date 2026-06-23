@@ -14,13 +14,12 @@
  *
  * UX additions over legacy (which was just a flat table):
  *   - Search input filters across all four text fields
- *   - Group-by-category toggle (collapsible sections with sub-totals)
+ *   - Grouped by category — collapsible sections with per-group sub-totals
  *   - Rate-amount badges (₹) for quick scanning
  */
 import { useMemo, useState } from 'react';
 import {
-  ReceiptText, Search, LayoutGrid, FolderTree,
-  ChevronRight, IndianRupee, Tag, Wrench, FileText,
+  ReceiptText, Search, ChevronRight, IndianRupee, Tag,
 } from 'lucide-react';
 import { useFetchOnce } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
@@ -34,13 +33,10 @@ type RateCardRow = {
   charge_type: number | boolean | null;
 };
 
-type ViewMode = 'flat' | 'grouped';
-
 // INR formatter — no decimals (legacy showed bare integers).
 const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
 export default function RateCardPage() {
-  const [view, setView] = useState<ViewMode>('flat');
   const [q, setQ] = useState('');
 
   const { data, loading, error } = useFetchOnce<{ items: RateCardRow[] }>('/ratecard');
@@ -100,37 +96,6 @@ export default function RateCardPage() {
             Your contracted service rates across categories and skill levels.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* View toggle */}
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setView('flat')}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition',
-                view === 'flat'
-                  ? 'bg-primary text-white shadow'
-                  : 'text-slate-700 hover:bg-slate-100'
-              )}
-            >
-              <LayoutGrid className="w-4 h-4" /> Table
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('grouped')}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition',
-                view === 'grouped'
-                  ? 'bg-primary text-white shadow'
-                  : 'text-slate-700 hover:bg-slate-100'
-              )}
-            >
-              <FolderTree className="w-4 h-4" /> Grouped
-            </button>
-          </div>
-
-        </div>
       </div>
 
       {/* Summary chips */}
@@ -170,65 +135,8 @@ export default function RateCardPage() {
         </div>
       )}
 
-      {/* FLAT TABLE view */}
-      {view === 'flat' && (
-        <div className="card overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="w-12">#</th>
-                <th>Service Category</th>
-                <th>Service Type</th>
-                <th>Rate Card Name</th>
-                <th className="text-right">Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td colSpan={5} className="text-center text-slate-500 py-8">Loading…</td></tr>
-              )}
-              {!loading && filtered.length === 0 && (
-                <tr><td colSpan={5} className="text-center text-slate-500 py-8">
-                  {q ? 'No matches for your search.' : 'No rate card configured for your account.'}
-                </td></tr>
-              )}
-              {!loading && filtered.map((r, i) => (
-                <tr key={r.client_service_id} className="hover:bg-primary-50/40">
-                  <td className="text-xs text-slate-500">{i + 1}</td>
-                  <td>
-                    <span className="inline-flex items-center gap-1 text-sm text-slate-800">
-                      <Tag className="w-3.5 h-3.5 text-slate-400" />
-                      {r.service_category_name || '—'}
-                    </span>
-                  </td>
-                  <td className="text-sm">
-                    <span className="inline-flex items-center gap-1 text-slate-700">
-                      <Wrench className="w-3.5 h-3.5 text-slate-400" />
-                      {r.service_type_name || '—'}
-                    </span>
-                  </td>
-                  <td className="text-sm">
-                    <span className="inline-flex items-center gap-1 text-slate-700">
-                      <FileText className="w-3.5 h-3.5 text-slate-400" />
-                      {r.rate_card_name || '—'}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <span className="inline-flex items-center gap-0.5 font-bold text-emerald-700">
-                      <IndianRupee className="w-3.5 h-3.5" />
-                      {r.total_amount != null ? inr.format(r.total_amount) : '—'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* GROUPED view — collapsible categories with per-group totals */}
-      {view === 'grouped' && (
-        <div className="space-y-3">
+      {/* GROUPED — collapsible categories with per-group totals */}
+      <div className="space-y-3">
           {loading && (
             <div className="card text-center text-slate-500 py-8">Loading…</div>
           )}
@@ -292,8 +200,7 @@ export default function RateCardPage() {
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
