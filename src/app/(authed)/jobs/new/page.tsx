@@ -118,6 +118,26 @@ const EMPTY: FormState = {
   appt_slot: '',
 };
 
+// The address sub-form is edited in a DRAFT before it's committed to the
+// main `form` (only on Add-Details "Continue"/Save). Seeding the draft —
+// rather than `form` — when a place / saved address / current location is
+// picked means cancelling the popup leaves the summary card untouched
+// (no half-finished address leaking through). Shape mirrors AddressDialog's
+// `initial` prop exactly.
+type AddressDraft = Pick<
+  FormState,
+  'address' | 'city_id' | 'pin_code' | 'building' | 'landmark' | 'gps_location' | 'address_type'
+>;
+const EMPTY_ADDR: AddressDraft = {
+  address: '',
+  city_id: null,
+  pin_code: '',
+  building: '',
+  landmark: '',
+  gps_location: '',
+  address_type: '',
+};
+
 /*
  * Greeting name — return the SPOC's full display name verbatim
  * ("Mr. Rahul Jadhav") for the "Hello …" header on the New Order page.
@@ -209,6 +229,8 @@ export default function NewOrderPage() {
   //      address, or chooses to add a brand-new one.
   const [selectAddressOpen, setSelectAddressOpen] = useState(false);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
+  // Draft the Add-Details popup edits; only committed to `form` on Save.
+  const [addrDraft, setAddrDraft] = useState<AddressDraft>(EMPTY_ADDR);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -1014,62 +1036,48 @@ export default function NewOrderPage() {
           onClose={() => setSelectAddressOpen(false)}
           onPickPlace={(prefill) => {
             // Google Place suggestion picked — seed the Add Details
-            // popup with everything Google gave us (address, gps, pin,
-            // city). The SPOC just fills building / landmark / type.
-            setForm((f) => ({
-              ...f,
-              address:      prefill.address      ?? f.address,
-              city_id:      prefill.city_id      ?? f.city_id,
-              pin_code:     prefill.pin_code     ?? f.pin_code,
-              gps_location: prefill.gps_location ?? f.gps_location,
-              // Clear flat / landmark / type — they're not in a Place
-              // result and shouldn't carry over from the previous edit.
-              building: '', landmark: '', address_type: '',
-            }));
+            // DRAFT (not `form`) with everything Google gave us (address,
+            // gps, pin, city). All four come from one geocode so they
+            // stay consistent. Building / landmark / type start blank.
+            setAddrDraft({
+              ...EMPTY_ADDR,
+              address:      prefill.address      ?? '',
+              city_id:      prefill.city_id      ?? null,
+              pin_code:     prefill.pin_code     ?? '',
+              gps_location: prefill.gps_location ?? '',
+            });
             setSelectAddressOpen(false);
             setAddressDialogOpen(true);
           }}
           onPickSaved={(a) => {
             // Saved address chosen → load values into the Add Details
-            // popup so the SPOC can confirm/tweak (especially the
-            // address_type and Society/Flat/Floor/Block Name). They
-            // can hit Continue without touching anything to accept
-            // the saved values as-is.
-            setForm((f) => ({
-              ...f,
+            // DRAFT so the SPOC can confirm/tweak. address_type is reset
+            // so they explicitly pick one for this booking.
+            setAddrDraft({
+              ...EMPTY_ADDR,
               address:      a.address || '',
               city_id:      a.city_id ?? null,
               pin_code:     a.pin_code || '',
               building:     a.building || '',
               landmark:     a.landmark || '',
               gps_location: a.gps_location || '',
-              // Reset address_type so the SPOC explicitly picks one for
-              // this booking — it isn't carried over from history.
-              address_type: '',
-            }));
-            setFieldErrors((fe) => {
-              const next = { ...fe };
-              delete next.address;
-              delete next.city_id;
-              return next;
             });
             setSelectAddressOpen(false);
             setAddressDialogOpen(true);
           }}
           onAddNew={() => {
-            // Hop to the full Add Details popup with a blank slate.
-            setForm((f) => ({
-              ...f,
-              address: '', city_id: null, pin_code: '',
-              building: '', landmark: '', gps_location: '', address_type: '',
-            }));
+            // Hop to the full Add Details popup with a blank draft.
+            setAddrDraft(EMPTY_ADDR);
             setSelectAddressOpen(false);
             setAddressDialogOpen(true);
           }}
           onUseCurrentLocation={(gps) => {
-            // Use Current Location → seed GPS, then go to Add Details
-            // so the SPOC can fill the rest (building, landmark, type).
-            setForm((f) => ({ ...f, gps_location: gps }));
+            // Use Current Location → seed ONLY the new GPS and clear the
+            // descriptive fields, so the Add-Details reverse-geocode
+            // re-derives address / pincode / city from this coordinate.
+            // (Previously the stale address/pin/city were left behind,
+            // so the GPS no longer matched what was shown.)
+            setAddrDraft({ ...EMPTY_ADDR, gps_location: gps });
             setSelectAddressOpen(false);
             setAddressDialogOpen(true);
           }}
@@ -1078,16 +1086,11 @@ export default function NewOrderPage() {
 
       {addressDialogOpen && (
         <AddressDialog
-          initial={{
-            address: form.address,
-            city_id: form.city_id,
-            pin_code: form.pin_code,
-            building: form.building,
-            landmark: form.landmark,
-            gps_location: form.gps_location,
-            address_type: form.address_type,
-          }}
+          initial={addrDraft}
           cities={cities}
+          // Cancel: just close. `form` was never touched (edits live in
+          // the draft), so the summary card keeps whatever was last saved
+          // — no half-finished address leaks through.
           onClose={() => setAddressDialogOpen(false)}
           onSave={(v) => {
             setForm((f) => ({ ...f, ...v }));
@@ -2424,7 +2427,9 @@ function AddressDialog({
                     <DialogField label="GPS" required icon={Crosshair}>
                       <input
                         type="text"
-                        className="input w-full font-mono text-xs"
+                        // h-10 + rounded-lg so GPS/Pincode match the City
+                        // control's height & radius — all three uniform.
+                        className="input w-full h-10 rounded-lg font-mono"
                         value={v.gps_location}
                         onChange={(e) => update('gps_location', e.target.value)}
                         placeholder="lat, lng"
@@ -2435,7 +2440,7 @@ function AddressDialog({
                         type="text"
                         inputMode="numeric"
                         maxLength={6}
-                        className="input w-full"
+                        className="input w-full h-10 rounded-lg"
                         value={v.pin_code}
                         onChange={(e) => update('pin_code', e.target.value.replace(/\D/g, ''))}
                         placeholder="6-digit"
