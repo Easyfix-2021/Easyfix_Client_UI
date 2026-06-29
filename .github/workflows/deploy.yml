@@ -226,6 +226,13 @@ jobs:
     timeout-minutes: 10
     environment: 'Organisation Level Secrets'
     steps:
+      # Check out the repo so deploy/docker-compose.prod-frontend.yml is on
+      # disk for the "Encode prod-frontend docker-compose.yml" step below.
+      # Without this, that step's `[[ ! -f ... ]]` check fails with
+      # "missing in the repo" (the file exists in git, just not on the
+      # runner — this job previously skipped checkout).
+      - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
