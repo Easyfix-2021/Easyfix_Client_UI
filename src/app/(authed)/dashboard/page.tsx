@@ -27,13 +27,15 @@
  *     jump into resolution with one tap.
  */
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useFetchOnce } from '@/lib/hooks';
+import { openJobDrawer } from '@/components/job-drawer';
 import { useSpoc } from '@/lib/spoc-context';
 import {
   Loader2, BellRing, ArrowUpRight, Plus,
   TicketIcon, Clock, AlarmClock, CheckCircle2, XCircle, AlertTriangle,
-  Users as UsersIcon,
+  Activity, FileClock, PhoneOff, PauseCircle, RotateCcw, CalendarDays,
 } from 'lucide-react';
 
 type Summary = {
@@ -53,6 +55,16 @@ type Summary = {
     escalated:  number;
   };
   statusBreakdown: Array<{ label: string; count: number; color: string }>;
+  categoryBreakdown: Array<{ label: string; count: number; color: string }>;
+  recentTickets: Array<{
+    jobId: number;
+    ref: string | null;
+    customer: string | null;
+    city: string | null;
+    tech: string | null;
+    status: number;
+    when: string | null;
+  }>;
   recentEscalations: Array<{
     job_id: number;
     client_ref_id: string | null;
@@ -63,6 +75,27 @@ type Summary = {
     review_comment: string | null;
     customer_rating: number | null;
   }>;
+  // Performance by city / store — real, team-scoped aggregation.
+  cityPerformance: Array<{
+    city: string;
+    orders: number;
+    completed: number;
+    onTimePct: number | null;
+    avgTatDays: number | null;
+  }>;
+  // Overdue active jobs bucketed by how many days late they are.
+  slaAging: { d01: number; d23: number; d47: number; d7plus: number };
+  // "Needs attention" — actionable order buckets + invoices due.
+  attention?: {
+    invoicesDue: { count: number; amount: number };
+    estimatePending: number;
+    noResponse: number;
+    onHold: number;
+    revisit: number;
+    qcDone: number;
+  };
+  // 30-day orders trend — received vs completed per day.
+  trend?: Array<{ date: string; created: number; completed: number }>;
   teamSize: number;
 };
 
@@ -97,71 +130,544 @@ export default function SummaryDashboardPage() {
     return (stripped.split(/\s+/)[0] || raw).trim();
   })();
 
+  // Time-of-day greeting (client-only — this page renders after the data
+  // fetch, so no SSR/hydration mismatch on the hour).
+  const hour = new Date().getHours();
+  const greet =
+    hour < 12 ? 'Good morning' :
+    hour < 17 ? 'Good afternoon' :
+    hour < 21 ? 'Good evening' : 'Good night';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {greetingName ? `Welcome back, ${greetingName}` : 'Welcome back'}
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {greetingName ? `${greet}, ${greetingName}` : greet}
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5 inline-flex items-center gap-1.5">
-            <UsersIcon className="w-3.5 h-3.5" />
-            Across {data.teamSize} {data.teamSize === 1 ? 'account' : 'accounts'} in your team
+          <p className="text-sm text-slate-500 mt-1">
+            Here&apos;s what&apos;s happening across your service operations today.
           </p>
         </div>
         <Link
           href="/jobs/new"
-          className="px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-white hover:opacity-90 inline-flex items-center gap-1.5 transition shadow-sm"
+          className="px-5 py-2.5 text-sm font-bold rounded-xl text-white inline-flex items-center gap-1.5 transition hover:-translate-y-0.5"
+          style={{ background: 'linear-gradient(145deg,#ff6b6b,#e53935)', boxShadow: '0 12px 24px -10px rgba(229,57,53,.7)' }}
         >
           <Plus className="w-4 h-4" /> New Order
         </Link>
       </div>
 
-      {/* ─── KPI cards ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-        <KPICard
-          label="New Tickets"
-          value={data.boxes.newTickets}
-          icon={TicketIcon}
-          tone="amber"
-          href="/tickets/new"
-        />
-        <KPICard
-          label="Waiting for Allocation"
-          value={data.boxes.waitingForAllocation}
-          icon={Clock}
-          tone="violet"
-          href="/appointments"
-        />
-        <KPICard
-          label="Running Late"
-          value={data.boxes.runningLate}
-          icon={AlarmClock}
-          tone="orange"
-          href="/appointments"
-        />
-        <KPICard
-          label="Estimate Approved"
-          value={data.boxes.estimateApproved}
-          icon={CheckCircle2}
-          tone="emerald"
-          href="/tickets/under-audit"
-        />
-        <KPICard
-          label="Estimate Rejected"
-          value={data.boxes.estimateRejected}
-          icon={XCircle}
-          tone="rose"
-          href="/tickets/under-audit"
-        />
+      {/* Needs your attention + Upcoming events, side by side (fills the blank) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <AttentionCard attention={data.attention} />
+        <HolidayCalendar />
       </div>
 
-      {/* ─── Status donut + Escalations ────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StatusDonut breakdown={data.statusBreakdown} />
-        <EscalationsList items={data.recentEscalations} />
+      {/* 3 · Trends */}
+      <section>
+        <SectionHead>Trends</SectionHead>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <OrdersTrend data={data.trend ?? []} />
+          <CompletionCard counts={data.counts} />
+        </div>
+      </section>
+
+      {/* 4 · Breakdown */}
+      <section>
+        <SectionHead>Breakdown</SectionHead>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CategoryBreakdown items={data.categoryBreakdown ?? []} />
+          <EscalationsList items={data.recentEscalations} />
+        </div>
+      </section>
+
+      {/* 5 · Service health */}
+      <section>
+        <SectionHead>Service health</SectionHead>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SlaAging aging={data.slaAging} />
+          <CityPerformance rows={data.cityPerformance} />
+        </div>
+      </section>
+
+      {/* 6 · Recent tickets (sample data) */}
+      <section>
+        <SectionHead>Recent tickets</SectionHead>
+        <RecentTickets rows={data.recentTickets ?? []} onOpen={openJobDrawer} />
+      </section>
+    </div>
+  );
+}
+
+/*
+ * RecentTickets — a sample tickets table (dummy data for now). Swap the
+ * ROWS array for a real GET /jobs feed when we wire it up.
+ */
+function RecentTickets({ rows, onOpen }: { rows: Summary['recentTickets']; onOpen: (id: number) => void }) {
+  const items = rows ?? [];
+
+  // Map the real job_status code to a labelled, colour-coded pill.
+  const pill = (s: number): { label: string; cls: string } => {
+    if (s === 9) return { label: 'New Ticket', cls: 'bg-amber-50 text-amber-700' };
+    if (s === 0 || s === 1) return { label: 'Pending Scheduling', cls: 'bg-blue-50 text-blue-700' };
+    if (s === 2 || s === 20) return { label: 'In Progress', cls: 'bg-violet-50 text-violet-700' };
+    if (s === 3 || s === 5) return { label: 'Completed', cls: 'bg-emerald-50 text-emerald-700' };
+    if (s === 6) return { label: 'Cancelled', cls: 'bg-rose-50 text-rose-700' };
+    if (s === 10) return { label: 'Under Audit', cls: 'bg-cyan-50 text-cyan-700' };
+    if (s === 15) return { label: 'Awaiting Approval', cls: 'bg-amber-50 text-amber-700' };
+    if (s === 21) return { label: 'On Hold', cls: 'bg-slate-100 text-slate-600' };
+    return { label: 'Order', cls: 'bg-slate-100 text-slate-600' };
+  };
+  const fmt = (d: string | null) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()}`;
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
+      <div className="px-5 py-4">
+        <h3 className="text-sm font-bold text-slate-800">Recent Tickets</h3>
+        <p className="text-xs text-slate-400">Your latest orders</p>
       </div>
+      {items.length === 0 ? (
+        <div className="text-center text-sm text-slate-400 py-8">No recent tickets.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[680px]">
+            <thead>
+              <tr className="text-[11px] uppercase tracking-wide text-slate-500 bg-slate-50">
+                <th className="text-left font-semibold px-5 py-2.5">Ticket</th>
+                <th className="text-left font-semibold px-3 py-2.5">Customer</th>
+                <th className="text-left font-semibold px-3 py-2.5">Technician</th>
+                <th className="text-left font-semibold px-3 py-2.5">Status</th>
+                <th className="text-left font-semibold px-3 py-2.5">Appointment</th>
+                <th className="text-right font-semibold px-5 py-2.5">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => {
+                const p = pill(r.status);
+                return (
+                  <tr key={r.jobId} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-5 py-3">
+                      <button type="button" onClick={() => onOpen(r.jobId)} className="font-bold text-primary hover:underline">
+                        #{r.jobId}
+                      </button>
+                      {r.ref && <div className="text-xs text-slate-400">{r.ref}</div>}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-700 truncate max-w-[200px]">{r.customer || '—'}</div>
+                      <div className="text-xs text-slate-400">{r.city || '—'}</div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">{r.tech || '—'}</td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold ${p.cls}`}>
+                        {p.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-slate-500">{fmt(r.when)}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onOpen(r.jobId)}
+                        className="text-xs font-bold text-primary border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 transition"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/*
+ * SlaAging — overdue active jobs bucketed by how many days late they
+ * are. Reads /dashboard-summary → slaAging. Empty (all zero) shows a
+ * reassuring "nothing overdue" state rather than an empty chart.
+ */
+function SlaAging({ aging }: { aging: Summary['slaAging'] }) {
+  const rows = [
+    { label: '0–1 day',  value: aging?.d01 ?? 0,    color: '#f59e0b' },
+    { label: '2–3 days', value: aging?.d23 ?? 0,    color: '#ea8a1e' },
+    { label: '4–7 days', value: aging?.d47 ?? 0,    color: '#e11d48' },
+    { label: '7+ days',  value: aging?.d7plus ?? 0, color: '#9f1239' },
+  ];
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const max = Math.max(1, ...rows.map((r) => r.value));
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-slate-700">SLA breaches by aging</h2>
+        <span className="text-xs font-semibold text-slate-400">{total} overdue</span>
+      </div>
+      {total === 0 ? (
+        <div className="text-center text-sm text-slate-400 py-10">
+          Nothing overdue — every committed appointment is on track. 🎉
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {rows.map((r) => (
+            <li key={r.label} className="flex items-center gap-3 text-sm">
+              <span className="w-16 shrink-0 text-slate-600">{r.label}</span>
+              <span className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                <span
+                  className="block h-full rounded-full"
+                  style={{ width: `${(r.value / max) * 100}%`, backgroundColor: r.color }}
+                />
+              </span>
+              <span className="w-8 text-right font-bold text-slate-900 tabular-nums">{r.value}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/*
+ * AttentionCard — the "Needs attention" panel. Surfaces the things a
+ * SPOC should act on today: invoices due, tickets aging 7+ days, and
+ * orders at SLA-breach risk (4–7 days overdue). Each row links straight
+ * to where the SPOC can act. All-clear shows a reassuring empty state.
+ */
+/*
+ * SectionHead — a small red-accent eyebrow that labels each dashboard
+ * band (Overview / Trends / Breakdown / Service health) so the page
+ * scans as distinct, ordered sections.
+ */
+function SectionHead({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <span className="w-1 h-4 rounded-full bg-primary" />
+      <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">{children}</h2>
+    </div>
+  );
+}
+
+/*
+ * HolidayCalendar — upcoming holidays (sample data for now; swap the
+ * HOLIDAYS list for a real feed when we have one). Shows the next few
+ * holidays from today, each with a date chip, name, weekday and tag.
+ */
+type Holiday = { date: string; name: string; holiday_type: string; description: string | null };
+
+function HolidayCalendar() {
+  const DAYS = 30;
+  const { data, loading } = useFetchOnce<{ items: Holiday[] }>(`/holidays?days=${DAYS}`);
+  const items = data?.items ?? [];
+
+  const mon = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+  const dow = (d: Date) => d.toLocaleString('en-US', { weekday: 'long' });
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+        <CalendarDays className="w-5 h-5 text-slate-400" />
+        <h3 className="text-base font-bold text-slate-800">Upcoming Events</h3>
+      </div>
+
+      <div className="p-5">
+        {loading ? (
+          <div className="text-center py-10 text-sm text-slate-400">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-10">
+            <div className="text-slate-600 font-semibold">No Upcoming Holidays</div>
+            <div className="text-slate-400 text-sm mt-1">Within the next {DAYS} days</div>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {items.map((h) => {
+              const d = new Date(h.date);
+              const national = String(h.holiday_type).toLowerCase() === 'national';
+              return (
+                <li key={h.date + h.name} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="w-11 h-11 shrink-0 rounded-xl bg-primary-50 text-primary flex flex-col items-center justify-center leading-none">
+                    <span className="text-base font-extrabold tabular-nums">{isNaN(d.getTime()) ? '—' : d.getDate()}</span>
+                    <span className="text-[9px] font-bold uppercase">{isNaN(d.getTime()) ? '' : mon(d)}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-slate-800 truncate">{h.name}</div>
+                    <div className="text-xs text-slate-400">{isNaN(d.getTime()) ? '' : dow(d)}</div>
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${national ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {national ? 'National' : 'Restricted'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
+  const a = attention;
+  type Tone = 'rose' | 'amber' | 'violet' | 'blue' | 'emerald';
+  const defs: Array<{
+    key: string; count: number; tone: Tone;
+    icon: React.ComponentType<{ className?: string }>;
+    label: string; hint: string; href: string;
+  }> = [
+    { key: 'est',  count: a?.estimatePending ?? 0, tone: 'amber',  icon: FileClock,
+      label: 'Estimate approval', hint: 'Approve to proceed', href: '/tickets/approvals' },
+    { key: 'hold', count: a?.onHold ?? 0, tone: 'rose', icon: PauseCircle,
+      label: 'Fulfilment on hold', hint: 'Items / parts pending', href: '/tickets/approvals' },
+    { key: 'nr',   count: a?.noResponse ?? 0, tone: 'violet', icon: PhoneOff,
+      label: 'Not responding', hint: 'Call not picked', href: '/tickets/new' },
+    { key: 'rev',  count: a?.revisit ?? 0, tone: 'blue', icon: RotateCcw,
+      label: 'Revisits created', hint: 'Repeat visit scheduled', href: '/tickets/under-audit' },
+    { key: 'qc',   count: a?.qcDone ?? 0, tone: 'emerald', icon: CheckCircle2,
+      label: 'QC done', hint: 'Ready to invoice', href: '/tickets/under-audit' },
+  ];
+  const cards = defs.filter((d) => d.count > 0);
+
+  // Option C — soft tinted priority cards. Each tone = a soft background,
+  // a matching deep text colour, and a vivid icon colour.
+  const tone: Record<Tone, { bg: string; fg: string; ic: string }> = {
+    amber:   { bg: '#fff7ea', fg: '#9a6300', ic: '#F39C12' },
+    rose:    { bg: '#fdeef1', fg: '#a51033', ic: '#e11d48' },
+    violet:  { bg: '#f1edff', fg: '#4b32b8', ic: '#7c5cff' },
+    blue:    { bg: '#eaf3ff', fg: '#1f4fd6', ic: '#2f6bff' },
+    emerald: { bg: '#e9f7f0', fg: '#0b7d54', ic: '#0f9d6b' },
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+        <h2 className="text-base font-extrabold text-slate-900">Needs your attention</h2>
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 text-center text-sm text-slate-400 py-8">
+          You’re all caught up — nothing needs action right now. 🎉
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3.5">
+          {cards.map((d) => {
+            const t = tone[d.tone];
+            const Icon = d.icon;
+            return (
+              <Link
+                key={d.key}
+                href={d.href}
+                className="aspect-square flex flex-col justify-between rounded-2xl p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                style={{ background: t.bg, color: t.fg }}
+              >
+                <span className="w-10 h-10 rounded-xl grid place-items-center bg-white/70" style={{ color: t.ic }}>
+                  <Icon className="w-5 h-5" />
+                </span>
+                <div>
+                  <div className="text-3xl font-extrabold leading-none tabular-nums">
+                    {d.count.toLocaleString('en-IN')}
+                  </div>
+                  <div className="mt-1 text-[13px] font-extrabold">{d.label}</div>
+                  <div className="text-[11px] mt-0.5 opacity-75">{d.hint}</div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/*
+ * OrdersTrend — 30-day line chart of orders received vs completed per
+ * day. Inline SVG (no chart lib). Empty (all-zero) shows a friendly
+ * message rather than a flat line.
+ */
+function OrdersTrend({ data }: { data: NonNullable<Summary['trend']> }) {
+  const [range, setRange] = useState<'7d' | '30d'>('30d');
+  const days = range === '7d' ? 7 : 30;
+  const points = (data ?? []).slice(-days);
+  const total = points.reduce((s, d) => s + d.created + d.completed, 0);
+
+  const fmtDay = (iso: string) => {
+    const dt = new Date(iso);
+    if (isNaN(dt.getTime())) return '';
+    return `${dt.getDate()} ${dt.toLocaleString('en-US', { month: 'short' })}`;
+  };
+
+  const W = 520, H = 150, padL = 8, padR = 8, padT = 10, padB = 20;
+  const n = Math.max(1, points.length - 1);
+  const max = Math.max(1, ...points.flatMap((d) => [d.created, d.completed]));
+  const x = (i: number) => padL + i * ((W - padL - padR) / n);
+  const y = (v: number) => padT + (1 - v / max) * (H - padT - padB);
+  const line = (key: 'created' | 'completed') =>
+    points.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
+  const area = (key: 'created' | 'completed') =>
+    points.length
+      ? `M${x(0)},${y(0)} ` + points.map((d, i) => `L${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ') + ` L${x(points.length - 1)},${y(0)} Z`
+      : '';
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-primary" /> Orders trend
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">Ticket created vs completed · last {days} days</p>
+        </div>
+        <div className="inline-flex bg-slate-100 border border-slate-200 rounded-lg p-1">
+          {(['7d', '30d'] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition ${range === r ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {r === '7d' ? '7D' : '30D'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 text-xs text-slate-500 mt-2">
+        <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#2f6bff' }} />Ticket Created</span>
+        <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#10b981' }} />Completed</span>
+      </div>
+
+      {total === 0 ? (
+        <div className="text-center text-sm text-slate-400 py-12">No orders in the last {days} days.</div>
+      ) : (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto mt-3" preserveAspectRatio="none">
+            {[0.25, 0.5, 0.75, 1].map((f) => (
+              <line key={f} x1={padL} x2={W - padR} y1={padT + f * (H - padT - padB)} y2={padT + f * (H - padT - padB)} stroke="#f1f5f9" strokeWidth={1} />
+            ))}
+            <path d={area('created')} fill="rgba(47,107,255,.10)" />
+            <path d={line('created')} fill="none" stroke="#2f6bff" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('completed')} fill="none" stroke="#10b981" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+          <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+            <span>{fmtDay(points[0]?.date)}</span>
+            <span>{fmtDay(points[Math.floor(points.length / 2)]?.date)}</span>
+            <span>{fmtDay(points[points.length - 1]?.date)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/*
+ * CompletionCard — compact ring showing what share of orders are done,
+ * plus a small legend. Sits beside the Orders trend. Uses the counts
+ * already in the summary payload (no extra fetch).
+ */
+function CompletionCard({ counts }: { counts: Summary['counts'] }) {
+  const total = counts.completed + counts.inProgress + counts.newTickets + counts.cancelled;
+  const rate = total ? Math.round((counts.completed / total) * 100) : 0;
+  const r = 42;
+  const C = 2 * Math.PI * r;
+  const rows = [
+    { label: 'Completed',   value: counts.completed,  color: '#10b981' },
+    { label: 'In progress', value: counts.inProgress, color: '#2f6bff' },
+    { label: 'New',         value: counts.newTickets, color: '#f59e0b' },
+    { label: 'Cancelled',   value: counts.cancelled,  color: '#e11d48' },
+  ];
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">
+        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Completion rate
+      </h2>
+      <div className="mt-3 flex items-center gap-5">
+        <div className="relative w-28 h-28 shrink-0">
+          <svg viewBox="0 0 110 110" className="w-28 h-28 -rotate-90">
+            <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="12" />
+            <circle
+              cx="55" cy="55" r={r} fill="none" stroke="#10b981" strokeWidth="12"
+              strokeLinecap="round" strokeDasharray={`${(rate / 100) * C} ${C}`}
+            />
+          </svg>
+          <div className="absolute inset-0 grid place-items-center">
+            <span className="text-2xl font-bold text-slate-900">{rate}%</span>
+          </div>
+        </div>
+        <ul className="flex-1 space-y-1.5 text-sm">
+          {rows.map((r2) => (
+            <li key={r2.label} className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: r2.color }} />
+              <span className="flex-1 text-slate-600">{r2.label}</span>
+              <b className="tabular-nums text-slate-900">{r2.value.toLocaleString('en-IN')}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * CityPerformance — per-city orders / completed / on-time% / avg TAT,
+ * from /dashboard-summary → cityPerformance. On-time% is colour-tiered
+ * so the weakest city stands out at a glance.
+ */
+function CityPerformance({ rows }: { rows: Summary['cityPerformance'] }) {
+  const items = rows ?? [];
+  const otClass = (pct: number | null) =>
+    pct == null ? 'text-slate-400'
+      : pct >= 95 ? 'text-emerald-700'
+      : pct >= 90 ? 'text-amber-600'
+      : 'text-rose-600';
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200">
+      <div className="px-5 pt-5 pb-3">
+        <h2 className="text-sm font-bold text-slate-700">Performance by city</h2>
+      </div>
+      {items.length === 0 ? (
+        <div className="px-5 pb-8 text-center text-sm text-slate-400 py-8">
+          No city data yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="text-left font-semibold px-5 py-2 border-b border-slate-100">City</th>
+                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">Orders</th>
+                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">Done</th>
+                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">On-time</th>
+                <th className="text-right font-semibold px-5 py-2 border-b border-slate-100">Avg TAT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.city} className="hover:bg-slate-50">
+                  <td className="px-5 py-2.5 font-semibold text-slate-800 border-b border-slate-50">{r.city}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums border-b border-slate-50">{r.orders}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 border-b border-slate-50">{r.completed}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums font-bold border-b border-slate-50 ${otClass(r.onTimePct)}`}>
+                    {r.onTimePct == null ? '—' : `${r.onTimePct}%`}
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums text-slate-600 border-b border-slate-50">
+                    {r.avgTatDays == null ? '—' : `${r.avgTatDays}d`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -223,10 +729,10 @@ function KPICard({
  * a single ring. Zero external deps, ~30 lines of code, fully
  * responsive (the SVG scales with the container).
  */
-function StatusDonut({
-  breakdown,
+function CategoryBreakdown({
+  items: breakdown,
 }: {
-  breakdown: Array<{ label: string; count: number; color: string }>;
+  items: Array<{ label: string; count: number; color: string }>;
 }) {
   const total = breakdown.reduce((sum, s) => sum + s.count, 0);
 
@@ -234,9 +740,9 @@ function StatusDonut({
   if (total === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6">
-        <h2 className="text-sm font-bold text-slate-700 mb-3">Status breakdown</h2>
+        <h2 className="text-sm font-bold text-slate-700 mb-3">Category &amp; work type</h2>
         <div className="text-center text-sm text-slate-400 py-12">
-          No jobs yet to chart.
+          No orders yet to chart.
         </div>
       </div>
     );
@@ -251,7 +757,7 @@ function StatusDonut({
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-6">
-      <h2 className="text-sm font-bold text-slate-700 mb-4">Status breakdown</h2>
+      <h2 className="text-sm font-bold text-slate-700 mb-4">Category &amp; work type</h2>
       <div className="grid grid-cols-2 gap-4 items-center">
         <div className="flex items-center justify-center">
           <svg viewBox="0 0 160 160" className="w-44 h-44 -rotate-90">
@@ -280,7 +786,7 @@ function StatusDonut({
                 {total.toLocaleString('en-IN')}
               </text>
               <text x="80" y="94" textAnchor="middle" fontSize="10" fill="#94a3b8" letterSpacing="0.05em">
-                TOTAL JOBS
+                TOTAL ORDERS
               </text>
             </g>
           </svg>

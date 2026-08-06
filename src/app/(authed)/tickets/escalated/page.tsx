@@ -21,6 +21,7 @@
  *   4. EscalatedTime → escalated_time (formatted as "Mar 15, 2024 4:30 PM")
  */
 import Link from 'next/link';
+import { openJobDrawer } from '@/components/job-drawer';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, ChevronLeft, ChevronRight, Filter, X, Flame,
@@ -271,13 +272,14 @@ export default function EscalatedOrdersPage() {
             {!loading && items.map((j) => (
               <tr key={j.job_id} className="hover:bg-orange-50/40">
                 <td>
-                  <Link
-                    href={`/jobs/${j.job_id}`}
+                  <button
+                    type="button"
+                    onClick={() => openJobDrawer(j.job_id)}
                     className="text-primary hover:underline font-semibold inline-flex items-center gap-1"
                   >
                     <Flame className="w-3.5 h-3.5 text-orange-500" aria-label="Escalated" />
                     #{j.job_id}
-                  </Link>
+                  </button>
                 </td>
                 <td>
                   <div className="text-slate-800">{j.escalated_by_name || '—'}</div>

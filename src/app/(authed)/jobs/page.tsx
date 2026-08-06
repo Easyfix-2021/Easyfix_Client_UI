@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { openJobDrawer } from '@/components/job-drawer';
 import { useFetch, useDebouncedValue } from '@/lib/hooks';
 import { STATUS_LABELS, formatDate } from '@/lib/utils';
 
@@ -90,9 +91,9 @@ export default function JobsPage() {
             {!loading && items.map((j) => (
               <tr key={j.job_id} className="hover:bg-slate-50">
                 <td>
-                  <Link href={`/jobs/${j.job_id}`} className="text-primary hover:underline font-medium">
+                  <button type="button" onClick={() => openJobDrawer(j.job_id)} className="text-primary hover:underline font-medium">
                     #{j.job_id}
-                  </Link>
+                  </button>
                 </td>
                 <td className="font-mono text-xs">{j.job_reference_id || j.client_ref_id || '—'}</td>
                 <td>{j.customer_name}</td>

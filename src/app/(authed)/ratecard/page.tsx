@@ -79,10 +79,6 @@ export default function RateCardPage() {
   }
 
   const totalRowCount = filtered.length;
-  const grandTotal = useMemo(
-    () => filtered.reduce((s, r) => s + Number(r.total_amount || 0), 0),
-    [filtered]
-  );
 
   return (
     <div className="space-y-5">
@@ -99,7 +95,7 @@ export default function RateCardPage() {
       </div>
 
       {/* Summary chips */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="card p-3">
           <div className="text-xs text-slate-500 uppercase tracking-wide">Total Services</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{totalRowCount}</div>
@@ -107,12 +103,6 @@ export default function RateCardPage() {
         <div className="card p-3">
           <div className="text-xs text-slate-500 uppercase tracking-wide">Categories</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{grouped.length}</div>
-        </div>
-        <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">Sum of Rates</div>
-          <div className="text-2xl font-bold text-primary mt-1 inline-flex items-center">
-            <IndianRupee className="w-5 h-5" />{inr.format(grandTotal)}
-          </div>
         </div>
       </div>
 

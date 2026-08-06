@@ -28,6 +28,7 @@
  *   PATCH /api/client/jobs/:id/approve   — authorizes (flips approved_by_client=1)
  */
 import Link from 'next/link';
+import { openJobDrawer } from '@/components/job-drawer';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Upload, Search, ChevronLeft, ChevronRight,
@@ -460,15 +461,16 @@ export default function MyNewTicketsPage() {
             {!loading && items.map((j) => (
               <tr key={j.job_id} className="hover:bg-primary-50/50">
                 <td>
-                  <Link
-                    href={`/jobs/${j.job_id}`}
+                  <button
+                    type="button"
+                    onClick={() => openJobDrawer(j.job_id)}
                     className="text-primary hover:underline font-semibold inline-flex items-center gap-1"
                   >
                     #{j.job_id}
                     {j.is_escalated ? (
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Escalated" />
                     ) : null}
-                  </Link>
+                  </button>
                 </td>
                 <td className="text-xs font-mono">{j.client_ref_id || '—'}</td>
                 <td className="text-xs">{formatDate(j.ticket_created_date_time)}</td>

@@ -23,6 +23,7 @@
  * (OrderHistoryTable for All Orders, VisitDoneTable for Completed).
  */
 import Link from 'next/link';
+import { openJobDrawer } from '@/components/job-drawer';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -689,12 +690,12 @@ export default function OrderHistoryPage() {
               return (
                 <tr key={j.job_id} className="hover:bg-primary-50/50">
                   <td>
-                    <Link href={`/jobs/${j.job_id}`} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
+                    <button type="button" onClick={() => openJobDrawer(j.job_id)} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
                       #{j.job_id}
                       {j.is_escalated ? (
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Escalated" />
                       ) : null}
-                    </Link>
+                    </button>
                   </td>
                   <td className="text-xs font-mono truncate" title={j.job_reference_id || ''}>
                     {j.job_reference_id || '—'}
@@ -748,12 +749,12 @@ export default function OrderHistoryPage() {
             {!loading && tab === 'completedOrders' && items.map((j) => (
               <tr key={j.job_id} className="hover:bg-primary-50/50">
                 <td>
-                  <Link href={`/jobs/${j.job_id}`} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
+                  <button type="button" onClick={() => openJobDrawer(j.job_id)} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
                     #{j.job_id}
                     {j.is_escalated ? (
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Escalated" />
                     ) : null}
-                  </Link>
+                  </button>
                 </td>
                 <td className="text-xs font-mono">{j.client_ref_id || '—'}</td>
                 <td>{j.city_name || '—'}</td>

@@ -19,15 +19,20 @@ import {
   MapPin,
   ClipboardCheck,
   ReceiptText,
-  Users,
+  FileText,
+  // Users, // used by the My Team nav item (currently removed)
   HardHat,
   ExternalLink,
   LogOut,
   Bell,
   Menu,
+  Smartphone,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { GetAppModal } from '@/components/get-app-modal';
+import { JobDrawerHost } from '@/components/job-drawer';
 
 type NavItem = {
   href?: string;
@@ -49,15 +54,18 @@ const SECTION_ONE: NavItem[] = [
   { href: '/dashboard',           label: 'Home',                    icon: Home },
   { href: '/history',             label: 'Order History',           icon: History, match: ['/jobs'] },
   { href: '/tickets/new',         label: 'New Tickets',             icon: Ticket },
-  { href: '/tickets/approvals',   label: 'Client Delay',            icon: Clock4 },
-  { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
-  { href: '/tx-location',         label: 'Tx on Location',          icon: MapPin },
-  { href: '/tickets/under-audit', label: 'Completed & Under Audit', icon: ClipboardCheck },
+  // Hidden for now (pages replaced with "Coming soon"; originals in git).
+  // { href: '/tickets/approvals',   label: 'Client Delay',            icon: Clock4 },
+  // { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
+  // { href: '/tx-location',         label: 'Tx on Location',          icon: MapPin },
+  // { href: '/tickets/under-audit', label: 'Completed & Under Audit', icon: ClipboardCheck },
 ];
 
 const SECTION_TWO: NavItem[] = [
+  { href: '/invoices',     label: 'Invoices',        icon: FileText },
   { href: '/ratecard',     label: 'Ratecard',        icon: ReceiptText },
-  { href: '/team',         label: 'My Team',         icon: Users },
+  // My Team — removed from the sidebar (page + route still exist at /team).
+  // { href: '/team',         label: 'My Team',         icon: Users },
   { href: '/technicians',  label: 'My Technicians',  icon: HardHat },
   { externalHref: 'https://www.easyfix.in/our-team', label: 'Contact Us', icon: ExternalLink },
 ];
@@ -75,6 +83,10 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [spoc, setSpoc] = useState<Spoc | null>(null);
   const [loading, setLoading] = useState(true);
+  // Set when /me fails for a reason OTHER than 401 (e.g. backend down,
+  // network blip). Drives the "Try again" screen below instead of
+  // letting a null SPOC reach useSpoc() and crash the whole dashboard.
+  const [bootError, setBootError] = useState<string | null>(null);
   // Default sidebar OPEN on desktop, CLOSED on mobile.
   // We can't read window at SSR/render time, so initialise to true and
   // immediately collapse on first client mount if the viewport is below
@@ -104,10 +116,19 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     (async () => {
       try {
         const res = await api.get<{ spoc: Spoc }>('/me');
-        setSpoc(res.spoc);
+        if (res?.spoc) setSpoc(res.spoc);
+        else setBootError('We could not load your profile. Please try again.');
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           setToken(null); router.push('/');
+        } else {
+          // Backend down / network blip — don't render children with a
+          // null SPOC (that crashes useSpoc). Show a retry screen instead.
+          setBootError(
+            err instanceof ApiError
+              ? err.message
+              : 'Could not reach the server. Check your connection and try again.'
+          );
         }
       } finally { setLoading(false); }
     })();
@@ -125,6 +146,22 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   // (it'll expire on its own; tokens are stateless JWTs).
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // ─── "Get the App" promo ───────────────────────────────────────────
+  // Auto-open ONCE per browser after the first login (gated on a
+  // localStorage flag so it never nags), and re-openable any time from
+  // the "Get the App" button in the top bar.
+  const [appModalOpen, setAppModalOpen] = useState(false);
+  useEffect(() => {
+    if (!spoc) return;
+    try {
+      if (!localStorage.getItem('ef_app_promo_seen')) setAppModalOpen(true);
+    } catch { /* localStorage unavailable — just skip the auto-open */ }
+  }, [spoc]);
+  function closeAppModal() {
+    setAppModalOpen(false);
+    try { localStorage.setItem('ef_app_promo_seen', '1'); } catch { /* ignore */ }
+  }
 
   // ─── Unread-notice count for the bell badge ────────────────────────
   // Polled once on mount + every 60s while the tab is foregrounded.
@@ -207,7 +244,32 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     );
   }
 
+  // No SPOC after loading (and not a 401 redirect) → the /me call failed.
+  // Render a friendly retry screen rather than letting a null SPOC reach
+  // useSpoc() in the child pages and white-screen the whole dashboard.
+  if (!spoc) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="w-14 h-14 rounded-full bg-primary-50 text-primary grid place-items-center ring-4 ring-primary/10">
+          <Bell className="w-6 h-6" />
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">Couldn’t load your dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500 max-w-sm">
+            {bootError || 'Your session could not be loaded right now.'}
+          </p>
+        </div>
+        <button type="button" onClick={() => window.location.reload()} className="btn-primary">
+          Try again
+        </button>
+      </main>
+    );
+  }
+
   const initials = initialsOf(spoc?.contact_name);
+  const firstName = (spoc?.contact_name || 'User')
+    .replace(/^(mr|mrs|ms|dr|miss|sir|madam)\.?\s+/i, '')
+    .trim().split(/\s+/)[0] || 'User';
 
   return (
     <SpocContext.Provider value={spoc}>
@@ -317,6 +379,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           </button>
 
           <div className="ml-auto flex items-center gap-3 md:gap-5">
+            {/* Get the App — reopens the mobile-app promo any time. */}
+            <button
+              type="button"
+              onClick={() => setAppModalOpen(true)}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-primary bg-primary-50 ring-1 ring-primary/20 hover:bg-primary-100 transition"
+            >
+              <Smartphone className="w-3.5 h-3.5" /> Get the App
+            </button>
             {/* Notification bell — amber/gold treatment matching the
                 target mock. Soft amber tile background, deep amber
                 stroke + matching fill so the bell reads as gold; red
@@ -347,28 +417,25 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
               )}
             </Link>
 
+            {/* Profile chip — pill with pink→violet gradient avatar,
+                first name, and a chevron. Links to the profile page. */}
             <Link
               href="/profile"
-              className="flex items-center gap-2 hover:opacity-90"
+              className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition"
               aria-label="Open profile"
             >
-              {/* Avatar — pink→violet gradient matching the mock, one
-                  size bigger (h-11 w-11) with a soft white ring so it
-                  reads as the "primary identity chip" in the top bar.
-                  The gradient tone is intentionally warm (fuchsia → purple)
-                  so it stands distinct from the brand-red logo + amber
-                  bell sitting next to it. */}
-              <span className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-base ring-2 ring-white shadow-md shadow-pink-500/20">
+              <span className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-xs">
                 {initials}
               </span>
-              <span className="hidden md:block text-sm leading-tight">
-                <span className="block font-bold text-slate-900 truncate max-w-[180px]">
-                  {spoc?.contact_name ?? 'User'}
+              <span className="hidden sm:block leading-tight text-left">
+                <span className="block text-sm font-bold text-slate-900 truncate max-w-[140px]">
+                  {firstName}
                 </span>
-                <span className="block text-xs text-slate-500 truncate max-w-[180px]">
-                  {spoc?.email ?? `Client #${spoc?.client_id ?? '—'}`}
+                <span className="block text-[11px] text-slate-500">
+                  Client #{spoc?.client_id ?? '—'}
                 </span>
               </span>
+              <ChevronDown className="w-4 h-4 text-slate-400 hidden sm:block" />
             </Link>
 
             <button
@@ -398,6 +465,11 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
         busy={loggingOut}
         icon={LogOut}
       />
+
+      <GetAppModal open={appModalOpen} onClose={closeAppModal} />
+
+      {/* Global job details drawer — opens on any job-id click via openJobDrawer(). */}
+      <JobDrawerHost />
     </div>
     </SpocContext.Provider>
   );

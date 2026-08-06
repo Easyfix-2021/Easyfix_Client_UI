@@ -74,6 +74,19 @@ type FormState = {
   appt_slot: TimeSlot | '';
 };
 
+// A store/branch row from the client's store directory (GET /stores/lookup).
+type Store = {
+  id: number;
+  store_code: string;
+  store_name: string | null;
+  contact_name: string | null;
+  contact_no: string | null;
+  address: string | null;
+  city_id: number | null;
+  city_name: string | null;
+  pin_code: string | null;
+};
+
 // Time slot options shown in the appointment picker — labels match the
 // legacy Angular dashboard's TimeSlot constant exactly so payloads sent
 // to /jobs are 1:1 with the legacy contract (e.g. "After 7pm").
@@ -335,6 +348,40 @@ export default function NewOrderPage() {
     setFieldErrors((e) => { const { [key]: _, ...rest } = e; return rest; });
   }
 
+  // ─── Book by store code ────────────────────────────────────────────
+  // Type a store code → prefill the store's name / contact / address from
+  // the client's store directory, so the SPOC only enters the service,
+  // description and appointment.
+  const [storeCode, setStoreCode] = useState('');
+  const [storeLookup, setStoreLookup] = useState<'idle' | 'loading' | 'found' | 'notfound'>('idle');
+  const [storeName, setStoreName] = useState('');
+  async function lookupStore() {
+    const code = storeCode.trim();
+    if (!code) return;
+    setStoreLookup('loading');
+    try {
+      const res = await api.get<{ store: Store | null }>(`/stores/lookup?code=${encodeURIComponent(code)}`);
+      if (res?.store) {
+        const s = res.store;
+        setForm((f) => ({
+          ...f,
+          customer_name:   s.store_name || s.contact_name || f.customer_name,
+          customer_mob_no: s.contact_no || f.customer_mob_no,
+          address:         s.address || f.address,
+          pin_code:        s.pin_code || f.pin_code,
+          city_id:         s.city_id ?? f.city_id,
+          client_ref_id:   s.store_code || f.client_ref_id,
+        }));
+        setStoreName(s.store_name || s.store_code);
+        setStoreLookup('found');
+      } else {
+        setStoreLookup('notfound');
+      }
+    } catch {
+      setStoreLookup('notfound');
+    }
+  }
+
   function toggleJobType(t: keyof FormState['job_types']) {
     setForm((f) => ({ ...f, job_types: { ...f.job_types, [t]: !f.job_types[t] } }));
   }
@@ -542,7 +589,7 @@ export default function NewOrderPage() {
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 inline-flex items-center gap-2 leading-tight">
               <Sparkles className="w-5 h-5 text-primary shrink-0" />
-              <span className="truncate">Hello {firstNameOf(spoc.contact_name) || 'there'} 👋</span>
+              <span className="truncate">Book a technician</span>
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Tell us about the work and we&apos;ll dispatch a technician right away.
@@ -553,6 +600,38 @@ export default function NewOrderPage() {
             {filledCount} / {requiredChecks.length} required filled
           </div>
         </div>
+      </div>
+
+      {/* Book by store code — prefills the customer & address from the
+          client's store directory, so only service + appointment remain. */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-4 sm:mb-5">
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code
+        </label>
+        <div className="mt-2 relative">
+          <input
+            value={storeCode}
+            onChange={(e) => { setStoreCode(e.target.value); setStoreLookup('idle'); }}
+            onBlur={() => void lookupStore()}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+            placeholder="e.g. STR-142"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          {storeLookup === 'loading' && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Looking up…</span>
+          )}
+        </div>
+        {storeLookup === 'found' && (
+          <p className="mt-2 text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5" /> {storeName} matched — customer &amp; address filled below.
+          </p>
+        )}
+        {storeLookup === 'notfound' && (
+          <p className="mt-2 text-xs font-semibold text-rose-600">No store found for that code.</p>
+        )}
+        <p className="mt-1.5 text-[11px] text-slate-400">
+          Fills store name, contact &amp; address — you only add the service, description &amp; appointment.
+        </p>
       </div>
 
       {error && (
