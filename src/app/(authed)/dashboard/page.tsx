@@ -27,9 +27,10 @@
  *     jump into resolution with one tap.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useFetchOnce } from '@/lib/hooks';
+import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
+import { buildTrend, topCities, type AnalyticsJob } from '@/lib/analytics';
 import { openJobDrawer } from '@/components/job-drawer';
 import { useSpoc } from '@/lib/spoc-context';
 import {
@@ -102,6 +103,9 @@ type Summary = {
 export default function SummaryDashboardPage() {
   const spoc = useSpoc();
   const { data, loading, error } = useFetchOnce<Summary>('/dashboard-summary');
+  // Recent-orders window — Orders-trend + Performance-by-city aggregate this
+  // CLIENT-SIDE (see src/lib/analytics.ts), exactly like the mobile app.
+  const { jobs, loading: jobsLoading } = useRecentJobs<AnalyticsJob>();
 
   if (loading) {
     return (
@@ -159,8 +163,8 @@ export default function SummaryDashboardPage() {
         </Link>
       </div>
 
-      {/* Needs your attention + Upcoming events, side by side (fills the blank) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      {/* Needs your attention + Upcoming events, side by side, equal height */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         <AttentionCard attention={data.attention} />
         <HolidayCalendar />
       </div>
@@ -169,7 +173,7 @@ export default function SummaryDashboardPage() {
       <section>
         <SectionHead>Trends</SectionHead>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <OrdersTrend data={data.trend ?? []} />
+          <OrdersTrend jobs={jobs} loading={jobsLoading} />
           <CompletionCard counts={data.counts} />
         </div>
       </section>
@@ -188,7 +192,7 @@ export default function SummaryDashboardPage() {
         <SectionHead>Service health</SectionHead>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SlaAging aging={data.slaAging} />
-          <CityPerformance rows={data.cityPerformance} />
+          <CityPerformance jobs={jobs} loading={jobsLoading} />
         </div>
       </section>
 
@@ -372,7 +376,7 @@ function HolidayCalendar() {
   const dow = (d: Date) => d.toLocaleString('en-US', { weekday: 'long' });
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
         <CalendarDays className="w-5 h-5 text-slate-400" />
@@ -447,7 +451,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
   };
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 mb-3">
         <span className="w-2.5 h-2.5 rounded-full bg-primary" />
         <h2 className="text-base font-extrabold text-slate-900">Needs your attention</h2>
@@ -458,7 +462,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
           You’re all caught up — nothing needs action right now. 🎉
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-2 gap-3.5 flex-1">
           {cards.map((d) => {
             const t = tone[d.tone];
             const Icon = d.icon;
@@ -466,7 +470,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
               <Link
                 key={d.key}
                 href={d.href}
-                className="aspect-square flex flex-col justify-between rounded-2xl p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                className="h-full min-h-[150px] flex flex-col justify-between rounded-2xl p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 style={{ background: t.bg, color: t.fg }}
               >
                 <span className="w-10 h-10 rounded-xl grid place-items-center bg-white/70" style={{ color: t.ic }}>
@@ -489,32 +493,30 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
 }
 
 /*
- * OrdersTrend — 30-day line chart of orders received vs completed per
- * day. Inline SVG (no chart lib). Empty (all-zero) shows a friendly
- * message rather than a flat line.
+ * OrdersTrend — created / completed / cancelled trend per day.
+ *
+ * Ported 1:1 from the mobile client app: aggregates the loaded orders window
+ * CLIENT-SIDE via buildTrend() (src/lib/analytics.ts). The window ends on the
+ * most recent order date present in the data (so it's never empty when data
+ * lags), and each day counts Created (all), Completed (status 3/5) and
+ * Cancelled (status 6/7) by ticket-created day. Own 7D/30D toggle.
  */
-function OrdersTrend({ data }: { data: NonNullable<Summary['trend']> }) {
-  const [range, setRange] = useState<'7d' | '30d'>('30d');
+function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean }) {
+  const [range, setRange] = useState<'7d' | '30d'>('7d');
   const days = range === '7d' ? 7 : 30;
-  const points = (data ?? []).slice(-days);
-  const total = points.reduce((s, d) => s + d.created + d.completed, 0);
+  const trend = useMemo(() => buildTrend(jobs, days), [jobs, days]);
+  const inr = (n: number) => n.toLocaleString('en-IN');
 
-  const fmtDay = (iso: string) => {
-    const dt = new Date(iso);
-    if (isNaN(dt.getTime())) return '';
-    return `${dt.getDate()} ${dt.toLocaleString('en-US', { month: 'short' })}`;
-  };
-
-  const W = 520, H = 150, padL = 8, padR = 8, padT = 10, padB = 20;
-  const n = Math.max(1, points.length - 1);
-  const max = Math.max(1, ...points.flatMap((d) => [d.created, d.completed]));
+  const W = 520, H = 150, padL = 8, padR = 8, padT = 10, padB = 8;
+  const n = Math.max(1, trend.days.length - 1);
+  const max = Math.max(1, ...trend.days.flatMap((d) => [d.created, d.completed, d.cancelled])) * 1.1;
   const x = (i: number) => padL + i * ((W - padL - padR) / n);
   const y = (v: number) => padT + (1 - v / max) * (H - padT - padB);
-  const line = (key: 'created' | 'completed') =>
-    points.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
+  const line = (key: 'created' | 'completed' | 'cancelled') =>
+    trend.days.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
   const area = (key: 'created' | 'completed') =>
-    points.length
-      ? `M${x(0)},${y(0)} ` + points.map((d, i) => `L${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ') + ` L${x(points.length - 1)},${y(0)} Z`
+    trend.days.length
+      ? `M${x(0)},${y(0)} ` + trend.days.map((d, i) => `L${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ') + ` L${x(trend.days.length - 1)},${y(0)} Z`
       : '';
 
   return (
@@ -524,7 +526,7 @@ function OrdersTrend({ data }: { data: NonNullable<Summary['trend']> }) {
           <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-primary" /> Orders trend
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">Ticket created vs completed · last {days} days</p>
+          <p className="text-xs text-slate-400 mt-0.5">Last {days} days · {trend.rangeLabel}</p>
         </div>
         <div className="inline-flex bg-slate-100 border border-slate-200 rounded-lg p-1">
           {(['7d', '30d'] as const).map((r) => (
@@ -540,12 +542,9 @@ function OrdersTrend({ data }: { data: NonNullable<Summary['trend']> }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-slate-500 mt-2">
-        <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#2f6bff' }} />Ticket Created</span>
-        <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#10b981' }} />Completed</span>
-      </div>
-
-      {total === 0 ? (
+      {loading ? (
+        <div className="text-center text-sm text-slate-400 py-12">Loading orders…</div>
+      ) : trend.createdTotal === 0 ? (
         <div className="text-center text-sm text-slate-400 py-12">No orders in the last {days} days.</div>
       ) : (
         <>
@@ -553,14 +552,39 @@ function OrdersTrend({ data }: { data: NonNullable<Summary['trend']> }) {
             {[0.25, 0.5, 0.75, 1].map((f) => (
               <line key={f} x1={padL} x2={W - padR} y1={padT + f * (H - padT - padB)} y2={padT + f * (H - padT - padB)} stroke="#f1f5f9" strokeWidth={1} />
             ))}
-            <path d={area('created')} fill="rgba(47,107,255,.10)" />
-            <path d={line('created')} fill="none" stroke="#2f6bff" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            <path d={line('completed')} fill="none" stroke="#10b981" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={area('created')} fill="rgba(42,120,214,.10)" />
+            <path d={line('completed')} fill="none" stroke="#1baf7a" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('cancelled')} fill="none" stroke="#e34948" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('created')} fill="none" stroke="#2a78d6" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           </svg>
           <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-            <span>{fmtDay(points[0]?.date)}</span>
-            <span>{fmtDay(points[Math.floor(points.length / 2)]?.date)}</span>
-            <span>{fmtDay(points[points.length - 1]?.date)}</span>
+            {trend.days.map((d, i) => (
+              <span key={i}>{i % (days <= 7 ? 1 : 5) === 0 || i === trend.days.length - 1 ? d.day : ''}</span>
+            ))}
+          </div>
+
+          {/* Stat row — Created / Completed·% / Cancelled totals (matches app). */}
+          <div className="grid grid-cols-3 gap-2.5 mt-4">
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#2a78d6' }} />Created
+              </div>
+              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">{inr(trend.createdTotal)}</div>
+            </div>
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#1baf7a' }} />Completed
+              </div>
+              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">
+                {inr(trend.completedTotal)} <span className="text-xs font-semibold text-emerald-600">· {trend.completionPct}%</span>
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#e34948' }} />Cancelled
+              </div>
+              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">{inr(trend.cancelledTotal)}</div>
+            </div>
           </div>
         </>
       )}
@@ -617,56 +641,70 @@ function CompletionCard({ counts }: { counts: Summary['counts'] }) {
 }
 
 /*
- * CityPerformance — per-city orders / completed / on-time% / avg TAT,
- * from /dashboard-summary → cityPerformance. On-time% is colour-tiered
- * so the weakest city stands out at a glance.
+ * CityPerformance — "Where the work is": top 10 cities by order count over
+ * the chosen window, as ranked horizontal bars.
+ *
+ * Ported 1:1 from the mobile client app (InsightsSections.tsx → topCities):
+ * count city_name over jobsInWindow(jobs, days), sort desc, take top 10.
+ * Own 7D/30D toggle.
  */
-function CityPerformance({ rows }: { rows: Summary['cityPerformance'] }) {
-  const items = rows ?? [];
-  const otClass = (pct: number | null) =>
-    pct == null ? 'text-slate-400'
-      : pct >= 95 ? 'text-emerald-700'
-      : pct >= 90 ? 'text-amber-600'
-      : 'text-rose-600';
+const CITY_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#4a3aa7', '#e34948', '#e87ba4', '#94a3b8'];
+
+function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean }) {
+  const [range, setRange] = useState<'7d' | '30d'>('7d');
+  const days = range === '7d' ? 7 : 30;
+  const cities = useMemo(() => topCities(jobs, days), [jobs, days]);
+  const cityMax = cities.length ? cities[0].orders : 0;
+  const inr = (n: number) => n.toLocaleString('en-IN');
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200">
-      <div className="px-5 pt-5 pb-3">
-        <h2 className="text-sm font-bold text-slate-700">Performance by city</h2>
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-slate-700">Performance by city</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Most orders by city · last {days} days</p>
+        </div>
+        <div className="inline-flex bg-slate-100 border border-slate-200 rounded-lg p-1 shrink-0">
+          {(['7d', '30d'] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition ${range === r ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {r === '7d' ? '7D' : '30D'}
+            </button>
+          ))}
+        </div>
       </div>
-      {items.length === 0 ? (
-        <div className="px-5 pb-8 text-center text-sm text-slate-400 py-8">
-          No city data yet.
-        </div>
+
+      {loading ? (
+        <div className="text-center text-sm text-slate-400 py-10">Loading orders…</div>
+      ) : cities.length === 0 ? (
+        <div className="text-center text-sm text-slate-400 py-10">No city data yet.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="text-left font-semibold px-5 py-2 border-b border-slate-100">City</th>
-                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">Orders</th>
-                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">Done</th>
-                <th className="text-right font-semibold px-3 py-2 border-b border-slate-100">On-time</th>
-                <th className="text-right font-semibold px-5 py-2 border-b border-slate-100">Avg TAT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((r) => (
-                <tr key={r.city} className="hover:bg-slate-50">
-                  <td className="px-5 py-2.5 font-semibold text-slate-800 border-b border-slate-50">{r.city}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums border-b border-slate-50">{r.orders}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 border-b border-slate-50">{r.completed}</td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums font-bold border-b border-slate-50 ${otClass(r.onTimePct)}`}>
-                    {r.onTimePct == null ? '—' : `${r.onTimePct}%`}
-                  </td>
-                  <td className="px-5 py-2.5 text-right tabular-nums text-slate-600 border-b border-slate-50">
-                    {r.avgTatDays == null ? '—' : `${r.avgTatDays}d`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="mt-4 space-y-3">
+          {cities.map((ct, i) => (
+            <li key={ct.city} className="flex items-center gap-3">
+              <span className="w-4 shrink-0 text-center text-sm font-bold text-slate-400 tabular-nums">{i + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-800 truncate">{ct.city}</span>
+                  <span className="text-sm font-bold text-slate-500 tabular-nums">{inr(ct.orders)}</span>
+                </div>
+                <div className="mt-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${cityMax ? Math.max(6, (ct.orders / cityMax) * 100) : 0}%`,
+                      backgroundColor: CITY_COLORS[i % CITY_COLORS.length],
+                    }}
+                  />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

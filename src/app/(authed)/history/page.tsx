@@ -464,8 +464,13 @@ export default function OrderHistoryPage() {
           >
             <Download className="w-4 h-4" /> {exporting ? 'Exporting…' : 'Export'}
           </button>
-          <Link href="/jobs/new" className="btn-primary" title="Raise a new technician booking">
-            <Plus className="w-4 h-4" /> New Orders
+          <Link
+            href="/jobs/new"
+            title="Raise a new technician booking"
+            className="px-5 py-2.5 text-sm font-bold rounded-xl text-white inline-flex items-center gap-1.5 transition hover:-translate-y-0.5"
+            style={{ background: 'linear-gradient(145deg,#ff6b6b,#e53935)', boxShadow: '0 12px 24px -10px rgba(229,57,53,.7)' }}
+          >
+            <Plus className="w-4 h-4" /> New Order
           </Link>
         </div>
       </div>

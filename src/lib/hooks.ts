@@ -124,3 +124,65 @@ export function useDebouncedValue<T>(value: T, delay = 300): T {
   }, [value, delay]);
   return debounced;
 }
+
+/* ─── Recent-orders window (for client-side analytics) ─────────────────
+ *
+ * Ported from the mobile client app (Easyfix_Client_App → src/lib/hooks.ts).
+ * The dashboard's Orders-trend / Performance-by-city cards aggregate the last
+ * 7–30 days CLIENT-SIDE (see src/lib/analytics.ts), exactly like the app, so
+ * we load a recent window of orders once and slice it in the browser.
+ */
+
+type Paged<T> = { items: T[]; total?: number };
+
+/** Parallel pager over GET /jobs — fetches up to `cap` rows for `query`. */
+export async function fetchAllJobs<T>(query = '', cap = 4000): Promise<T[]> {
+  const PAGE = 500;
+  const q = query ? `${query}&` : '';
+  const first = await api.get<Paged<T>>(`/jobs?${q}limit=${PAGE}&offset=0`);
+  const head = first.items || [];
+  const total = Math.min(first.total ?? head.length, cap);
+  if (head.length >= total || head.length < PAGE) return head.slice(0, cap);
+
+  const offsets: number[] = [];
+  for (let off = PAGE; off < total; off += PAGE) offsets.push(off);
+  const rest = await Promise.all(
+    offsets.map((off) =>
+      api.get<Paged<T>>(`/jobs?${q}limit=${PAGE}&offset=${off}`).then((r) => r.items || []).catch(() => [] as T[])),
+  );
+  return [head, ...rest].flat().slice(0, cap);
+}
+
+/**
+ * Recent orders for the dashboard analytics cards. `windowDays` limits the
+ * fetch to a server-side ticket-created date window so we don't download the
+ * client's ENTIRE history on every open — the charts only aggregate the last
+ * 7–30 days.
+ */
+export function useRecentJobs<T>(cap = 4000, windowDays = 60) {
+  const [jobs, setJobs] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      let q = '';
+      if (windowDays > 0) {
+        const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const lo = new Date(Date.now() - windowDays * 86400000);
+        q = `dateType=ticket&startDate=${ymd(lo)}&endDate=${encodeURIComponent(`${ymd(new Date())} 23:59:59`)}`;
+      }
+      setJobs(await fetchAllJobs<T>(q, cap));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load orders');
+      setJobs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [cap, windowDays]);
+
+  useEffect(() => { void load(); }, [load]);
+  return { jobs, loading, error, reload: load };
+}
