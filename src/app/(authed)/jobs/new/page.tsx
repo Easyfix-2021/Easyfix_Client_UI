@@ -33,6 +33,10 @@ import {
   Calendar, Clock, CheckCircle2,
   Home, Building, MapPinned, Crosshair,
   Film, Play, File as FileGeneric,
+  Store, Smartphone,
+  Snowflake, Refrigerator, WashingMachine, Zap, Droplets, Microwave, Tv, Flame, AirVent, Wrench,
+  ArrowLeft,
+  type LucideIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -220,6 +224,25 @@ function isValidMobile(v: string): { ok: true } | { ok: false; reason: string } 
   return { ok: true };
 }
 
+/**
+ * Best-effort icon for a service category. Categories are tenant-configured
+ * (real names from /lookup/service-categories), so we match on keywords and
+ * fall back to a generic wrench for anything unrecognised.
+ */
+function iconForCategory(name: string): LucideIcon {
+  const n = (name || '').toLowerCase();
+  if (/\bac\b|air.?con|cooling|hvac/.test(n)) return Snowflake;
+  if (/fridge|refriger/.test(n)) return Refrigerator;
+  if (/wash|laundr/.test(n)) return WashingMachine;
+  if (/electric|wiring|switch|socket|mcb/.test(n)) return Zap;
+  if (/plumb|tap|water|pipe|leak|geyser|bath|sink/.test(n)) return Droplets;
+  if (/microwave|oven|otg/.test(n)) return Microwave;
+  if (/\btv\b|televis|led|display|monitor/.test(n)) return Tv;
+  if (/heat|boiler|flame|gas|stove|chimney|burner/.test(n)) return Flame;
+  if (/fan|cooler|vent|exhaust|purifier/.test(n)) return AirVent;
+  return Wrench;
+}
+
 export default function NewOrderPage() {
   const router = useRouter();
   const spoc = useSpoc();
@@ -348,6 +371,16 @@ export default function NewOrderPage() {
     setFieldErrors((e) => { const { [key]: _, ...rest } = e; return rest; });
   }
 
+  // ─── Booking case ──────────────────────────────────────────────────
+  // The SPOC picks HOW they're booking before filling the form:
+  //   'mobile' → an individual customer, found by mobile number
+  //   'store'  → a registered store / branch, found by store code
+  // The form adapts to the choice (see the mode chooser + store card).
+  const [bookingMode, setBookingMode] = useState<'mobile' | 'store'>('mobile');
+
+  // ─── Wizard step (1 Customer & Service · 2 Location & Schedule · 3 Review) ──
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
   // ─── Book by store code ────────────────────────────────────────────
   // Type a store code → prefill the store's name / contact / address from
   // the client's store directory, so the SPOC only enters the service,
@@ -397,15 +430,22 @@ export default function NewOrderPage() {
   }
 
   // Live required-field checklist for the summary rail + bottom bar.
+  // The required set depends on the booking case:
+  //   • Store / branch      → the store code is the key required field;
+  //     mobile + name are filled FROM the store, so they aren't required.
+  //   • Individual customer → mobile + name are required (no store code).
   const requiredChecks = useMemo(() => {
-    const checks: { key: string; label: string; ok: boolean }[] = [
-      { key: 'customer_mob_no', label: 'Customer mobile',  ok: isValidMobile(form.customer_mob_no).ok },
-      { key: 'customer_name',   label: 'Contact name',     ok: form.customer_name.trim().length > 0 },
-      { key: 'service_category_ids', label: 'Service category', ok: form.service_category_ids.length > 0 },
-      { key: 'job_desc',        label: 'Problem description', ok: form.job_desc.trim().length > 0 },
-      { key: 'address',         label: 'Address',          ok: form.address.trim().length > 0 },
-      { key: 'client_ref_id',   label: 'Order reference ID', ok: form.client_ref_id.trim().length > 0 },
-    ];
+    const checks: { key: string; label: string; ok: boolean }[] = [];
+    if (bookingMode === 'store') {
+      checks.push({ key: 'storeCode', label: 'Store code', ok: storeCode.trim().length > 0 && storeLookup === 'found' });
+    } else {
+      checks.push({ key: 'customer_mob_no', label: 'Customer mobile', ok: isValidMobile(form.customer_mob_no).ok });
+      checks.push({ key: 'customer_name',   label: 'Contact name',    ok: form.customer_name.trim().length > 0 });
+    }
+    checks.push({ key: 'service_category_ids', label: 'Service category', ok: form.service_category_ids.length > 0 });
+    checks.push({ key: 'job_desc',        label: 'Problem description', ok: form.job_desc.trim().length > 0 });
+    checks.push({ key: 'address',         label: 'Address',          ok: form.address.trim().length > 0 });
+    checks.push({ key: 'client_ref_id',   label: 'Order reference ID', ok: form.client_ref_id.trim().length > 0 });
     customProps.filter((cp) => cp.mandatory).forEach((cp) => {
       checks.push({
         key: `cp_${cp.name}`,
@@ -414,23 +454,36 @@ export default function NewOrderPage() {
       });
     });
     return checks;
-  }, [form, customProps]);
+  }, [form, customProps, bookingMode, storeCode, storeLookup]);
 
   const filledCount = requiredChecks.filter((c) => c.ok).length;
   const allRequiredOk = filledCount === requiredChecks.length;
 
-  // Returns the errors map so callers can use it immediately
-  // (setFieldErrors is async — reading state right after won't reflect
-  // the new value).
-  function validate(): Record<string, string> {
+  // Pure error computation (no setState) so step navigation can scope which
+  // errors block the "Continue" without mutating the whole error map.
+  function computeErrors(): Record<string, string> {
     const errs: Record<string, string> = {};
-    if (!form.customer_mob_no.trim()) {
-      errs.customer_mob_no = 'Mobile number is required';
+    if (bookingMode === 'store') {
+      // Store / branch case — the store code is the required field. Mobile
+      // and name are filled from the store, so they aren't required here;
+      // we only sanity-check the mobile's FORMAT if one is present.
+      if (storeLookup !== 'found') {
+        errs.storeCode = storeCode.trim() ? 'Enter a valid store code' : 'Store code is required';
+      }
+      if (form.customer_mob_no.trim()) {
+        const v = isValidMobile(form.customer_mob_no);
+        if (!v.ok) errs.customer_mob_no = v.reason;
+      }
     } else {
-      const v = isValidMobile(form.customer_mob_no);
-      if (!v.ok) errs.customer_mob_no = v.reason;
+      // Individual customer case — mobile + name are required.
+      if (!form.customer_mob_no.trim()) {
+        errs.customer_mob_no = 'Mobile number is required';
+      } else {
+        const v = isValidMobile(form.customer_mob_no);
+        if (!v.ok) errs.customer_mob_no = v.reason;
+      }
+      if (!form.customer_name.trim()) errs.customer_name = 'Contact name is required';
     }
-    if (!form.customer_name.trim()) errs.customer_name = 'Contact name is required';
     if (form.service_category_ids.length === 0) errs.service_category_ids = 'Pick at least one service category';
     if (!form.job_desc.trim()) errs.job_desc = 'Describe the problem';
     if (!form.address.trim()) errs.address = 'Address is required';
@@ -451,8 +504,47 @@ export default function NewOrderPage() {
         errs[`cp_${cp.name}`] = `${cp.label || humanize(cp.name)} is required`;
       }
     });
+    return errs;
+  }
+
+  // Returns the errors map so callers can use it immediately
+  // (setFieldErrors is async — reading state right after won't reflect it).
+  function validate(): Record<string, string> {
+    const errs = computeErrors();
     setFieldErrors(errs);
     return errs;
+  }
+
+  // ─── Wizard navigation ─────────────────────────────────────────────
+  // Which error keys belong to each step, so "Continue" only blocks on the
+  // fields visible in the current step.
+  const STEP1_KEYS = ['storeCode', 'customer_mob_no', 'customer_name', 'service_category_ids', 'job_desc'];
+  const STEP2_KEYS = ['address', 'city_id', 'client_ref_id', 'appt_date', 'appt_slot'];
+  function isStepKey(s: 1 | 2 | 3, k: string): boolean {
+    if (s === 1) return STEP1_KEYS.includes(k) || k.startsWith('cp_');
+    if (s === 2) return STEP2_KEYS.includes(k) || k === 'alternate_mob_no';
+    return true;
+  }
+  function goNext() {
+    const all = computeErrors();
+    const mine = Object.fromEntries(Object.entries(all).filter(([k]) => isStepKey(step, k)));
+    setFieldErrors(mine);
+    if (Object.keys(mine).length > 0) {
+      const first = Object.keys(mine)[0];
+      document.querySelector(`[data-field="${first}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const n = Object.keys(mine).length;
+      setError(`${n} field${n === 1 ? '' : 's'} on this step need${n === 1 ? 's' : ''} attention.`);
+      return;
+    }
+    setError(null);
+    setFieldErrors({});
+    setStep((s) => (s < 3 ? ((s + 1) as 1 | 2 | 3) : s));
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function goBack() {
+    setError(null);
+    setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s));
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // Validate everything (including inline appointment) and POST in a
@@ -602,37 +694,112 @@ export default function NewOrderPage() {
         </div>
       </div>
 
-      {/* Book by store code — prefills the customer & address from the
-          client's store directory, so only service + appointment remain. */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-4 sm:mb-5">
+      {/* Booking method + store code — only relevant on Step 1. */}
+      {step === 1 && (<>
+      {/* How are you booking? — slim segmented toggle. The form adapts:
+          Individual customer → mobile + name; Store / branch → store code. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          How are you booking?
+        </p>
+        <div className="inline-flex flex-wrap gap-1 p-1 rounded-xl border border-slate-200 bg-slate-100">
+          {([
+            { key: 'mobile', title: 'Individual customer', sub: 'by mobile number', Icon: Smartphone },
+            { key: 'store',  title: 'Store / branch',      sub: 'by store code',    Icon: Store },
+          ] as const).map((m) => {
+            const active = bookingMode === m.key;
+            const Icon = m.Icon;
+            return (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setBookingMode(m.key)}
+                aria-pressed={active}
+                className={cn(
+                  'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-bold transition',
+                  active ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {m.title}
+                <span className="hidden sm:inline text-xs font-medium opacity-60">· {m.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Book by store code — shown only in the Store/branch case. Prefills
+          the customer & address from the client's store directory, so only
+          service + appointment remain. */}
+      {bookingMode === 'store' && (
+      <div data-field="storeCode" className="bg-white border border-slate-200 rounded-2xl shadow-sm p-3.5 mb-3">
         <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-          <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code
+          <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code <span className="text-rose-500">*</span>
         </label>
-        <div className="mt-2 relative">
+        <div className="mt-2 relative sm:max-w-xs">
           <input
             value={storeCode}
-            onChange={(e) => { setStoreCode(e.target.value); setStoreLookup('idle'); }}
+            onChange={(e) => { setStoreCode(e.target.value); setStoreLookup('idle'); setFieldErrors((er) => { const { storeCode: _drop, ...rest } = er; return rest; }); }}
             onBlur={() => void lookupStore()}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
             placeholder="e.g. STR-142"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.storeCode && 'border-rose-300 ring-1 ring-rose-300')}
           />
           {storeLookup === 'loading' && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Looking up…</span>
           )}
         </div>
-        {storeLookup === 'found' && (
-          <p className="mt-2 text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5" /> {storeName} matched — customer &amp; address filled below.
-          </p>
-        )}
         {storeLookup === 'notfound' && (
           <p className="mt-2 text-xs font-semibold text-rose-600">No store found for that code.</p>
         )}
-        <p className="mt-1.5 text-[11px] text-slate-400">
-          Fills store name, contact &amp; address — you only add the service, description &amp; appointment.
-        </p>
+        {fieldErrors.storeCode && storeLookup !== 'notfound' && (
+          <p className="mt-2 text-xs text-rose-600 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> {fieldErrors.storeCode}
+          </p>
+        )}
+
+        {storeLookup === 'found' ? (
+          // Matched store — show its details right here, so the SPOC doesn't
+          // re-enter the customer/address (those fields are hidden below).
+          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-lg bg-white grid place-items-center text-blue-600 shrink-0">
+                <Store className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-slate-900 truncate">{storeName}</div>
+                <div className="text-[11px] font-semibold text-emerald-700 inline-flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Matched — details filled from your directory
+                </div>
+              </div>
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {form.customer_name && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1">
+                  <User className="w-3 h-3 text-emerald-600" /> {form.customer_name}
+                </span>
+              )}
+              {form.customer_mob_no && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1">
+                  <Phone className="w-3 h-3 text-emerald-600" /> {form.customer_mob_no}
+                </span>
+              )}
+              {form.address && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1 max-w-full">
+                  <MapPin className="w-3 h-3 text-emerald-600 shrink-0" /> <span className="truncate">{form.address}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            Fills contact &amp; address — you only add the service, description &amp; appointment.
+          </p>
+        )}
       </div>
+      )}
+      </>)}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 flex items-start gap-2 mb-5">
@@ -640,18 +807,54 @@ export default function NewOrderPage() {
         </div>
       )}
 
+      {/* Wizard progress — 1 Customer & Service · 2 Location & Schedule · 3 Review */}
+      <div className="mb-5 overflow-x-auto">
+        <div className="flex items-center min-w-max">
+          {([
+            { n: 1, label: 'Customer & Service' },
+            { n: 2, label: 'Location & Schedule' },
+            { n: 3, label: 'Review & Confirm' },
+          ] as const).map((st, i) => {
+            const done = step > st.n;
+            const on = step === st.n;
+            return (
+              <div key={st.n} className="flex items-center">
+                <div className="flex items-center gap-2.5">
+                  <span className={cn(
+                    'w-8 h-8 rounded-full grid place-items-center text-sm font-bold shrink-0 transition',
+                    on ? 'bg-primary text-white shadow-md shadow-primary/30'
+                      : done ? 'bg-primary/15 text-primary'
+                      : 'bg-slate-100 text-slate-400'
+                  )}>
+                    {done ? <Check className="w-4 h-4" /> : st.n}
+                  </span>
+                  <span className={cn('text-sm font-bold whitespace-nowrap', on ? 'text-slate-900' : 'text-slate-400')}>
+                    {st.label}
+                  </span>
+                </div>
+                {i < 2 && <span className={cn('mx-3 sm:mx-4 h-0.5 w-8 sm:w-16 rounded-full', step > st.n ? 'bg-primary' : 'bg-slate-200')} />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Two-column on desktop: form (left) + sticky summary (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
 
         {/* ─── LEFT: form sections ───────────────────────────── */}
         <div className="space-y-5 min-w-0">
 
-          {/* STEP 1 — Customer & Service */}
+          {/* ══ STEP 1 — Customer & Service ══ */}
+          {step === 1 && (
           <StepCard step={1} icon={User} title="Customer &amp; Service"
             subtitle="Who needs the technician and what kind of work?">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Individual-customer case only — in Store mode the customer's
+                  contact comes from the store (shown in the store card above). */}
+              {bookingMode === 'mobile' && (<>
               <Field
-                label="Customer mobile" required
+                label="Customer mobile" required={bookingMode === 'mobile'}
                 error={fieldErrors.customer_mob_no}
                 icon={Phone}
                 dataField="customer_mob_no"
@@ -692,7 +895,7 @@ export default function NewOrderPage() {
               </Field>
 
               <Field
-                label="Contact name" required
+                label="Contact name" required={bookingMode === 'mobile'}
                 error={fieldErrors.customer_name}
                 icon={User}
                 dataField="customer_name"
@@ -719,6 +922,7 @@ export default function NewOrderPage() {
                   </p>
                 )}
               </Field>
+              </>)}
 
               <Field
                 label="Service category" required
@@ -727,18 +931,50 @@ export default function NewOrderPage() {
                 className="md:col-span-2"
                 dataField="service_category_ids"
               >
-                <CategorySelect
-                  options={categories}
-                  selectedIds={form.service_category_ids}
-                  onChange={(ids) => setField('service_category_ids', ids)}
-                  placeholder={
-                    categories.length === 0
-                      ? 'No categories configured for your account'
-                      : 'Pick one or more — search by name'
-                  }
-                  disabled={categories.length === 0}
-                  hasError={!!fieldErrors.service_category_ids}
-                />
+                {categories.length === 0 ? (
+                  <div className="text-sm text-slate-400 italic border border-dashed border-slate-200 rounded-xl px-4 py-6 text-center">
+                    No categories configured for your account.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {categories.map((cat) => {
+                      const on = form.service_category_ids.includes(cat.id);
+                      const Icon = iconForCategory(cat.name);
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() =>
+                            setField(
+                              'service_category_ids',
+                              on
+                                ? form.service_category_ids.filter((id) => id !== cat.id)
+                                : [...form.service_category_ids, cat.id],
+                            )
+                          }
+                          className={cn(
+                            'relative flex flex-col items-center justify-center gap-2 rounded-xl border p-3 min-h-[92px] text-center transition',
+                            on
+                              ? 'border-primary bg-primary-50/60 shadow-sm'
+                              : fieldErrors.service_category_ids
+                                ? 'border-rose-200 hover:border-slate-300 bg-white'
+                                : 'border-slate-200 hover:border-slate-300 bg-white',
+                          )}
+                        >
+                          {on && (
+                            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-white grid place-items-center">
+                              <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                            </span>
+                          )}
+                          <Icon className={cn('w-7 h-7', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
+                          <span className={cn('text-xs font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
+                            {cat.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </Field>
 
               <Field
@@ -838,8 +1074,11 @@ export default function NewOrderPage() {
               )}
             </div>
           </StepCard>
+          )}
 
-          {/* STEP 2 — Service Location */}
+          {/* ══ STEP 2 — Location & Schedule (address + appointment + files) ══ */}
+          {step === 2 && (<>
+          {/* Service Location */}
           <StepCard step={2} icon={MapPin} title="Service Location"
             subtitle="Where should the technician go?">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1012,6 +1251,45 @@ export default function NewOrderPage() {
               </p>
             </div>
           </StepCard>
+          </>)}
+
+          {/* ══ STEP 3 — Review & Confirm ══ */}
+          {step === 3 && (
+          <StepCard step={3} icon={CheckCircle2} title="Review &amp; Confirm"
+            subtitle="Check everything below, then place the order.">
+            <div className="divide-y divide-slate-100">
+              {[
+                { icon: bookingMode === 'store' ? Store : User, label: bookingMode === 'store' ? 'Store' : 'Customer',
+                  value: bookingMode === 'store'
+                    ? (storeName || storeCode || '—')
+                    : [form.customer_name, form.customer_mob_no].filter(Boolean).join(' · ') || '—', jump: 1 as const },
+                { icon: Briefcase, label: 'Service', value: selectedCategoryNames.join(', ') || '—', jump: 1 as const },
+                { icon: FileText, label: 'Problem', value: form.job_desc || '—', jump: 1 as const },
+                { icon: MapPin, label: 'Address', value: [form.building, form.address, cities.find((c) => c.id === form.city_id)?.name].filter(Boolean).join(', ') || '—', jump: 2 as const },
+                { icon: Hash, label: 'Reference', value: form.client_ref_id || '—', jump: 2 as const },
+                { icon: Calendar, label: 'Appointment', value: [form.appt_date, form.appt_slot].filter(Boolean).join(' · ') || '—', jump: 2 as const },
+                { icon: Camera, label: 'Attachments', value: files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'None', jump: 2 as const },
+              ].map((row) => {
+                const RIcon = row.icon;
+                return (
+                  <div key={row.label} className="flex items-start gap-3 py-3">
+                    <span className="w-9 h-9 rounded-lg bg-primary-50 text-primary grid place-items-center shrink-0">
+                      <RIcon className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{row.label}</div>
+                      <div className="text-sm text-slate-800 break-words">{row.value}</div>
+                    </div>
+                    <button type="button" onClick={() => setStep(row.jump)}
+                      className="text-xs font-bold text-primary hover:underline shrink-0 mt-0.5">
+                      Edit
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </StepCard>
+          )}
         </div>
 
         {/* ─── RIGHT: sticky summary rail ───────────────────── */}
@@ -1073,23 +1351,46 @@ export default function NewOrderPage() {
             {filledCount}/{requiredChecks.length}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={reset}
-              className="hidden sm:inline-flex text-sm text-slate-600 hover:text-primary underline-offset-2 hover:underline px-2"
-            >
-              Reset
-            </button>
-            <Link href="/dashboard" className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2">Cancel</Link>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {submitting
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking…</>
-                : <>Book Now <ChevronRight className="w-4 h-4" /></>}
-            </button>
+            {step === 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="hidden sm:inline-flex text-sm text-slate-600 hover:text-primary underline-offset-2 hover:underline px-2"
+                >
+                  Reset
+                </button>
+                <Link href="/dashboard" className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2">Cancel</Link>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={goBack}
+                className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2 inline-flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+            )}
+
+            {step < 3 ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 inline-flex items-center gap-1.5"
+              >
+                Continue <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              >
+                {submitting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking…</>
+                  : <>Book Now <ChevronRight className="w-4 h-4" /></>}
+              </button>
+            )}
           </div>
         </div>
       </div>

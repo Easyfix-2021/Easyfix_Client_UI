@@ -1063,7 +1063,7 @@ function ManagerSelect({
               onChange={(e) => { setQuery(e.target.value); setActive(0); }}
               onKeyDown={onKeyDown}
               placeholder="Type to search by name or email…"
-              className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded outline-none focus:border-primary"
+              className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
             />
           </div>
           <ul ref={listRef} className="flex-1 overflow-y-auto py-1">
