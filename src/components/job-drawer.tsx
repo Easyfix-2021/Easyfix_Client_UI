@@ -223,13 +223,8 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
                     <FieldBox label="Address" info select value={fullAddress || '—'} />
                     <div>
                       <FieldLabel info>Phone</FieldLabel>
-                      <div className="flex gap-2">
-                        <div className="w-24 shrink-0 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-600">
-                          Work <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                        </div>
-                        <div className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 truncate">
-                          {j.customer_mob_no || '—'}
-                        </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 truncate">
+                        {j.customer_mob_no || '—'}
                       </div>
                     </div>
                     <FieldBox label="Job description" value={j.job_desc || '—'} />

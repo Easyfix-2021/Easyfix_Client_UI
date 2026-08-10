@@ -550,8 +550,11 @@ export default function NewOrderPage() {
   // Validate everything (including inline appointment) and POST in a
   // single step — no popup. Backend expects a nested payload shape
   // (customer + address objects), so we restructure here.
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(e?: React.SyntheticEvent) {
+    e?.preventDefault();
+    // Guard: the order is only placed from the Review step (step 3). This
+    // stops any stray form-submit (e.g. Enter key) from booking early.
+    if (step !== 3) return;
     setError(null);
     const errs = validate();
     if (Object.keys(errs).length > 0) {
@@ -580,12 +583,10 @@ export default function NewOrderPage() {
           customer_email:   form.customer_email || undefined,
         },
         address: {
-          // Prepend "[Home]" / "[Office]" / "[Other]" tag so the
-          // address-type choice is preserved without needing a new
-          // backend column (tbl_address has no address_type field).
-          address: (form.address_type
-            ? `[${form.address_type}] ${form.address.trim()}`
-            : form.address.trim()),
+          // Save the raw address only. The Home / Office / Other choice is
+          // FE-only metadata and is intentionally NOT written to tbl_address
+          // (no such column, and the client doesn't want it in the value).
+          address: form.address.trim(),
           city_id:    form.city_id,
           pin_code:   form.pin_code || '',
           building:   form.building.trim() || undefined,
@@ -1382,7 +1383,8 @@ export default function NewOrderPage() {
               </button>
             ) : (
               <button
-                type="submit"
+                type="button"
+                onClick={submit}
                 disabled={submitting}
                 className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               >
