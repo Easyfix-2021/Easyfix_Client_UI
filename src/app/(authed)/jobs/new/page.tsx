@@ -292,10 +292,14 @@ export default function NewOrderPage() {
     setCustomerLookup({ state: 'loading' });
     (async () => {
       try {
-        const res = await api.get<{ customer: null | {
+        // POST, not GET-with-the-number-in-the-path: a URL is written to the
+        // backend access log on every request and to every upstream proxy/CDN
+        // log we don't control, so the customer's phone number was being logged
+        // at request rate. The body is not logged. Still a pure read.
+        const res = await api.post<{ customer: null | {
           customer_id: number; customer_name: string;
           customer_mob_no: string; customer_email: string | null;
-        }}>(`/customers/mobile/${mob}`);
+        }}>('/customers/lookup', { mobile: mob });
         if (cancelled) return;
         if (res?.customer) {
           setCustomerLookup({
@@ -1031,6 +1035,7 @@ export default function NewOrderPage() {
 
       {selectAddressOpen && (
         <SelectAddressDialog
+          customerId={form.customer_id}
           customerMobile={form.customer_mob_no}
           cities={cities}
           onClose={() => setSelectAddressOpen(false)}
@@ -1806,9 +1811,9 @@ function SuccessModal({
  * SelectAddressDialog — "Select Address" picker (image 2 in the brief).
  *
  * First step of the two-step address flow:
- *   1. Customer mobile is already on the form → we look up the
- *      customer's address book via
- *      GET /api/client/customers/mobile/:mobile/addresses
+ *   1. The customer mobile on the form has already been resolved to a
+ *      customer_id by the lookup above → we read that customer's address
+ *      book via GET /api/client/customers/:customerId/addresses
  *      (scoped to the SPOC's own client, so we never leak addresses
  *      from another brand's bookings).
  *   2. SPOC picks one of the saved cards → onPickSaved fills the form.
@@ -1848,8 +1853,18 @@ type PlaceSuggestion = {
 };
 
 function SelectAddressDialog({
-  customerMobile, cities, onClose, onPickSaved, onAddNew, onUseCurrentLocation, onPickPlace,
+  customerId, customerMobile, cities, onClose, onPickSaved, onAddNew, onUseCurrentLocation, onPickPlace,
 }: {
+  /*
+   * The saved-address read is keyed on the CUSTOMER ID, not the mobile. The
+   * mobile-keyed URL this used to call never existed on the backend (the route
+   * is GET /customers/:customerId/addresses), so the request 404'd and the
+   * picker silently showed "no saved addresses" for every customer. The id is
+   * already resolved by the mobile lookup above and kept on `form.customer_id`.
+   * Null until that lookup resolves, or for a brand-new customer — both cases
+   * correctly have no address book to show.
+   */
+  customerId: number | null;
   customerMobile: string;
   cities: { id: number; name: string }[];
   onClose: () => void;
@@ -1874,17 +1889,21 @@ function SelectAddressDialog({
 
   useEffect(() => {
     let cancelled = false;
-    if (!/^\d{10}$/.test(customerMobile)) {
+    // No id yet (lookup still running, or a brand-new customer) → nothing to
+    // fetch. Previously this gated on the mobile and then called a mobile-keyed
+    // URL that has no backend route, so every request 404'd into the catch and
+    // the picker always rendered empty.
+    if (!customerId) {
       setItems([]);
       return;
     }
     setLoading(true); setError(null);
-    api.get<{ items: SavedAddress[] }>(`/customers/mobile/${customerMobile}/addresses`)
+    api.get<{ items: SavedAddress[] }>(`/customers/${customerId}/addresses`)
       .then((res) => { if (!cancelled) setItems(res.items || []); })
       .catch((err) => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load addresses'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [customerMobile]);
+  }, [customerId]);
 
   // Debounced Places Autocomplete. <3 chars or empty → clear. >=3
   // chars → wait 300ms, then call /maps/autocomplete. AbortController
