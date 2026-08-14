@@ -22,6 +22,7 @@ import {
   FileText,
   // Users, // used by the My Team nav item (currently removed)
   HardHat,
+  Wallet,
   ExternalLink,
   LogOut,
   Bell,
@@ -62,6 +63,7 @@ const SECTION_ONE: NavItem[] = [
 ];
 
 const SECTION_TWO: NavItem[] = [
+  { href: '/wallet',       label: 'Wallet',          icon: Wallet },
   { href: '/invoices',     label: 'Invoices',        icon: FileText },
   { href: '/ratecard',     label: 'Ratecard',        icon: ReceiptText },
   // My Team — removed from the sidebar (page + route still exist at /team).

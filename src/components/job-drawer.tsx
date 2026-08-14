@@ -121,6 +121,9 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
   const pay = j ? paymentLabel(j.collected_by) : null;
   const imgUrl = (id: number) => `/api/client/jobs/${jobId}/images/${id}`;
   const pics = (j?.images || []).filter((im) => !/\.pdf$/i.test(im.image || ''));
+  // PO / Jobsheet docs live in tbl_job_image, tagged by image_category.
+  const poDoc = (j?.images || []).find((im) => /purchase.?order|^po$/i.test(im.image_category || ''));
+  const jsDoc = (j?.images || []).find((im) => /job.?sheet/i.test(im.image_category || ''));
 
   // "Last updated" = the most recent lifecycle timestamp we have.
   let lastUpdated: string | null = null;
@@ -173,8 +176,24 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button type="button" className={hbtn}><FileText className="w-4 h-4" /> PO</button>
-              <button type="button" className={hbtn}><ClipboardList className="w-4 h-4" /> Jobsheet</button>
+              <button
+                type="button"
+                disabled={!poDoc}
+                onClick={() => poDoc && window.open(imgUrl(poDoc.image_id), '_blank', 'noopener,noreferrer')}
+                title={poDoc ? 'Open Purchase Order' : 'No PO uploaded for this job'}
+                className={`${hbtn} ${!poDoc ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <FileText className="w-4 h-4" /> PO
+              </button>
+              <button
+                type="button"
+                disabled={!jsDoc}
+                onClick={() => jsDoc && window.open(imgUrl(jsDoc.image_id), '_blank', 'noopener,noreferrer')}
+                title={jsDoc ? 'Open Job Sheet' : 'No Jobsheet uploaded for this job'}
+                className={`${hbtn} ${!jsDoc ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <ClipboardList className="w-4 h-4" /> Jobsheet
+              </button>
               <div className="relative">
                 <button type="button" onClick={() => setScrollOpen((v) => !v)} className={hbtn}>
                   <ChevronsDown className="w-4 h-4" /> Scroll To

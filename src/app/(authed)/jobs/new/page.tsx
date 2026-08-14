@@ -298,6 +298,9 @@ export default function NewOrderPage() {
         // ones our client has previously booked in. Bookings can land
         // in any active city.
         api.get<{ items: { id: number; name: string }[] }>('/lookup/cities?scope=all'),
+        // The client's store / branch directory — powers the store-code
+        // autocomplete (filtered client-side as the SPOC types).
+        api.get<{ items: Store[] }>('/stores'),
       ]);
       if (results[0].status === 'rejected' && results[1].status === 'rejected') {
         setBootError('Unable to load order form data. Please refresh.');
@@ -305,6 +308,7 @@ export default function NewOrderPage() {
       setCategories(results[0].status === 'fulfilled' ? results[0].value.items ?? [] : []);
       setCustomProps(results[1].status === 'fulfilled' ? results[1].value.items ?? [] : []);
       setCities(results[2].status === 'fulfilled' ? results[2].value.items ?? [] : []);
+      setStores(results[3].status === 'fulfilled' ? results[3].value.items ?? [] : []);
       setBootstrapped(true);
     })();
   }, []);
@@ -377,12 +381,7 @@ export default function NewOrderPage() {
 
   // ─── Booking case ──────────────────────────────────────────────────
   // The SPOC picks HOW they're booking before filling the form:
-  //   'mobile' → an individual customer, found by mobile number
-  //   'store'  → a registered store / branch, found by store code
-  // The form adapts to the choice (see the mode chooser + store card).
-  const [bookingMode, setBookingMode] = useState<'mobile' | 'store'>('mobile');
-
-  // ─── Wizard step (1 Customer & Service · 2 Location & Schedule · 3 Review) ──
+  // ─── Wizard step (retained internally; the page is single-scroll now) ──
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // ─── Book by store code ────────────────────────────────────────────
@@ -392,32 +391,59 @@ export default function NewOrderPage() {
   const [storeCode, setStoreCode] = useState('');
   const [storeLookup, setStoreLookup] = useState<'idle' | 'loading' | 'found' | 'notfound'>('idle');
   const [storeName, setStoreName] = useState('');
+  const [stores, setStores] = useState<Store[]>([]);     // the client's directory (for autocomplete)
+  const [storeOpen, setStoreOpen] = useState(false);     // suggestions dropdown open
+  const [newStore, setNewStore] = useState(false);       // booking with a brand-new code
+
+  // A MATCHED store prefills the customer/address, so mobile + name aren't
+  // required. Otherwise (individual, or a brand-new store) they are.
+  const storeMatched = storeLookup === 'found';
+
+  // Fill the form from a store record (shared by autocomplete-select and
+  // the exact-code lookup).
+  function applyStore(s: Store) {
+    setForm((f) => ({
+      ...f,
+      customer_name:   s.store_name || s.contact_name || f.customer_name,
+      customer_mob_no: s.contact_no || f.customer_mob_no,
+      address:         s.address || f.address,
+      pin_code:        s.pin_code || f.pin_code,
+      city_id:         s.city_id ?? f.city_id,
+      client_ref_id:   s.store_code || f.client_ref_id,
+    }));
+    setStoreName(s.store_name || s.store_code);
+    setStoreCode(s.store_code);
+    setStoreLookup('found');
+    setStoreOpen(false);
+    setNewStore(false);
+    setFieldErrors((er) => { const { storeCode: _drop, ...rest } = er; return rest; });
+  }
+
   async function lookupStore() {
     const code = storeCode.trim();
     if (!code) return;
+    // Prefer the already-loaded directory (exact, case-insensitive) to avoid a
+    // round-trip; fall back to the server lookup.
+    const local = stores.find((s) => s.store_code.toLowerCase() === code.toLowerCase());
+    if (local) { applyStore(local); return; }
     setStoreLookup('loading');
     try {
       const res = await api.get<{ store: Store | null }>(`/stores/lookup?code=${encodeURIComponent(code)}`);
-      if (res?.store) {
-        const s = res.store;
-        setForm((f) => ({
-          ...f,
-          customer_name:   s.store_name || s.contact_name || f.customer_name,
-          customer_mob_no: s.contact_no || f.customer_mob_no,
-          address:         s.address || f.address,
-          pin_code:        s.pin_code || f.pin_code,
-          city_id:         s.city_id ?? f.city_id,
-          client_ref_id:   s.store_code || f.client_ref_id,
-        }));
-        setStoreName(s.store_name || s.store_code);
-        setStoreLookup('found');
-      } else {
-        setStoreLookup('notfound');
-      }
+      if (res?.store) applyStore(res.store);
+      else setStoreLookup('notfound');
     } catch {
       setStoreLookup('notfound');
     }
   }
+
+  // Live suggestions as the SPOC types (match code OR name, case-insensitive).
+  const storeSuggestions = useMemo(() => {
+    const q = storeCode.trim().toLowerCase();
+    if (!q) return stores.slice(0, 8);
+    return stores
+      .filter((s) => s.store_code.toLowerCase().includes(q) || (s.store_name || '').toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [stores, storeCode]);
 
   function toggleJobType(t: keyof FormState['job_types']) {
     setForm((f) => ({ ...f, job_types: { ...f.job_types, [t]: !f.job_types[t] } }));
@@ -434,15 +460,11 @@ export default function NewOrderPage() {
   }
 
   // Live required-field checklist for the summary rail + bottom bar.
-  // The required set depends on the booking case:
-  //   • Store / branch      → the store code is the key required field;
-  //     mobile + name are filled FROM the store, so they aren't required.
-  //   • Individual customer → mobile + name are required (no store code).
+  // A matched store fills the customer in, so mobile + name aren't required;
+  // otherwise (individual / brand-new store) they are.
   const requiredChecks = useMemo(() => {
     const checks: { key: string; label: string; ok: boolean }[] = [];
-    if (bookingMode === 'store') {
-      checks.push({ key: 'storeCode', label: 'Store code', ok: storeCode.trim().length > 0 && storeLookup === 'found' });
-    } else {
+    if (!storeMatched) {
       checks.push({ key: 'customer_mob_no', label: 'Customer mobile', ok: isValidMobile(form.customer_mob_no).ok });
       checks.push({ key: 'customer_name',   label: 'Contact name',    ok: form.customer_name.trim().length > 0 });
     }
@@ -458,7 +480,7 @@ export default function NewOrderPage() {
       });
     });
     return checks;
-  }, [form, customProps, bookingMode, storeCode, storeLookup]);
+  }, [form, customProps, storeMatched]);
 
   const filledCount = requiredChecks.filter((c) => c.ok).length;
   const allRequiredOk = filledCount === requiredChecks.length;
@@ -467,21 +489,17 @@ export default function NewOrderPage() {
   // errors block the "Continue" without mutating the whole error map.
   function computeErrors(): Record<string, string> {
     const errs: Record<string, string> = {};
-    if (bookingMode === 'store') {
-      // Store / branch case — the store code is the required field. Mobile
-      // and name are filled from the store, so they aren't required here;
-      // we only sanity-check the mobile's FORMAT if one is present.
-      if (storeLookup !== 'found') {
-        errs.storeCode = storeCode.trim() ? 'Enter a valid store code' : 'Store code is required';
-      }
+    if (storeMatched) {
+      // Matched store prefills the contact; mobile is optional here — we only
+      // sanity-check its format if one is present.
       if (form.customer_mob_no.trim()) {
         const v = isValidMobile(form.customer_mob_no);
         if (!v.ok) errs.customer_mob_no = v.reason;
       }
     } else {
-      // Individual customer case — mobile + name are required.
+      // Individual customer (or a brand-new store) — mobile + name required.
       if (!form.customer_mob_no.trim()) {
-        errs.customer_mob_no = 'Mobile number is required';
+        errs.customer_mob_no = 'Enter a mobile number, or use a store code';
       } else {
         const v = isValidMobile(form.customer_mob_no);
         if (!v.ok) errs.customer_mob_no = v.reason;
@@ -556,9 +574,6 @@ export default function NewOrderPage() {
   // (customer + address objects), so we restructure here.
   async function submit(e?: React.SyntheticEvent) {
     e?.preventDefault();
-    // Guard: the order is only placed from the Review step (step 3). This
-    // stops any stray form-submit (e.g. Enter key) from booking early.
-    if (step !== 3) return;
     setError(null);
     const errs = validate();
     if (Object.keys(errs).length > 0) {
@@ -677,86 +692,92 @@ export default function NewOrderPage() {
         <span className="font-semibold text-slate-800">New Order</span>
       </div>
 
-      {/* Hero card with brand-red side stripe — stacks on mobile, side-
-          by-side from sm:. Smaller padding and heading on phones so the
-          required-fields pill doesn't crowd the greeting. */}
-      <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-4 sm:mb-5">
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
-        <div className="p-4 sm:p-5 md:p-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 inline-flex items-center gap-2 leading-tight">
-              <Sparkles className="w-5 h-5 text-primary shrink-0" />
-              <span className="truncate">Book a technician</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Tell us about the work and we&apos;ll dispatch a technician right away.
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold self-start sm:self-auto shrink-0">
-            <ClipboardList className="w-4 h-4" />
-            {filledCount} / {requiredChecks.length} required filled
-          </div>
-        </div>
-      </div>
-
-      {/* Booking method + store code — only relevant on Step 1. */}
-      {step === 1 && (<>
-      {/* How are you booking? — slim segmented toggle. The form adapts:
-          Individual customer → mobile + name; Store / branch → store code. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-          How are you booking?
+      {/* Find the customer — enter a store code OR a mobile number; either one
+          pulls in the contact & address. No mode to choose. */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-3">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-3">
+          Find the customer — store code or mobile
         </p>
-        <div className="inline-flex flex-wrap gap-1 p-1 rounded-xl border border-slate-200 bg-slate-100">
-          {([
-            { key: 'mobile', title: 'Individual customer', sub: 'by mobile number', Icon: Smartphone },
-            { key: 'store',  title: 'Store / branch',      sub: 'by store code',    Icon: Store },
-          ] as const).map((m) => {
-            const active = bookingMode === m.key;
-            const Icon = m.Icon;
-            return (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => setBookingMode(m.key)}
-                aria-pressed={active}
-                className={cn(
-                  'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-bold transition',
-                  active ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                {m.title}
-                <span className="hidden sm:inline text-xs font-medium opacity-60">· {m.sub}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Store code */}
+          <div data-field="storeCode">
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code
+            </label>
+            <div className="mt-1.5 relative">
+              <input
+                value={storeCode}
+                onChange={(e) => { setStoreCode(e.target.value); setStoreLookup('idle'); setStoreOpen(true); setNewStore(false); setFieldErrors((er) => { const { storeCode: _drop, ...rest } = er; return rest; }); }}
+                onFocus={() => setStoreOpen(true)}
+                onBlur={() => { setTimeout(() => setStoreOpen(false), 150); void lookupStore(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setStoreOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === 'Escape') setStoreOpen(false); }}
+                placeholder="Type a store code or name…"
+                autoComplete="off"
+                className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.storeCode && 'border-rose-300 ring-1 ring-rose-300')}
+              />
+              {storeLookup === 'loading' && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Looking up…</span>
+              )}
+              {/* Suggestions dropdown */}
+              {storeOpen && storeSuggestions.length > 0 && (
+                <ul className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg py-1">
+                  {storeSuggestions.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); applyStore(s); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-primary/5"
+                      >
+                        <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 grid place-items-center shrink-0"><Store className="w-3.5 h-3.5" /></span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-800 truncate">{s.store_code}</span>
+                          <span className="block text-xs text-slate-500 truncate">{s.store_name || '—'}{s.city_name ? ` · ${s.city_name}` : ''}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
 
-      {/* Book by store code — shown only in the Store/branch case. Prefills
-          the customer & address from the client's store directory, so only
-          service + appointment remain. */}
-      {bookingMode === 'store' && (
-      <div data-field="storeCode" className="bg-white border border-slate-200 rounded-2xl shadow-sm p-3.5 mb-3">
-        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-          <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code <span className="text-rose-500">*</span>
-        </label>
-        <div className="mt-2 relative sm:max-w-xs">
-          <input
-            value={storeCode}
-            onChange={(e) => { setStoreCode(e.target.value); setStoreLookup('idle'); setFieldErrors((er) => { const { storeCode: _drop, ...rest } = er; return rest; }); }}
-            onBlur={() => void lookupStore()}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
-            placeholder="e.g. STR-142"
-            className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.storeCode && 'border-rose-300 ring-1 ring-rose-300')}
-          />
-          {storeLookup === 'loading' && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Looking up…</span>
-          )}
+          {/* Customer mobile — either this OR a matched store identifies the customer */}
+          <div data-field="customer_mob_no">
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5 text-primary" /> Customer mobile {!storeMatched && <span className="text-rose-500">*</span>}
+            </label>
+            <div className="mt-1.5 relative">
+              <input
+                className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.customer_mob_no && 'border-rose-300 ring-1 ring-rose-300')}
+                inputMode="numeric"
+                maxLength={10}
+                value={form.customer_mob_no}
+                onChange={(e) => setField('customer_mob_no', e.target.value.replace(/\D/g, ''))}
+                placeholder="10-digit mobile"
+              />
+              {customerLookup.state === 'loading' && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />}
+              {customerLookup.state === 'found' && <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />}
+              {customerLookup.state === 'new' && <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />}
+            </div>
+            {fieldErrors.customer_mob_no && <p className="mt-1 text-xs text-rose-600">{fieldErrors.customer_mob_no}</p>}
+            {!fieldErrors.customer_mob_no && customerLookup.state === 'found' && <p className="mt-1 text-xs text-emerald-700">Existing customer — name filled below.</p>}
+            {!fieldErrors.customer_mob_no && customerLookup.state === 'new' && <p className="mt-1 text-xs text-primary">New customer — add a name below.</p>}
+          </div>
         </div>
-        {storeLookup === 'notfound' && (
-          <p className="mt-2 text-xs font-semibold text-rose-600">No store found for that code.</p>
+        {storeLookup === 'notfound' && !newStore && (
+          <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs font-semibold text-rose-600">No store found for “{storeCode.trim()}”.</p>
+            <button type="button"
+              onClick={() => { setNewStore(true); setField('client_ref_id', storeCode.trim()); }}
+              className="text-xs font-bold text-primary inline-flex items-center gap-1 hover:underline">
+              <Plus className="w-3.5 h-3.5" /> Book “{storeCode.trim()}” as a new store
+            </button>
+          </div>
+        )}
+        {newStore && (
+          <p className="mt-2 text-xs font-semibold text-blue-700 inline-flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5" /> New store “{storeCode.trim()}” — add the customer name, mobile &amp; address below.
+          </p>
         )}
         {fieldErrors.storeCode && storeLookup !== 'notfound' && (
           <p className="mt-2 text-xs text-rose-600 inline-flex items-center gap-1">
@@ -803,8 +824,6 @@ export default function NewOrderPage() {
           </p>
         )}
       </div>
-      )}
-      </>)}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 flex items-start gap-2 mb-5">
@@ -812,95 +831,19 @@ export default function NewOrderPage() {
         </div>
       )}
 
-      {/* Wizard progress — 1 Customer & Service · 2 Location & Schedule · 3 Review */}
-      <div className="mb-5 overflow-x-auto">
-        <div className="flex items-center min-w-max">
-          {([
-            { n: 1, label: 'Customer & Service' },
-            { n: 2, label: 'Location & Schedule' },
-            { n: 3, label: 'Review & Confirm' },
-          ] as const).map((st, i) => {
-            const done = step > st.n;
-            const on = step === st.n;
-            return (
-              <div key={st.n} className="flex items-center">
-                <div className="flex items-center gap-2.5">
-                  <span className={cn(
-                    'w-8 h-8 rounded-full grid place-items-center text-sm font-bold shrink-0 transition',
-                    on ? 'bg-primary text-white shadow-md shadow-primary/30'
-                      : done ? 'bg-primary/15 text-primary'
-                      : 'bg-slate-100 text-slate-400'
-                  )}>
-                    {done ? <Check className="w-4 h-4" /> : st.n}
-                  </span>
-                  <span className={cn('text-sm font-bold whitespace-nowrap', on ? 'text-slate-900' : 'text-slate-400')}>
-                    {st.label}
-                  </span>
-                </div>
-                {i < 2 && <span className={cn('mx-3 sm:mx-4 h-0.5 w-8 sm:w-16 rounded-full', step > st.n ? 'bg-primary' : 'bg-slate-200')} />}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Two-column on desktop: form (left) + sticky summary (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+      <div className="grid grid-cols-1 gap-5">
 
-        {/* ─── LEFT: form sections ───────────────────────────── */}
+        {/* ─── LEFT: form sections (single page) ─────────────── */}
         <div className="space-y-5 min-w-0">
 
-          {/* ══ STEP 1 — Customer & Service ══ */}
-          {step === 1 && (
+          {/* Customer & Service */}
           <StepCard step={1} icon={User} title="Customer &amp; Service"
             subtitle="Who needs the technician and what kind of work?">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Individual-customer case only — in Store mode the customer's
-                  contact comes from the store (shown in the store card above). */}
-              {bookingMode === 'mobile' && (<>
+              {/* Mobile is captured in the top panel; here we collect the name. */}
               <Field
-                label="Customer mobile" required={bookingMode === 'mobile'}
-                error={fieldErrors.customer_mob_no}
-                icon={Phone}
-                dataField="customer_mob_no"
-              >
-                <div className="relative">
-                  <input
-                    className={cn('input pr-9', fieldErrors.customer_mob_no && 'ring-1 ring-rose-300')}
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={form.customer_mob_no}
-                    onChange={(e) => setField('customer_mob_no', e.target.value.replace(/\D/g, ''))}
-                    placeholder="10-digit mobile"
-                  />
-                  {/* Lookup status indicator — shows after a complete
-                      mobile is typed so the SPOC sees that the system
-                      checked for an existing customer. */}
-                  {customerLookup.state === 'loading' && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
-                  )}
-                  {customerLookup.state === 'found' && (
-                    <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
-                  )}
-                  {customerLookup.state === 'new' && (
-                    <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
-                  )}
-                </div>
-                {/* Friendly under-field hint that mirrors the lookup state */}
-                {customerLookup.state === 'found' && (
-                  <p className="mt-1.5 text-xs text-emerald-700 inline-flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Existing customer — name auto-filled
-                  </p>
-                )}
-                {customerLookup.state === 'new' && (
-                  <p className="mt-1.5 text-xs text-primary inline-flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> New customer — please add a name below
-                  </p>
-                )}
-              </Field>
-
-              <Field
-                label="Contact name" required={bookingMode === 'mobile'}
+                label="Contact name" required={!storeMatched}
                 error={fieldErrors.customer_name}
                 icon={User}
                 dataField="customer_name"
@@ -927,7 +870,6 @@ export default function NewOrderPage() {
                   </p>
                 )}
               </Field>
-              </>)}
 
               <Field
                 label="Service category" required
@@ -941,7 +883,7 @@ export default function NewOrderPage() {
                     No categories configured for your account.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
                     {categories.map((cat) => {
                       const on = form.service_category_ids.includes(cat.id);
                       const Icon = iconForCategory(cat.name);
@@ -958,7 +900,7 @@ export default function NewOrderPage() {
                             )
                           }
                           className={cn(
-                            'relative flex flex-col items-center justify-center gap-2 rounded-xl border p-3 min-h-[92px] text-center transition',
+                            'relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 min-h-[78px] text-center transition',
                             on
                               ? 'border-primary bg-primary-50/60 shadow-sm'
                               : fieldErrors.service_category_ids
@@ -971,8 +913,8 @@ export default function NewOrderPage() {
                               <Check className="w-2.5 h-2.5" strokeWidth={3} />
                             </span>
                           )}
-                          <Icon className={cn('w-7 h-7', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
-                          <span className={cn('text-xs font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
+                          <Icon className={cn('w-6 h-6', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
+                          <span className={cn('text-[11px] font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
                             {cat.name}
                           </span>
                         </button>
@@ -1079,10 +1021,8 @@ export default function NewOrderPage() {
               )}
             </div>
           </StepCard>
-          )}
 
-          {/* ══ STEP 2 — Location & Schedule (address + appointment + files) ══ */}
-          {step === 2 && (<>
+          {/* Location & Schedule (address + appointment + files) */}
           {/* Service Location */}
           <StepCard step={2} icon={MapPin} title="Service Location"
             subtitle="Where should the technician go?">
@@ -1256,92 +1196,8 @@ export default function NewOrderPage() {
               </p>
             </div>
           </StepCard>
-          </>)}
-
-          {/* ══ STEP 3 — Review & Confirm ══ */}
-          {step === 3 && (
-          <StepCard step={3} icon={CheckCircle2} title="Review &amp; Confirm"
-            subtitle="Check everything below, then place the order.">
-            <div className="divide-y divide-slate-100">
-              {[
-                { icon: bookingMode === 'store' ? Store : User, label: bookingMode === 'store' ? 'Store' : 'Customer',
-                  value: bookingMode === 'store'
-                    ? (storeName || storeCode || '—')
-                    : [form.customer_name, form.customer_mob_no].filter(Boolean).join(' · ') || '—', jump: 1 as const },
-                { icon: Briefcase, label: 'Service', value: selectedCategoryNames.join(', ') || '—', jump: 1 as const },
-                { icon: FileText, label: 'Problem', value: form.job_desc || '—', jump: 1 as const },
-                { icon: MapPin, label: 'Address', value: [form.building, form.address, cities.find((c) => c.id === form.city_id)?.name].filter(Boolean).join(', ') || '—', jump: 2 as const },
-                { icon: Hash, label: 'Reference', value: form.client_ref_id || '—', jump: 2 as const },
-                { icon: Calendar, label: 'Appointment', value: [form.appt_date, form.appt_slot].filter(Boolean).join(' · ') || '—', jump: 2 as const },
-                { icon: Camera, label: 'Attachments', value: files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'None', jump: 2 as const },
-              ].map((row) => {
-                const RIcon = row.icon;
-                return (
-                  <div key={row.label} className="flex items-start gap-3 py-3">
-                    <span className="w-9 h-9 rounded-lg bg-primary-50 text-primary grid place-items-center shrink-0">
-                      <RIcon className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{row.label}</div>
-                      <div className="text-sm text-slate-800 break-words">{row.value}</div>
-                    </div>
-                    <button type="button" onClick={() => setStep(row.jump)}
-                      className="text-xs font-bold text-primary hover:underline shrink-0 mt-0.5">
-                      Edit
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </StepCard>
-          )}
         </div>
 
-        {/* ─── RIGHT: sticky summary rail ───────────────────── */}
-        <aside className="hidden lg:block">
-          <div className="sticky top-24 space-y-3">
-            {/* Summary card */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
-                <ClipboardList className="w-3 h-3" /> Booking summary
-              </div>
-              <dl className="space-y-3 text-sm">
-                <SummaryRow icon={User}     label="Contact"    value={form.customer_name || '—'}
-                  sub={form.customer_mob_no || undefined} />
-                <SummaryRow icon={Briefcase} label="Services"   value={selectedCategoryNames.length ? `${selectedCategoryNames.length} selected` : '—'}
-                  sub={selectedCategoryNames.slice(0, 2).join(', ') || undefined} />
-                <SummaryRow icon={MapPin}    label="Address"    value={form.address || '—'} />
-                <SummaryRow icon={Hash}      label="Reference"  value={form.client_ref_id || '—'} />
-                <SummaryRow icon={Camera}    label="Attachments" value={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : '—'} />
-              </dl>
-            </div>
-
-            {/* Required-field tick list */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
-                <Check className="w-3 h-3" /> Required ({filledCount}/{requiredChecks.length})
-              </div>
-              <ul className="space-y-1.5 text-xs">
-                {requiredChecks.map((c) => (
-                  <li key={c.key} className="flex items-center gap-2">
-                    <span className={cn(
-                      'w-4 h-4 rounded-full grid place-items-center shrink-0',
-                      c.ok ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'
-                    )}>
-                      {c.ok && <Check className="w-3 h-3" />}
-                    </span>
-                    <span className={cn(
-                      'truncate',
-                      c.ok ? 'text-slate-500 line-through' : 'text-slate-700 font-medium'
-                    )}>
-                      {c.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </aside>
       </div>
 
       {/* Sticky bottom action bar — safe-area aware on iPhone, two-row
@@ -1356,47 +1212,24 @@ export default function NewOrderPage() {
             {filledCount}/{requiredChecks.length}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {step === 1 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="hidden sm:inline-flex text-sm text-slate-600 hover:text-primary underline-offset-2 hover:underline px-2"
-                >
-                  Reset
-                </button>
-                <Link href="/dashboard" className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2">Cancel</Link>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={goBack}
-                className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2 inline-flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" /> Back
-              </button>
-            )}
-
-            {step < 3 ? (
-              <button
-                type="button"
-                onClick={goNext}
-                className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 inline-flex items-center gap-1.5"
-              >
-                Continue <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submit}
-                disabled={submitting}
-                className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              >
-                {submitting
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking…</>
-                  : <>Book Now <ChevronRight className="w-4 h-4" /></>}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={reset}
+              className="hidden sm:inline-flex text-sm text-slate-600 hover:text-primary underline-offset-2 hover:underline px-2"
+            >
+              Reset
+            </button>
+            <Link href="/dashboard" className="btn-outline text-sm px-3 py-2 sm:px-4 sm:py-2">Cancel</Link>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              className="btn-primary text-sm px-4 py-2 sm:px-5 sm:py-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+            >
+              {submitting
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking…</>
+                : <>Confirm booking <ChevronRight className="w-4 h-4" /></>}
+            </button>
           </div>
         </div>
       </div>

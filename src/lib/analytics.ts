@@ -17,6 +17,8 @@ export type AnalyticsJob = {
 };
 
 const COMPLETED_STATUS = new Set([3, 5]);
+// "In progress" = scheduled (0, 1) + in-progress (2) + on-the-way/started (20).
+const IN_PROGRESS_STATUS = new Set([0, 1, 2, 20]);
 // "Cancelled" bucket = cancelled (6) + enquiry (7), per the client's request.
 const CANCELLED_STATUS = new Set([6, 7]);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -31,11 +33,12 @@ export function parseDate(s?: string | null): Date | null {
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
-export type DayBar = { label: string; day: number; created: number; completed: number; cancelled: number };
+export type DayBar = { label: string; day: number; created: number; completed: number; inProgress: number; cancelled: number };
 export type Trend7 = {
   days: DayBar[];
   createdTotal: number;
   completedTotal: number;
+  inProgressTotal: number;
   cancelledTotal: number;
   completionPct: number;
   rangeLabel: string;
@@ -64,7 +67,7 @@ export function buildTrend(jobs: AnalyticsJob[], days = 7, now: Date = new Date(
   const buckets: DayBar[] = [];
   for (let i = 0; i < days; i++) {
     const d = addDays(start, i);
-    buckets.push({ label: `${d.getDate()} ${MONTHS[d.getMonth()]}`, day: d.getDate(), created: 0, completed: 0, cancelled: 0 });
+    buckets.push({ label: `${d.getDate()} ${MONTHS[d.getMonth()]}`, day: d.getDate(), created: 0, completed: 0, inProgress: 0, cancelled: 0 });
   }
   const idxOf = (d: Date) => {
     const diff = Math.round((dayStart(d).getTime() - start.getTime()) / 86400000);
@@ -73,6 +76,7 @@ export function buildTrend(jobs: AnalyticsJob[], days = 7, now: Date = new Date(
 
   let createdTotal = 0;
   let completedTotal = 0;
+  let inProgressTotal = 0;
   let cancelledTotal = 0;
   for (const j of list) {
     const cd = parseDate(j.ticket_created_date_time);
@@ -86,6 +90,10 @@ export function buildTrend(jobs: AnalyticsJob[], days = 7, now: Date = new Date(
       buckets[i].completed += 1;
       completedTotal += 1;
     }
+    if (IN_PROGRESS_STATUS.has(st)) {
+      buckets[i].inProgress += 1;
+      inProgressTotal += 1;
+    }
     if (CANCELLED_STATUS.has(st)) {
       buckets[i].cancelled += 1;
       cancelledTotal += 1;
@@ -97,6 +105,7 @@ export function buildTrend(jobs: AnalyticsJob[], days = 7, now: Date = new Date(
     days: buckets,
     createdTotal,
     completedTotal,
+    inProgressTotal,
     cancelledTotal,
     completionPct: createdTotal ? Math.round((completedTotal / createdTotal) * 100) : 0,
     rangeLabel: `${fmt(start)} – ${fmt(maxDay)}`,
