@@ -36,7 +36,7 @@ import { useSpoc } from '@/lib/spoc-context';
 import {
   Loader2, BellRing, ArrowUpRight, Plus,
   TicketIcon, Clock, AlarmClock, CheckCircle2, XCircle, AlertTriangle,
-  Activity, FileClock, PhoneOff, PauseCircle, RotateCcw, CalendarDays,
+  Activity, FileClock, PhoneOff, PauseCircle, RotateCcw, CalendarDays, Search,
 } from 'lucide-react';
 
 type Summary = {
@@ -148,7 +148,7 @@ export default function SummaryDashboardPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            {greetingName ? `${greet}, ${greetingName}` : greet}
+            {greetingName ? `${greet}, ${greetingName}` : greet} <span aria-hidden>👋</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Here&apos;s what&apos;s happening across your service operations today.
@@ -163,13 +163,10 @@ export default function SummaryDashboardPage() {
         </Link>
       </div>
 
-      {/* Needs your attention + Upcoming events, side by side, equal height */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <AttentionCard attention={data.attention} />
-        <HolidayCalendar />
-      </div>
+      {/* Needs your attention — full width */}
+      <AttentionCard attention={data.attention} />
 
-      {/* 3 · Trends */}
+      {/* Trends */}
       <section>
         <SectionHead>Trends</SectionHead>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -178,25 +175,21 @@ export default function SummaryDashboardPage() {
         </div>
       </section>
 
-      {/* 4 · Breakdown */}
+      {/* Breakdown + Upcoming events (replaces Recent escalations) */}
       <section>
         <SectionHead>Breakdown</SectionHead>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
           <CategoryBreakdown items={data.categoryBreakdown ?? []} />
-          <EscalationsList items={data.recentEscalations} />
+          <HolidayCalendar />
         </div>
       </section>
 
-      {/* 5 · Service health */}
+      {/* Top Performance — city ranking (SLA breaches removed) */}
       <section>
-        <SectionHead>Service health</SectionHead>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SlaAging aging={data.slaAging} />
-          <CityPerformance jobs={jobs} loading={jobsLoading} />
-        </div>
+        <CityPerformance jobs={jobs} loading={jobsLoading} />
       </section>
 
-      {/* 6 · Recent tickets (sample data) */}
+      {/* Recent tickets — searchable by Job ID */}
       <section>
         <SectionHead>Recent tickets</SectionHead>
         <RecentTickets rows={data.recentTickets ?? []} onOpen={openJobDrawer} />
@@ -211,6 +204,21 @@ export default function SummaryDashboardPage() {
  */
 function RecentTickets({ rows, onOpen }: { rows: Summary['recentTickets']; onOpen: (id: number) => void }) {
   const items = rows ?? [];
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+  // Live-filter the loaded tickets by Job ID / ref / customer.
+  const filtered = query
+    ? items.filter((r) =>
+        String(r.jobId).includes(query) ||
+        (r.ref || '').toLowerCase().includes(query) ||
+        (r.customer || '').toLowerCase().includes(query))
+    : items;
+  // Enter on a numeric id → open that job even if it isn't in the recent list.
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    const n = Number(q.trim());
+    if (Number.isFinite(n) && n > 0) onOpen(n);
+  };
 
   // Map the real job_status code to a labelled, colour-coded pill.
   const pill = (s: number): { label: string; cls: string } => {
@@ -234,12 +242,29 @@ function RecentTickets({ rows, onOpen }: { rows: Summary['recentTickets']; onOpe
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
-      <div className="px-5 py-4">
-        <h3 className="text-sm font-bold text-slate-800">Recent Tickets</h3>
-        <p className="text-xs text-slate-400">Your latest orders</p>
+      <div className="px-5 py-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Recent Tickets</h3>
+          <p className="text-xs text-slate-400">Your latest orders</p>
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onSearchKey}
+            inputMode="numeric"
+            placeholder="Search Job ID…"
+            className="w-full sm:w-52 rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
       </div>
-      {items.length === 0 ? (
-        <div className="text-center text-sm text-slate-400 py-8">No recent tickets.</div>
+      {filtered.length === 0 ? (
+        <div className="text-center text-sm text-slate-400 py-8">
+          {query
+            ? <>No ticket here matches “{q.trim()}”. Press <b>Enter</b> to open Job #{q.trim()}.</>
+            : 'No recent tickets.'}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[680px]">
@@ -254,7 +279,7 @@ function RecentTickets({ rows, onOpen }: { rows: Summary['recentTickets']; onOpe
               </tr>
             </thead>
             <tbody>
-              {items.map((r) => {
+              {filtered.map((r) => {
                 const p = pill(r.status);
                 return (
                   <tr key={r.jobId} className="border-t border-slate-100 hover:bg-slate-50">
@@ -398,7 +423,8 @@ function HolidayCalendar() {
               const national = String(h.holiday_type).toLowerCase() === 'national';
               return (
                 <li key={h.date + h.name} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="w-11 h-11 shrink-0 rounded-xl bg-primary-50 text-primary flex flex-col items-center justify-center leading-none">
+                  <div className="w-11 h-11 shrink-0 rounded-xl text-white flex flex-col items-center justify-center leading-none"
+                    style={{ background: national ? 'linear-gradient(140deg,#5e9bff,#4f46e5)' : 'linear-gradient(140deg,#fbbf24,#f97316)' }}>
                     <span className="text-base font-extrabold tabular-nums">{isNaN(d.getTime()) ? '—' : d.getDate()}</span>
                     <span className="text-[9px] font-bold uppercase">{isNaN(d.getTime()) ? '' : mon(d)}</span>
                   </div>
@@ -440,14 +466,14 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
   ];
   const cards = defs.filter((d) => d.count > 0);
 
-  // Option C — soft tinted priority cards. Each tone = a soft background,
-  // a matching deep text colour, and a vivid icon colour.
-  const tone: Record<Tone, { bg: string; fg: string; ic: string }> = {
-    amber:   { bg: '#fff7ea', fg: '#9a6300', ic: '#F39C12' },
-    rose:    { bg: '#fdeef1', fg: '#a51033', ic: '#e11d48' },
-    violet:  { bg: '#f1edff', fg: '#4b32b8', ic: '#7c5cff' },
-    blue:    { bg: '#eaf3ff', fg: '#1f4fd6', ic: '#2f6bff' },
-    emerald: { bg: '#e9f7f0', fg: '#0b7d54', ic: '#0f9d6b' },
+  // Vivid gradient priority tiles — each tone is a bold gradient + a matching
+  // soft glow, white text and a translucent icon chip.
+  const tone: Record<Tone, { grad: string; glow: string }> = {
+    amber:   { grad: 'linear-gradient(140deg,#fbbf24,#f97316)', glow: 'rgba(249,115,22,.45)' },
+    rose:    { grad: 'linear-gradient(140deg,#ff7a59,#ef3b6e)', glow: 'rgba(239,59,110,.45)' },
+    violet:  { grad: 'linear-gradient(140deg,#a855f7,#6d3bd0)', glow: 'rgba(124,58,237,.45)' },
+    blue:    { grad: 'linear-gradient(140deg,#5e9bff,#4f46e5)', glow: 'rgba(79,70,229,.45)' },
+    emerald: { grad: 'linear-gradient(140deg,#34d399,#10b981)', glow: 'rgba(16,185,129,.45)' },
   };
 
   return (
@@ -470,10 +496,10 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
               <Link
                 key={d.key}
                 href={d.href}
-                className="h-full min-h-[150px] flex flex-col justify-between rounded-2xl p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                style={{ background: t.bg, color: t.fg }}
+                className="h-full min-h-[150px] flex flex-col justify-between rounded-2xl p-4 text-white transition hover:-translate-y-0.5"
+                style={{ background: t.grad, boxShadow: `0 14px 30px -14px ${t.glow}` }}
               >
-                <span className="w-10 h-10 rounded-xl grid place-items-center bg-white/70" style={{ color: t.ic }}>
+                <span className="w-10 h-10 rounded-xl grid place-items-center bg-white/25 text-white">
                   <Icon className="w-5 h-5" />
                 </span>
                 <div>
@@ -481,7 +507,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
                     {d.count.toLocaleString('en-IN')}
                   </div>
                   <div className="mt-1 text-[13px] font-extrabold">{d.label}</div>
-                  <div className="text-[11px] mt-0.5 opacity-75">{d.hint}</div>
+                  <div className="text-[11px] mt-0.5 text-white/80">{d.hint}</div>
                 </div>
               </Link>
             );
@@ -509,10 +535,10 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
 
   const W = 520, H = 150, padL = 8, padR = 8, padT = 10, padB = 8;
   const n = Math.max(1, trend.days.length - 1);
-  const max = Math.max(1, ...trend.days.flatMap((d) => [d.created, d.completed, d.cancelled])) * 1.1;
+  const max = Math.max(1, ...trend.days.flatMap((d) => [d.created, d.completed, d.inProgress, d.cancelled])) * 1.1;
   const x = (i: number) => padL + i * ((W - padL - padR) / n);
   const y = (v: number) => padT + (1 - v / max) * (H - padT - padB);
-  const line = (key: 'created' | 'completed' | 'cancelled') =>
+  const line = (key: 'created' | 'completed' | 'inProgress' | 'cancelled') =>
     trend.days.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
   const area = (key: 'created' | 'completed') =>
     trend.days.length
@@ -549,13 +575,24 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
       ) : (
         <>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto mt-3" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#6366f1" stopOpacity="0.35" />
+                <stop offset="1" stopColor="#6366f1" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="trendLine" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stopColor="#4f46e5" />
+                <stop offset="1" stopColor="#a855f7" />
+              </linearGradient>
+            </defs>
             {[0.25, 0.5, 0.75, 1].map((f) => (
               <line key={f} x1={padL} x2={W - padR} y1={padT + f * (H - padT - padB)} y2={padT + f * (H - padT - padB)} stroke="#f1f5f9" strokeWidth={1} />
             ))}
-            <path d={area('created')} fill="rgba(42,120,214,.10)" />
-            <path d={line('completed')} fill="none" stroke="#1baf7a" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            <path d={line('cancelled')} fill="none" stroke="#e34948" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            <path d={line('created')} fill="none" stroke="#2a78d6" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={area('created')} fill="url(#trendArea)" />
+            <path d={line('completed')} fill="none" stroke="#12b886" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('inProgress')} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('cancelled')} fill="none" stroke="#ef4444" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line('created')} fill="none" stroke="url(#trendLine)" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
           </svg>
           <div className="flex justify-between text-[10px] text-slate-400 mt-1">
             {trend.days.map((d, i) => (
@@ -564,7 +601,7 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
           </div>
 
           {/* Stat row — Created / Completed·% / Cancelled totals (matches app). */}
-          <div className="grid grid-cols-3 gap-2.5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
             <div className="bg-slate-50 rounded-xl px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                 <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#2a78d6' }} />Created
@@ -575,9 +612,13 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                 <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#1baf7a' }} />Completed
               </div>
-              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">
-                {inr(trend.completedTotal)} <span className="text-xs font-semibold text-emerald-600">· {trend.completionPct}%</span>
+              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">{inr(trend.completedTotal)}</div>
+            </div>
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#f59e0b' }} />In Progress
               </div>
+              <div className="mt-1 text-xl font-bold text-slate-900 tabular-nums">{inr(trend.inProgressTotal)}</div>
             </div>
             <div className="bg-slate-50 rounded-xl px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
@@ -616,9 +657,15 @@ function CompletionCard({ counts }: { counts: Summary['counts'] }) {
       <div className="mt-3 flex items-center gap-5">
         <div className="relative w-28 h-28 shrink-0">
           <svg viewBox="0 0 110 110" className="w-28 h-28 -rotate-90">
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#34d399" />
+                <stop offset="1" stopColor="#059669" />
+              </linearGradient>
+            </defs>
             <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="12" />
             <circle
-              cx="55" cy="55" r={r} fill="none" stroke="#10b981" strokeWidth="12"
+              cx="55" cy="55" r={r} fill="none" stroke="url(#ringGrad)" strokeWidth="12"
               strokeLinecap="round" strokeDasharray={`${(rate / 100) * C} ${C}`}
             />
           </svg>
@@ -648,7 +695,15 @@ function CompletionCard({ counts }: { counts: Summary['counts'] }) {
  * count city_name over jobsInWindow(jobs, days), sort desc, take top 10.
  * Own 7D/30D toggle.
  */
-const CITY_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#4a3aa7', '#e34948', '#e87ba4', '#94a3b8'];
+const CITY_COLORS = [
+  'linear-gradient(140deg,#5e9bff,#4f46e5)',
+  'linear-gradient(140deg,#a855f7,#6d3bd0)',
+  'linear-gradient(140deg,#22d3ee,#0e9488)',
+  'linear-gradient(140deg,#fbbf24,#f97316)',
+  'linear-gradient(140deg,#34d399,#10b981)',
+  'linear-gradient(140deg,#ff7a59,#ef3b6e)',
+  'linear-gradient(140deg,#94a3b8,#64748b)',
+];
 
 function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean }) {
   const [range, setRange] = useState<'7d' | '30d'>('7d');
@@ -661,7 +716,7 @@ function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boo
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-700">Performance by city</h2>
+          <h2 className="text-sm font-bold text-slate-700">Top Performance</h2>
           <p className="text-xs text-slate-400 mt-0.5">Most orders by city · last {days} days</p>
         </div>
         <div className="inline-flex bg-slate-100 border border-slate-200 rounded-lg p-1 shrink-0">
@@ -686,7 +741,8 @@ function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boo
         <ul className="mt-4 space-y-3">
           {cities.map((ct, i) => (
             <li key={ct.city} className="flex items-center gap-3">
-              <span className="w-4 shrink-0 text-center text-sm font-bold text-slate-400 tabular-nums">{i + 1}</span>
+              <span className="w-6 h-6 shrink-0 rounded-lg grid place-items-center text-[11px] font-extrabold text-white tabular-nums"
+                style={{ background: CITY_COLORS[i % CITY_COLORS.length] }}>{i + 1}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-semibold text-slate-800 truncate">{ct.city}</span>
@@ -697,7 +753,7 @@ function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boo
                     className="h-full rounded-full"
                     style={{
                       width: `${cityMax ? Math.max(6, (ct.orders / cityMax) * 100) : 0}%`,
-                      backgroundColor: CITY_COLORS[i % CITY_COLORS.length],
+                      background: CITY_COLORS[i % CITY_COLORS.length],
                     }}
                   />
                 </div>
