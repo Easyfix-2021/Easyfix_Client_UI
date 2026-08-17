@@ -89,7 +89,6 @@ function paymentLabel(c: number | null) {
 const SCROLL_ITEMS = [
   { id: 'jd-customer',  label: 'Customer details',      icon: User },
   { id: 'jd-lifecycle', label: 'Order Lifecycle',       icon: Activity },
-  { id: 'jd-client',    label: 'Client details',        icon: Briefcase },
   { id: 'jd-images',    label: 'Before / After images', icon: ImageIcon },
   { id: 'jd-actions',   label: 'Action buttons',        icon: Star },
 ];
@@ -235,25 +234,30 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
 
               {/* 1 · Customer details */}
               <section id="jd-customer" className="scroll-mt-4">
-                <SecHead icon={User} title="Customer" />
-                <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                    <FieldBox label="Name" info value={j.customer_name || '—'} />
-                    <FieldBox label="Address" info select value={fullAddress || '—'} />
-                    <div>
-                      <FieldLabel info>Phone</FieldLabel>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 truncate">
-                        {j.customer_mob_no || '—'}
+                <div className="rounded-2xl ring-1 ring-slate-200 overflow-hidden bg-white">
+                  <div className="px-5 py-3 text-white font-extrabold text-sm tracking-wide"
+                    style={{ background: 'linear-gradient(122deg,#4f6bff 0%,#4f46e5 55%,#7c3aed 100%)' }}>
+                    CUSTOMER
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {([
+                      ['Name', j.customer_name || '—'],
+                      ['Phone', j.customer_mob_no || '—'],
+                      ['Address', fullAddress || '—'],
+                      ['Job description', j.job_desc || '—'],
+                    ] as const).map(([label, value]) => (
+                      <div key={label} className="flex items-start justify-between gap-4 px-5 py-3">
+                        <span className="text-sm font-semibold text-slate-500 shrink-0">{label}</span>
+                        <span className="text-sm text-slate-800 text-right break-words max-w-[62%]">{value}</span>
                       </div>
-                    </div>
-                    <FieldBox label="Job description" value={j.job_desc || '—'} />
+                    ))}
                   </div>
                 </div>
               </section>
 
               {/* 2 · Order Lifecycle */}
               <section id="jd-lifecycle" className="scroll-mt-4">
-                <SecHead icon={Activity} title="Order Lifecycle" />
+                <SecHead icon={Activity} title="Order Lifecycle" tone="violet" />
                 <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-6 overflow-x-auto">
                   <div className="relative min-w-[560px]" style={{ paddingTop: 4 }}>
                     <div className="absolute h-0.5 bg-slate-200" style={{ top: 14, left: `${cx(0)}%`, right: `${100 - cx(n - 1)}%` }} />
@@ -270,16 +274,6 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
                       ))}
                     </div>
                   </div>
-                </div>
-              </section>
-
-              {/* 3 · Client details */}
-              <section id="jd-client" className="scroll-mt-4">
-                <SecHead icon={Briefcase} title="Client Details" />
-                <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Row label="Client SPOC">{j.client_spoc_name || '—'}</Row>
-                  <Row label="Owner">{j.owner_name || '—'}</Row>
-                  <Row label="Created by">{j.created_by_name || '—'}</Row>
                 </div>
               </section>
 
@@ -320,10 +314,20 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
   );
 }
 
-function SecHead({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
+function SecHead({ icon: Icon, title, tone = 'red' }: {
+  icon: React.ComponentType<{ className?: string }>; title: string;
+  tone?: 'red' | 'violet' | 'blue' | 'amber' | 'emerald';
+}) {
+  const t = {
+    red:     'bg-primary-50 text-primary',
+    violet:  'bg-violet-50 text-violet-600',
+    blue:    'bg-blue-50 text-blue-600',
+    amber:   'bg-amber-50 text-amber-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+  }[tone];
   return (
     <div className="flex items-center gap-2 mb-3">
-      <span className="w-8 h-8 rounded-lg bg-primary-50 grid place-items-center"><Icon className="w-4 h-4 text-primary" /></span>
+      <span className={`w-8 h-8 rounded-lg grid place-items-center ${t}`}><Icon className="w-4 h-4" /></span>
       <h2 className="text-base font-extrabold text-slate-900">{title}</h2>
     </div>
   );
