@@ -469,6 +469,7 @@ export default function NewOrderPage() {
       checks.push({ key: 'customer_name',   label: 'Contact name',    ok: form.customer_name.trim().length > 0 });
     }
     checks.push({ key: 'service_category_ids', label: 'Service category', ok: form.service_category_ids.length > 0 });
+    checks.push({ key: 'jobType',         label: 'Job type',         ok: Object.values(form.job_types).some(Boolean) });
     checks.push({ key: 'job_desc',        label: 'Problem description', ok: form.job_desc.trim().length > 0 });
     checks.push({ key: 'address',         label: 'Address',          ok: form.address.trim().length > 0 });
     checks.push({ key: 'client_ref_id',   label: 'Order reference ID', ok: form.client_ref_id.trim().length > 0 });
@@ -507,6 +508,7 @@ export default function NewOrderPage() {
       if (!form.customer_name.trim()) errs.customer_name = 'Contact name is required';
     }
     if (form.service_category_ids.length === 0) errs.service_category_ids = 'Pick at least one service category';
+    if (!Object.values(form.job_types).some(Boolean)) errs.jobType = 'Pick a job type';
     if (!form.job_desc.trim()) errs.job_desc = 'Describe the problem';
     if (!form.address.trim()) errs.address = 'Address is required';
     if (!form.city_id)        errs.city_id = 'Pick a city';
@@ -657,6 +659,14 @@ export default function NewOrderPage() {
     setFiles([]);
     setFieldErrors({});
     setError(null);
+    // The store-code combobox keeps its own state — clear it too.
+    setStoreCode('');
+    setStoreLookup('idle');
+    setStoreName('');
+    setNewStore(false);
+    setStoreOpen(false);
+    setCustomerLookup({ state: 'idle' });
+    lastLookupMobile.current = '';
   }
 
   // Names selected categories will display in the summary rail
@@ -698,9 +708,9 @@ export default function NewOrderPage() {
         <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-3">
           Find the customer — store code or mobile
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           {/* Store code */}
-          <div data-field="storeCode">
+          <div data-field="storeCode" className="flex-1 min-w-0">
             <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code
             </label>
@@ -741,8 +751,11 @@ export default function NewOrderPage() {
             </div>
           </div>
 
+          {/* OR divider — either entry identifies the customer */}
+          <span className="shrink-0 self-center sm:mb-2 w-9 h-9 rounded-full border border-slate-200 bg-slate-50 grid place-items-center text-[10px] font-extrabold tracking-wide text-slate-400">OR</span>
+
           {/* Customer mobile — either this OR a matched store identifies the customer */}
-          <div data-field="customer_mob_no">
+          <div data-field="customer_mob_no" className="flex-1 min-w-0">
             <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
               <Phone className="w-3.5 h-3.5 text-primary" /> Customer mobile {!storeMatched && <span className="text-rose-500">*</span>}
             </label>
@@ -941,7 +954,7 @@ export default function NewOrderPage() {
               </Field>
 
               {/* Job Type — chip-style checkboxes for better tap target */}
-              <Field label="Job type" icon={Briefcase}>
+              <Field label="Job type" required icon={Briefcase} error={fieldErrors.jobType} dataField="jobType">
                 <div className="flex flex-wrap gap-2">
                   {(['Installation', 'Repair', 'Un-Installation'] as const).map((t) => {
                     const on = form.job_types[t];
