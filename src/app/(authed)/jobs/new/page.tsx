@@ -694,18 +694,28 @@ export default function NewOrderPage() {
   }
 
   return (
-    <form onSubmit={submit} className="max-w-6xl mx-auto pb-32 px-1 sm:px-0">
+    <form onSubmit={submit} className="-m-4 md:-m-6 px-4 md:px-6 pt-4 md:pt-6 pb-32 min-h-[calc(100vh-4rem)] bg-[#f6f2ea]">
+     <div className="max-w-6xl mx-auto px-1 sm:px-0">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 mb-3">
+      <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 mb-4">
         <Link href="/dashboard" className="hover:text-primary">Dashboard</Link>
         <ChevronRight className="w-3 h-3 text-slate-300" />
         <span className="font-semibold text-slate-800">New Order</span>
       </div>
 
+      {/* Title — warm editorial header (reference style) */}
+      <div className="mb-7 sm:mb-8">
+        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary mb-2">New order</div>
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
+          Book a technician<span className="text-primary">.</span>
+        </h1>
+        <p className="text-sm sm:text-base text-slate-500 mt-2.5">Find the customer, tell us the job — we&apos;ll dispatch a technician right away.</p>
+      </div>
+
       {/* Find the customer — enter a store code OR a mobile number; either one
           pulls in the contact & address. No mode to choose. */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-3">
+      <div className="bg-white border border-[#ece7de] rounded-3xl shadow-[0_2px_20px_-10px_rgba(20,25,40,0.12)] p-5 sm:p-6 mb-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary/70 mb-4">
           Find the customer — store code or mobile
         </p>
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -848,7 +858,7 @@ export default function NewOrderPage() {
       <div className="grid grid-cols-1 gap-5">
 
         {/* ─── LEFT: form sections (single page) ─────────────── */}
-        <div className="space-y-4 min-w-0">
+        <div className="space-y-6 min-w-0">
 
           {/* Customer & Service */}
           <StepCard step={1} icon={User} title="Customer &amp; Service"
@@ -896,7 +906,7 @@ export default function NewOrderPage() {
                     No categories configured for your account.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                     {categories.map((cat) => {
                       const on = form.service_category_ids.includes(cat.id);
                       const Icon = iconForCategory(cat.name);
@@ -913,7 +923,7 @@ export default function NewOrderPage() {
                             )
                           }
                           className={cn(
-                            'relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 min-h-[78px] text-center transition',
+                            'relative flex flex-col items-center justify-center gap-2.5 rounded-2xl border p-4 min-h-[104px] text-center transition hover:-translate-y-0.5',
                             on
                               ? 'border-primary bg-primary-50/60 shadow-sm'
                               : fieldErrors.service_category_ids
@@ -922,12 +932,12 @@ export default function NewOrderPage() {
                           )}
                         >
                           {on && (
-                            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-white grid place-items-center">
+                            <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-primary text-white grid place-items-center">
                               <Check className="w-2.5 h-2.5" strokeWidth={3} />
                             </span>
                           )}
-                          <Icon className={cn('w-6 h-6', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
-                          <span className={cn('text-[11px] font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
+                          <Icon className={cn('w-7 h-7', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
+                          <span className={cn('text-xs font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
                             {cat.name}
                           </span>
                         </button>
@@ -1212,6 +1222,7 @@ export default function NewOrderPage() {
         </div>
 
       </div>
+     </div>
 
       {/* Sticky bottom action bar — safe-area aware on iPhone, two-row
           layout on tight mobile widths so the "Book Now" CTA stays
@@ -1606,17 +1617,18 @@ function StepCard({
   // Mobile: tighter px-4/py-3 on header and p-4 on body so the form
   // fields keep more horizontal room on narrow phones.
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm">
-      <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
-        <div className="w-7 h-7 rounded-lg bg-primary text-white grid place-items-center shrink-0">
-          <Icon className="w-3.5 h-3.5" />
+    <section className="bg-white border border-[#ece7de] rounded-3xl shadow-[0_2px_20px_-10px_rgba(20,25,40,0.12)]">
+      <div className="flex items-center gap-3.5 px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
+        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-primary-50 text-primary grid place-items-center shrink-0">
+          <Icon className="w-5 h-5 sm:w-[22px] sm:h-[22px]" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-sm font-bold text-slate-900 leading-tight">{title}</h2>
-          <p className="text-[11px] text-slate-500 leading-snug">{subtitle}</p>
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary/70">Step {step}</div>
+          <h2 className="text-base sm:text-lg font-extrabold text-slate-900 leading-tight tracking-tight">{title}</h2>
+          <p className="text-xs sm:text-[13px] text-slate-500 leading-snug mt-0.5">{subtitle}</p>
         </div>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
     </section>
   );
 }

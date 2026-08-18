@@ -52,7 +52,7 @@ type NavItem = {
 // when the Summary was introduced — kept right after Home so the
 // SPOC's mental model "Home → drill into details" stays intact.
 const SECTION_ONE: NavItem[] = [
-  { href: '/dashboard',           label: 'Home',                    icon: Home },
+  { href: '/dashboard',           label: 'Overview',                icon: Home },
   { href: '/history',             label: 'Order History',           icon: History, match: ['/jobs'] },
   { href: '/tickets/new',         label: 'New Tickets',             icon: Ticket },
   // Hidden for now (pages replaced with "Coming soon"; originals in git).
