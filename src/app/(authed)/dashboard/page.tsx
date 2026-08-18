@@ -36,8 +36,10 @@ import { useSpoc } from '@/lib/spoc-context';
 import {
   Loader2, BellRing, ArrowUpRight, Plus,
   TicketIcon, Clock, AlarmClock, CheckCircle2, XCircle, AlertTriangle,
-  Activity, FileClock, PhoneOff, PauseCircle, RotateCcw, CalendarDays, Search,
+  Activity, FileClock, PauseCircle, CalendarDays, Search,
+  MapPin, CalendarClock, Sun,
 } from 'lucide-react';
+import { STATUS_LABELS } from '@/lib/utils';
 
 type Summary = {
   // Home-page KPI boxes — see /api/client/dashboard-summary.
@@ -165,6 +167,15 @@ export default function SummaryDashboardPage() {
 
       {/* Needs your attention — full width */}
       <AttentionCard attention={data.attention} />
+
+      {/* Today's appointments + Yesterday's booked */}
+      <section>
+        <SectionHead>Today &amp; yesterday</SectionHead>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <TodaysAppointments />
+          <YesterdaysBooked />
+        </div>
+      </section>
 
       {/* Trends */}
       <section>
@@ -448,23 +459,21 @@ function HolidayCalendar() {
 function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
   const a = attention;
   type Tone = 'rose' | 'amber' | 'violet' | 'blue' | 'emerald';
+  // Positive, action-oriented buckets only (no escalations / SLA / TAT).
+  // All three always render so the panel stays stable day to day.
   const defs: Array<{
     key: string; count: number; tone: Tone;
     icon: React.ComponentType<{ className?: string }>;
     label: string; hint: string; href: string;
   }> = [
-    { key: 'est',  count: a?.estimatePending ?? 0, tone: 'amber',  icon: FileClock,
-      label: 'Estimate approval', hint: 'Approve to proceed', href: '/tickets/approvals' },
-    { key: 'hold', count: a?.onHold ?? 0, tone: 'rose', icon: PauseCircle,
-      label: 'Fulfilment on hold', hint: 'Items / parts pending', href: '/tickets/approvals' },
-    { key: 'nr',   count: a?.noResponse ?? 0, tone: 'violet', icon: PhoneOff,
-      label: 'Not responding', hint: 'Call not picked', href: '/tickets/new' },
-    { key: 'rev',  count: a?.revisit ?? 0, tone: 'blue', icon: RotateCcw,
-      label: 'Revisits created', hint: 'Repeat visit scheduled', href: '/tickets/under-audit' },
     { key: 'qc',   count: a?.qcDone ?? 0, tone: 'emerald', icon: CheckCircle2,
       label: 'QC done', hint: 'Ready to invoice', href: '/tickets/under-audit' },
+    { key: 'est',  count: a?.estimatePending ?? 0, tone: 'amber',  icon: FileClock,
+      label: 'Pending approval', hint: 'Approve to proceed', href: '/tickets/approvals' },
+    { key: 'hold', count: a?.onHold ?? 0, tone: 'blue', icon: PauseCircle,
+      label: 'Fulfilment on hold', hint: 'Items / parts pending', href: '/tickets/approvals' },
   ];
-  const cards = defs.filter((d) => d.count > 0);
+  const cards = defs;
 
   // Vivid gradient priority tiles — each tone is a bold gradient + a matching
   // soft glow, white text and a translucent icon chip.
@@ -488,7 +497,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
           You’re all caught up — nothing needs action right now. 🎉
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3.5 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1">
           {cards.map((d) => {
             const t = tone[d.tone];
             const Icon = d.icon;
@@ -514,6 +523,216 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Today's appointments + Yesterday's booked ──────────────────────
+ *
+ * Both read the existing team-scoped GET /api/client/jobs list:
+ *   - Appointments: dateType=requested (the appointment column), today's
+ *     date, then the OPEN rows only (excludes completed 3/5, cancelled
+ *     6/7) — this mirrors the mobile app's Open-Orders "Today" tab.
+ *   - Yesterday's booked: dateType=booked (created_date_time), yesterday's
+ *     date, split into Open vs Completed, then bucketed by age and city.
+ */
+type DashJob = {
+  job_id: number;
+  client_ref_id: string | null;
+  job_status: number;
+  customer_name: string | null;
+  city_name: string | null;
+  requested_date_time: string | null;
+  created_date_time: string | null;
+  easyfixer_name: string | null;
+};
+
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const parseDT = (s?: string | null) => {
+  if (!s) return null;
+  const d = new Date(String(s).replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+};
+const fmtTime = (s?: string | null) => {
+  const d = parseDT(s);
+  return d ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—';
+};
+const ageDays = (s?: string | null) => {
+  const d = parseDT(s);
+  return d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
+};
+
+const STATUS_PILL: Record<number, string> = {
+  0: 'bg-slate-100 text-slate-600', 1: 'bg-amber-50 text-amber-700',
+  2: 'bg-violet-50 text-violet-700', 20: 'bg-violet-50 text-violet-700',
+  9: 'bg-slate-100 text-slate-600', 15: 'bg-amber-50 text-amber-700',
+  21: 'bg-blue-50 text-blue-700', 3: 'bg-emerald-50 text-emerald-700',
+  5: 'bg-emerald-50 text-emerald-700', 6: 'bg-rose-50 text-rose-700',
+  7: 'bg-rose-50 text-rose-700', 10: 'bg-red-50 text-red-700',
+};
+const statusPill = (s: number) => ({
+  label: STATUS_LABELS[s] ?? `#${s}`,
+  cls: STATUS_PILL[s] ?? 'bg-slate-100 text-slate-600',
+});
+
+const TERMINAL = [3, 5, 6, 7];
+
+function TodaysAppointments() {
+  const today = ymd(new Date());
+  const q = `/jobs?dateType=requested&startDate=${today}&endDate=${encodeURIComponent(today + ' 23:59:59')}&limit=500`;
+  const { data, loading } = useFetchOnce<{ items: DashJob[] }>(q);
+  const rows = (data?.items ?? [])
+    .filter((j) => !TERMINAL.includes(j.job_status ?? -1))
+    .sort((a, b) => (a.requested_date_time || '').localeCompare(b.requested_date_time || ''));
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden h-full flex flex-col">
+      <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-5 h-5 text-primary" />
+          <h3 className="text-base font-bold text-slate-800">Today&apos;s appointments</h3>
+        </div>
+        {!loading && rows.length > 0 && (
+          <span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-2.5 py-1 tabular-nums">{rows.length}</span>
+        )}
+      </div>
+      <div className="p-3 flex-1">
+        {loading ? (
+          <div className="text-center py-10 text-sm text-slate-400">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-slate-600 font-bold">No appointments today</div>
+            <div className="text-slate-400 text-sm mt-1">Nothing scheduled for today.</div>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100 max-h-[440px] overflow-y-auto">
+            {rows.map((j) => {
+              const st = statusPill(j.job_status);
+              return (
+                <li key={j.job_id}>
+                  <button
+                    type="button"
+                    onClick={() => openJobDrawer(j.job_id)}
+                    className="w-full text-left flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-slate-50 transition"
+                  >
+                    <span className="w-11 h-11 shrink-0 rounded-xl bg-primary/10 text-primary grid place-items-center">
+                      <Clock className="w-5 h-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-800 truncate">{j.customer_name || 'Customer'}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${st.cls}`}>{st.label}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 truncate mt-0.5 flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />{j.city_name || '—'}
+                        {j.easyfixer_name && <><span className="text-slate-300">·</span><span className="truncate">{j.easyfixer_name}</span></>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-bold text-slate-800 tabular-nums">{fmtTime(j.requested_date_time)}</div>
+                      <div className="text-[11px] text-slate-400">#{j.job_id}</div>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function YesterdaysBooked() {
+  const yd = new Date(); yd.setDate(yd.getDate() - 1);
+  const yday = ymd(yd);
+  const q = `/jobs?dateType=booked&startDate=${yday}&endDate=${encodeURIComponent(yday + ' 23:59:59')}&limit=500`;
+  const { data, loading } = useFetchOnce<{ items: DashJob[] }>(q);
+  const rows = data?.items ?? [];
+
+  const completed = rows.filter((j) => [3, 5].includes(j.job_status ?? -1));
+  const open = rows.filter((j) => !TERMINAL.includes(j.job_status ?? -1));
+
+  const age: Record<'0-2' | '3-5' | '>6', number> = { '0-2': 0, '3-5': 0, '>6': 0 };
+  rows.forEach((j) => {
+    const a = ageDays(j.created_date_time);
+    if (a == null) return;
+    age[a <= 2 ? '0-2' : a <= 5 ? '3-5' : '>6'] += 1;
+  });
+
+  const cityMap = new Map<string, number>();
+  rows.forEach((j) => { const c = (j.city_name || '').trim(); if (c) cityMap.set(c, (cityMap.get(c) || 0) + 1); });
+  const cities = [...cityMap.entries()].map(([city, n]) => ({ city, n })).sort((a, b) => b.n - a.n).slice(0, 5);
+  const cityMax = cities.length ? cities[0].n : 0;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden h-full flex flex-col">
+      <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <Sun className="w-5 h-5 text-amber-500" />
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Yesterday&apos;s booked</h3>
+            <p className="text-[11px] text-slate-400">{yday}</p>
+          </div>
+        </div>
+        {!loading && rows.length > 0 && (
+          <span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-2.5 py-1 tabular-nums">{rows.length}</span>
+        )}
+      </div>
+      <div className="p-5 flex-1">
+        {loading ? (
+          <div className="text-center py-10 text-sm text-slate-400">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="grid place-items-center py-12">
+            <div className="text-slate-600 font-bold text-lg">No orders</div>
+            <div className="text-slate-400 text-sm mt-1">Nothing was booked yesterday.</div>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(140deg,#5e9bff,#4f46e5)' }}>
+                <div className="text-white/80 text-xs font-bold uppercase tracking-wide">Open</div>
+                <div className="text-white text-3xl font-extrabold tabular-nums mt-1">{open.length}</div>
+              </div>
+              <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(140deg,#34d399,#10b981)' }}>
+                <div className="text-white/80 text-xs font-bold uppercase tracking-wide">Completed</div>
+                <div className="text-white text-3xl font-extrabold tabular-nums mt-1">{completed.length}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">By age (days)</div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['0-2', '3-5', '>6'] as const).map((k) => (
+                  <div key={k} className="rounded-xl bg-slate-50 ring-1 ring-slate-100 p-3 text-center">
+                    <div className="text-xl font-extrabold text-slate-800 tabular-nums">{age[k]}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">{k}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {cities.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">By city</div>
+                <ul className="space-y-2">
+                  {cities.map((c) => (
+                    <li key={c.city} className="flex items-center gap-3">
+                      <span className="text-sm text-slate-700 w-28 truncate shrink-0">{c.city}</span>
+                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${cityMax ? Math.max(8, (c.n / cityMax) * 100) : 0}%`, background: 'linear-gradient(90deg,#5e9bff,#4f46e5)' }} />
+                      </div>
+                      <span className="text-sm font-bold text-slate-500 tabular-nums w-6 text-right">{c.n}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -641,44 +860,63 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
 function CompletionCard({ counts }: { counts: Summary['counts'] }) {
   const total = counts.completed + counts.inProgress + counts.newTickets + counts.cancelled;
   const rate = total ? Math.round((counts.completed / total) * 100) : 0;
-  const r = 42;
+  const r = 46;
   const C = 2 * Math.PI * r;
+  // Muted, earthy status palette (calm — matches the reference).
   const rows = [
-    { label: 'Completed',   value: counts.completed,  color: '#10b981' },
-    { label: 'In progress', value: counts.inProgress, color: '#2f6bff' },
-    { label: 'New',         value: counts.newTickets, color: '#f59e0b' },
-    { label: 'Cancelled',   value: counts.cancelled,  color: '#e11d48' },
+    { label: 'Completed',   value: counts.completed,  color: '#3f7d5c' },
+    { label: 'In progress', value: counts.inProgress, color: '#e0954a' },
+    { label: 'New',         value: counts.newTickets, color: '#e6c96a' },
+    { label: 'Cancelled',   value: counts.cancelled,  color: '#d76a60' },
   ];
+  const pct = (v: number) => (total ? Math.round((v / total) * 100) : 0);
+  // Build the segmented ring: each status is an arc proportional to its
+  // share of total, laid clockwise from 12 o'clock with a small gap
+  // between segments (rounded caps give the clean separated look).
+  const GAP = 4; // dash units of whitespace between segments
+  let acc = 0;
+  const segments = rows
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const frac = s.value / total;
+      const len = Math.max(frac * C - GAP, 0.001);
+      const seg = { color: s.color, len, offset: -acc * C };
+      acc += frac;
+      return seg;
+    });
+
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
-      <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">
-        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Completion rate
-      </h2>
-      <div className="mt-3 flex items-center gap-5">
-        <div className="relative w-28 h-28 shrink-0">
-          <svg viewBox="0 0 110 110" className="w-28 h-28 -rotate-90">
-            <defs>
-              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#34d399" />
-                <stop offset="1" stopColor="#059669" />
-              </linearGradient>
-            </defs>
-            <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="12" />
-            <circle
-              cx="55" cy="55" r={r} fill="none" stroke="url(#ringGrad)" strokeWidth="12"
-              strokeLinecap="round" strokeDasharray={`${(rate / 100) * C} ${C}`}
-            />
+      <h2 className="text-base font-bold text-slate-900">Completion rate</h2>
+      <p className="text-xs text-slate-400 mt-0.5">Order status breakdown</p>
+
+      <div className="mt-4 flex items-center gap-6">
+        <div className="relative w-32 h-32 shrink-0">
+          <svg viewBox="0 0 110 110" className="w-32 h-32 -rotate-90">
+            {/* faint track (visible only if statuses don't fill the ring) */}
+            <circle cx="55" cy="55" r={r} fill="none" stroke="#eef1ee" strokeWidth="11" />
+            {segments.map((seg, i) => (
+              <circle
+                key={i}
+                cx="55" cy="55" r={r} fill="none"
+                stroke={seg.color} strokeWidth="11" strokeLinecap="round"
+                strokeDasharray={`${seg.len} ${C - seg.len}`}
+                strokeDashoffset={seg.offset}
+              />
+            ))}
           </svg>
-          <div className="absolute inset-0 grid place-items-center">
-            <span className="text-2xl font-bold text-slate-900">{rate}%</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-extrabold text-slate-900 leading-none">{rate}%</span>
+            <span className="text-xs text-slate-400 mt-1.5">complete</span>
           </div>
         </div>
-        <ul className="flex-1 space-y-1.5 text-sm">
+
+        <ul className="flex-1 space-y-3.5 text-sm">
           {rows.map((r2) => (
-            <li key={r2.label} className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: r2.color }} />
+            <li key={r2.label} className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r2.color }} />
               <span className="flex-1 text-slate-600">{r2.label}</span>
-              <b className="tabular-nums text-slate-900">{r2.value.toLocaleString('en-IN')}</b>
+              <b className="tabular-nums text-slate-900 font-bold">{pct(r2.value)}%</b>
             </li>
           ))}
         </ul>
