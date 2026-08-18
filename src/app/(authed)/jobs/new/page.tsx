@@ -659,6 +659,14 @@ export default function NewOrderPage() {
     setFiles([]);
     setFieldErrors({});
     setError(null);
+    // The store-code combobox keeps its own state — clear it too.
+    setStoreCode('');
+    setStoreLookup('idle');
+    setStoreName('');
+    setNewStore(false);
+    setStoreOpen(false);
+    setCustomerLookup({ state: 'idle' });
+    lastLookupMobile.current = '';
   }
 
   // Names selected categories will display in the summary rail
