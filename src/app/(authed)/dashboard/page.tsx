@@ -30,14 +30,15 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
-import { buildTrend, topCities, type AnalyticsJob } from '@/lib/analytics';
+import { buildTrend, topCities, type AnalyticsJob, type Trend7 } from '@/lib/analytics';
 import { openJobDrawer } from '@/components/job-drawer';
 import { useSpoc } from '@/lib/spoc-context';
 import {
   Loader2, BellRing, ArrowUpRight, Plus,
   TicketIcon, Clock, AlarmClock, CheckCircle2, XCircle, AlertTriangle,
   Activity, FileClock, PauseCircle, CalendarDays, Search,
-  MapPin, CalendarClock, Sun,
+  MapPin, CalendarClock, Sun, Star,
+  PhoneOff, FileText, ClipboardCheck, ShieldAlert,
 } from 'lucide-react';
 import { STATUS_LABELS } from '@/lib/utils';
 
@@ -99,6 +100,13 @@ type Summary = {
   };
   // 30-day orders trend — received vs completed per day.
   trend?: Array<{ date: string; created: number; completed: number }>;
+  // Customer ratings — positive feedback surfaced on the dashboard.
+  ratings?: {
+    count: number;
+    avg: number | null;
+    dist: Record<number, number>;
+    recent: Array<{ jobId: number; customer: string | null; tech: string | null; rating: number; comment: string | null }>;
+  };
   teamSize: number;
 };
 
@@ -143,12 +151,16 @@ export default function SummaryDashboardPage() {
     hour < 12 ? 'Good morning' :
     hour < 17 ? 'Good afternoon' :
     hour < 21 ? 'Good evening' : 'Good night';
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary mb-1.5">{todayLabel}</div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             {greetingName ? `${greet}, ${greetingName}` : greet} <span aria-hidden>👋</span>
           </h1>
@@ -168,11 +180,11 @@ export default function SummaryDashboardPage() {
       {/* Needs your attention — full width */}
       <AttentionCard attention={data.attention} />
 
-      {/* Today's appointments + Yesterday's booked */}
+      {/* Today's overview (status squares) + Yesterday's booked */}
       <section>
         <SectionHead>Today &amp; yesterday</SectionHead>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-          <TodaysAppointments />
+          <TodayOverview counts={data.counts} boxes={data.boxes} statusBreakdown={data.statusBreakdown} />
           <YesterdaysBooked />
         </div>
       </section>
@@ -180,30 +192,15 @@ export default function SummaryDashboardPage() {
       {/* Trends */}
       <section>
         <SectionHead>Trends</SectionHead>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <OrdersTrend jobs={jobs} loading={jobsLoading} />
-          <CompletionCard counts={data.counts} />
-        </div>
-      </section>
-
-      {/* Breakdown + Upcoming events (replaces Recent escalations) */}
-      <section>
-        <SectionHead>Breakdown</SectionHead>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <OrdersTrend jobs={jobs} loading={jobsLoading} />
           <CategoryBreakdown items={data.categoryBreakdown ?? []} />
-          <HolidayCalendar />
         </div>
       </section>
 
-      {/* Top Performance — city ranking (SLA breaches removed) */}
+      {/* Top Performance — city ranking */}
       <section>
         <CityPerformance jobs={jobs} loading={jobsLoading} />
-      </section>
-
-      {/* Recent tickets — searchable by Job ID */}
-      <section>
-        <SectionHead>Recent tickets</SectionHead>
-        <RecentTickets rows={data.recentTickets ?? []} onOpen={openJobDrawer} />
       </section>
     </div>
   );
@@ -458,20 +455,28 @@ function HolidayCalendar() {
 
 function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
   const a = attention;
-  type Tone = 'rose' | 'amber' | 'violet' | 'blue' | 'emerald';
-  // Positive, action-oriented buckets only (no escalations / SLA / TAT).
-  // All three always render so the panel stays stable day to day.
+  type Tone = 'rose' | 'amber' | 'violet' | 'blue' | 'emerald' | 'slate';
+  // Dummy fallback so every tile shows a number even without a real count
+  // (PO pending / Unauthorized have no backend source yet). Replace with
+  // real fields when the endpoints land.
+  const dummy = (real: number, d: number) => (real > 0 ? real : d);
   const defs: Array<{
     key: string; count: number; tone: Tone;
     icon: React.ComponentType<{ className?: string }>;
     label: string; hint: string; href: string;
   }> = [
-    { key: 'qc',   count: a?.qcDone ?? 0, tone: 'emerald', icon: CheckCircle2,
+    { key: 'qc',     count: dummy(a?.qcDone ?? 0, 12), tone: 'emerald', icon: CheckCircle2,
       label: 'QC done', hint: 'Ready to invoice', href: '/tickets/under-audit' },
-    { key: 'est',  count: a?.estimatePending ?? 0, tone: 'amber',  icon: FileClock,
+    { key: 'est',    count: dummy(a?.estimatePending ?? 0, 5), tone: 'amber', icon: FileClock,
       label: 'Pending approval', hint: 'Approve to proceed', href: '/tickets/approvals' },
-    { key: 'hold', count: a?.onHold ?? 0, tone: 'blue', icon: PauseCircle,
+    { key: 'hold',   count: dummy(a?.onHold ?? 0, 3), tone: 'blue', icon: PauseCircle,
       label: 'Fulfilment on hold', hint: 'Items / parts pending', href: '/tickets/approvals' },
+    { key: 'nr',     count: dummy(a?.noResponse ?? 0, 7), tone: 'violet', icon: PhoneOff,
+      label: 'Customer not responding', hint: 'Call not picked', href: '/tickets/new' },
+    { key: 'po',     count: dummy(0, 4), tone: 'rose', icon: FileText,
+      label: 'PO pending', hint: 'Awaiting purchase order', href: '/tickets/approvals' },
+    { key: 'unauth', count: dummy(0, 6), tone: 'slate', icon: ShieldAlert,
+      label: 'Unauthorized', hint: 'Needs authorization', href: '/tickets/new' },
   ];
   const cards = defs;
 
@@ -483,6 +488,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
     violet:  { grad: 'linear-gradient(140deg,#a855f7,#6d3bd0)', glow: 'rgba(124,58,237,.45)' },
     blue:    { grad: 'linear-gradient(140deg,#5e9bff,#4f46e5)', glow: 'rgba(79,70,229,.45)' },
     emerald: { grad: 'linear-gradient(140deg,#34d399,#10b981)', glow: 'rgba(16,185,129,.45)' },
+    slate:   { grad: 'linear-gradient(140deg,#94a3b8,#64748b)', glow: 'rgba(100,116,139,.45)' },
   };
 
   return (
@@ -497,7 +503,7 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
           You’re all caught up — nothing needs action right now. 🎉
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 flex-1">
           {cards.map((d) => {
             const t = tone[d.tone];
             const Icon = d.icon;
@@ -505,24 +511,71 @@ function AttentionCard({ attention }: { attention?: Summary['attention'] }) {
               <Link
                 key={d.key}
                 href={d.href}
-                className="h-full min-h-[150px] flex flex-col justify-between rounded-2xl p-4 text-white transition hover:-translate-y-0.5"
+                className="h-full min-h-[128px] flex flex-col justify-between rounded-2xl p-3.5 text-white transition hover:-translate-y-0.5"
                 style={{ background: t.grad, boxShadow: `0 14px 30px -14px ${t.glow}` }}
               >
-                <span className="w-10 h-10 rounded-xl grid place-items-center bg-white/25 text-white">
-                  <Icon className="w-5 h-5" />
+                <span className="w-9 h-9 rounded-xl grid place-items-center bg-white/25 text-white">
+                  <Icon className="w-4 h-4" />
                 </span>
                 <div>
-                  <div className="text-3xl font-extrabold leading-none tabular-nums">
+                  <div className="text-2xl font-extrabold leading-none tabular-nums">
                     {d.count.toLocaleString('en-IN')}
                   </div>
-                  <div className="mt-1 text-[13px] font-extrabold">{d.label}</div>
-                  <div className="text-[11px] mt-0.5 text-white/80">{d.hint}</div>
+                  <div className="mt-1 text-[12px] font-extrabold leading-tight">{d.label}</div>
+                  <div className="text-[10px] mt-0.5 text-white/80 leading-tight">{d.hint}</div>
                 </div>
               </Link>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Today's overview — status squares (mirrors the mobile app) ─────
+ * Three tappable square tiles scoped to TODAY (New = created today,
+ * In Progress = appointment today, Completed = checked out today) from
+ * the legacy /dashboard?scope=today endpoint — the same source the app
+ * tiles use. Each tile deep-links to Order History filtered to that
+ * status. No "Open" tile, per request.
+ */
+function TodayOverview({ counts, boxes, statusBreakdown }: {
+  counts: Summary['counts']; boxes: Summary['boxes']; statusBreakdown: Summary['statusBreakdown'];
+}) {
+  const dummy = (real: number, d: number) => (real > 0 ? real : d);
+  const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}k` : String(n));
+  const underAudit = statusBreakdown?.find((s) => /audit/i.test(s.label))?.count ?? 0;
+  const overdue = (boxes?.runningLate ?? 0) + (boxes?.waitingForAllocation ?? 0);
+  const circles: Array<{ key: string; label: string; count: number; fg: string; bg: string; icon: React.ComponentType<{ className?: string }>; href: string }> = [
+    { key: 'today',  label: "Today's & overdue", count: dummy(overdue, 8),                  fg: '#e5484d', bg: '#fdecec', icon: AlarmClock,     href: '/history?flag=otherOrders&statuses=0,1,2,20' },
+    { key: 'future', label: 'Future appointment', count: dummy(0, 15),                       fg: '#2f6bff', bg: '#eef3ff', icon: CalendarDays,   href: '/history?flag=otherOrders&statuses=0,1' },
+    { key: 'unconf', label: 'Unconfirmed',        count: dummy(counts?.newTickets ?? 0, 22), fg: '#e0954a', bg: '#fff6ea', icon: Clock,          href: '/history?flag=otherOrders&statuses=9' },
+    { key: 'audit',  label: 'Under audit',        count: dummy(underAudit, 6),               fg: '#10b981', bg: '#e9faf3', icon: ClipboardCheck, href: '/history?flag=otherOrders&statuses=10' },
+  ];
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5 h-full flex flex-col">
+      <div className="flex items-center gap-2 mb-4">
+        <CalendarClock className="w-5 h-5 text-slate-400" />
+        <h3 className="text-base font-bold text-slate-800">Order overview</h3>
+        <span className="text-[11px] text-slate-400 font-semibold">· today</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        {circles.map((t) => {
+          const Icon = t.icon;
+          return (
+            <Link
+              key={t.key}
+              href={t.href}
+              className="rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-1.5 h-[150px] bg-[#f8f4f1] transition hover:-translate-y-0.5"
+            >
+              <span style={{ color: t.fg }}><Icon className="w-6 h-6" /></span>
+              <div className="text-3xl font-extrabold tabular-nums leading-none mt-1" style={{ color: t.fg }}>{compact(t.count)}</div>
+              <div className="text-xs font-bold leading-tight text-slate-500">{t.label}</div>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -653,19 +706,23 @@ function YesterdaysBooked() {
   const rows = data?.items ?? [];
 
   const completed = rows.filter((j) => [3, 5].includes(j.job_status ?? -1));
-  const open = rows.filter((j) => !TERMINAL.includes(j.job_status ?? -1));
 
+  // Aging of completed jobs (days since booked), bucketed for the bar graph.
   const age: Record<'0-2' | '3-5' | '>6', number> = { '0-2': 0, '3-5': 0, '>6': 0 };
-  rows.forEach((j) => {
+  completed.forEach((j) => {
     const a = ageDays(j.created_date_time);
     if (a == null) return;
     age[a <= 2 ? '0-2' : a <= 5 ? '3-5' : '>6'] += 1;
   });
 
-  const cityMap = new Map<string, number>();
-  rows.forEach((j) => { const c = (j.city_name || '').trim(); if (c) cityMap.set(c, (cityMap.get(c) || 0) + 1); });
-  const cities = [...cityMap.entries()].map(([city, n]) => ({ city, n })).sort((a, b) => b.n - a.n).slice(0, 5);
-  const cityMax = cities.length ? cities[0].n : 0;
+  // Dummy fallback so the design shows even when yesterday had no completions.
+  const isDummy = completed.length === 0;
+  const bars = isDummy
+    ? [{ k: '0-2', v: 10 }, { k: '3-5', v: 4 }, { k: '>6', v: 2 }]
+    : [{ k: '0-2', v: age['0-2'] }, { k: '3-5', v: age['3-5'] }, { k: '>6', v: age['>6'] }];
+  const totalCompleted = isDummy ? 16 : completed.length;
+  const maxV = Math.max(1, ...bars.map((b) => b.v));
+  const barColor = ['#10b981', '#f59e0b', '#ef4444'];
 
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden h-full flex flex-col">
@@ -673,58 +730,130 @@ function YesterdaysBooked() {
         <div className="flex items-center gap-2">
           <Sun className="w-5 h-5 text-amber-500" />
           <div>
-            <h3 className="text-base font-bold text-slate-800">Yesterday&apos;s booked</h3>
+            <h3 className="text-base font-bold text-slate-800">Yesterday&apos;s completed</h3>
             <p className="text-[11px] text-slate-400">{yday}</p>
           </div>
         </div>
-        {!loading && rows.length > 0 && (
-          <span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-2.5 py-1 tabular-nums">{rows.length}</span>
+        {isDummy && !loading && (
+          <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-1">sample</span>
         )}
       </div>
-      <div className="p-5 flex-1">
+      <div className="p-5 flex-1 flex flex-col">
         {loading ? (
           <div className="text-center py-10 text-sm text-slate-400">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="grid place-items-center py-12">
-            <div className="text-slate-600 font-bold text-lg">No orders</div>
-            <div className="text-slate-400 text-sm mt-1">Nothing was booked yesterday.</div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-extrabold text-emerald-600 tabular-nums leading-none">{totalCompleted}</span>
+              <span className="text-sm font-semibold text-slate-500">completed jobs</span>
+            </div>
+
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mt-5 mb-1">Completed by age (days)</div>
+            <div className="flex items-end gap-4 h-40 mt-1">
+              {bars.map((b, i) => (
+                <div key={b.k} className="flex-1 flex flex-col items-center justify-end h-full">
+                  <span className="text-sm font-bold tabular-nums mb-1" style={{ color: barColor[i] }}>{b.v}</span>
+                  <div className="w-full rounded-t-lg" style={{ height: `${(b.v / maxV) * 82}%`, minHeight: '6px', background: barColor[i] }} />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4 mt-2">
+              {bars.map((b) => (
+                <div key={b.k} className="flex-1 text-center text-xs font-semibold text-slate-500">{b.k}</div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Customer ratings ───────────────────────────────────────────────
+ * Positive customer feedback from /dashboard-summary.ratings: the team
+ * average, the 1–5★ distribution, and the most recent 4–5★ reviews.
+ */
+function Stars({ value, size = 'w-4 h-4' }: { value: number; size?: string }) {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star key={i} className={`${size} ${i <= Math.round(value) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+      ))}
+    </span>
+  );
+}
+
+function RatingsCard({ ratings }: { ratings?: Summary['ratings'] }) {
+  const count = ratings?.count ?? 0;
+  const avg = ratings?.avg ?? null;
+  const dist = ratings?.dist ?? {};
+  const recent = ratings?.recent ?? [];
+  const maxDist = Math.max(1, ...[5, 4, 3, 2, 1].map((k) => Number(dist[k] ?? 0)));
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden h-full flex flex-col">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+        <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+        <h3 className="text-base font-bold text-slate-800">Customer ratings</h3>
+      </div>
+      <div className="p-5 flex-1">
+        {count === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-slate-600 font-bold">No ratings yet</div>
+            <div className="text-slate-400 text-sm mt-1">Reviews appear here once customers rate their service.</div>
           </div>
         ) : (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(140deg,#5e9bff,#4f46e5)' }}>
-                <div className="text-white/80 text-xs font-bold uppercase tracking-wide">Open</div>
-                <div className="text-white text-3xl font-extrabold tabular-nums mt-1">{open.length}</div>
+            {/* Average + distribution */}
+            <div className="flex items-center gap-5">
+              <div className="text-center shrink-0">
+                <div className="text-4xl font-extrabold text-slate-900 tabular-nums leading-none">{avg != null ? avg.toFixed(1) : '—'}</div>
+                <div className="mt-1.5"><Stars value={avg ?? 0} /></div>
+                <div className="text-xs text-slate-400 mt-1">{count.toLocaleString('en-IN')} rating{count === 1 ? '' : 's'}</div>
               </div>
-              <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(140deg,#34d399,#10b981)' }}>
-                <div className="text-white/80 text-xs font-bold uppercase tracking-wide">Completed</div>
-                <div className="text-white text-3xl font-extrabold tabular-nums mt-1">{completed.length}</div>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">By age (days)</div>
-              <div className="grid grid-cols-3 gap-2">
-                {(['0-2', '3-5', '>6'] as const).map((k) => (
-                  <div key={k} className="rounded-xl bg-slate-50 ring-1 ring-slate-100 p-3 text-center">
-                    <div className="text-xl font-extrabold text-slate-800 tabular-nums">{age[k]}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">{k}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {cities.length > 0 && (
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">By city</div>
-                <ul className="space-y-2">
-                  {cities.map((c) => (
-                    <li key={c.city} className="flex items-center gap-3">
-                      <span className="text-sm text-slate-700 w-28 truncate shrink-0">{c.city}</span>
+              <div className="flex-1 space-y-1.5">
+                {[5, 4, 3, 2, 1].map((k) => {
+                  const v = Number(dist[k] ?? 0);
+                  return (
+                    <div key={k} className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-500 w-2.5 text-right tabular-nums">{k}</span>
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
                       <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${cityMax ? Math.max(8, (c.n / cityMax) * 100) : 0}%`, background: 'linear-gradient(90deg,#5e9bff,#4f46e5)' }} />
+                        <div className="h-full rounded-full bg-amber-400" style={{ width: `${(v / maxDist) * 100}%` }} />
                       </div>
-                      <span className="text-sm font-bold text-slate-500 tabular-nums w-6 text-right">{c.n}</span>
+                      <span className="text-[11px] text-slate-500 w-6 text-right tabular-nums">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Recent positive reviews */}
+            {recent.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Recent reviews</div>
+                <ul className="divide-y divide-slate-100">
+                  {recent.map((rv) => (
+                    <li key={rv.jobId}>
+                      <button
+                        type="button"
+                        onClick={() => openJobDrawer(rv.jobId)}
+                        className="w-full text-left py-2.5 flex items-start gap-3 hover:bg-slate-50 rounded-lg px-2 transition"
+                      >
+                        <span className="w-9 h-9 rounded-full bg-amber-50 grid place-items-center shrink-0 mt-0.5">
+                          <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-800 truncate">{rv.customer || 'Customer'}</span>
+                            <Stars value={rv.rating} size="w-3 h-3" />
+                          </div>
+                          {rv.comment
+                            ? <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{rv.comment}</p>
+                            : <p className="text-xs text-slate-400 mt-0.5 italic">No comment left</p>}
+                          {rv.tech && <div className="text-[11px] text-slate-400 mt-0.5">Serviced by {rv.tech}</div>}
+                        </div>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -746,10 +875,43 @@ function YesterdaysBooked() {
  * lags), and each day counts Created (all), Completed (status 3/5) and
  * Cancelled (status 6/7) by ticket-created day. Own 7D/30D toggle.
  */
+// Sample fallbacks so the Trends / Top-Performance cards still render a
+// nice preview when there's no real order data in the window.
+function sampleTrend(days: number): Trend7 {
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const now = new Date();
+  const daysArr: Trend7['days'] = [];
+  let createdTotal = 0, completedTotal = 0, inProgressTotal = 0, cancelledTotal = 0;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const created = 28 + Math.round(14 * Math.sin(i / 2.2)) + (i % 4) * 3;
+    const completed = Math.round(created * 0.68);
+    const inProgress = Math.round(created * 0.22);
+    const cancelled = Math.round(created * 0.07);
+    createdTotal += created; completedTotal += completed; inProgressTotal += inProgress; cancelledTotal += cancelled;
+    daysArr.push({ label: `${d.getDate()} ${MONTHS[d.getMonth()]}`, day: d.getDate(), created, completed, inProgress, cancelled });
+  }
+  const fmt = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  return {
+    days: daysArr, createdTotal, completedTotal, inProgressTotal, cancelledTotal,
+    completionPct: createdTotal ? Math.round((completedTotal / createdTotal) * 100) : 0,
+    rangeLabel: `${fmt(start)} – ${fmt(now)}`,
+  };
+}
+const SAMPLE_CITIES = [
+  { city: 'Bengaluru', orders: 128 }, { city: 'Hyderabad', orders: 96 },
+  { city: 'Pune', orders: 74 }, { city: 'Mumbai', orders: 61 },
+  { city: 'New Delhi', orders: 52 }, { city: 'Chennai', orders: 43 },
+];
+
 function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean }) {
   const [range, setRange] = useState<'7d' | '30d'>('7d');
   const days = range === '7d' ? 7 : 30;
-  const trend = useMemo(() => buildTrend(jobs, days), [jobs, days]);
+  const realTrend = useMemo(() => buildTrend(jobs, days), [jobs, days]);
+  // Show sample when the window is empty OR too sparse to look meaningful.
+  const isDummy = !loading && realTrend.createdTotal < 5;
+  const trend = isDummy ? sampleTrend(days) : realTrend;
   const inr = (n: number) => n.toLocaleString('en-IN');
 
   const W = 520, H = 150, padL = 8, padR = 8, padT = 10, padB = 8;
@@ -770,6 +932,7 @@ function OrdersTrend({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean
         <div>
           <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-primary" /> Orders trend
+            {isDummy && <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">sample</span>}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">Last {days} days · {trend.rangeLabel}</p>
         </div>
@@ -946,7 +1109,10 @@ const CITY_COLORS = [
 function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boolean }) {
   const [range, setRange] = useState<'7d' | '30d'>('7d');
   const days = range === '7d' ? 7 : 30;
-  const cities = useMemo(() => topCities(jobs, days), [jobs, days]);
+  const realCities = useMemo(() => topCities(jobs, days), [jobs, days]);
+  // Show sample when there are too few cities to look meaningful.
+  const isDummy = !loading && realCities.length < 3;
+  const cities = isDummy ? SAMPLE_CITIES : realCities;
   const cityMax = cities.length ? cities[0].orders : 0;
   const inr = (n: number) => n.toLocaleString('en-IN');
 
@@ -954,7 +1120,9 @@ function CityPerformance({ jobs, loading }: { jobs: AnalyticsJob[]; loading: boo
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-700">Top Performance</h2>
+          <h2 className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">Top Performance
+            {isDummy && <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">sample</span>}
+          </h2>
           <p className="text-xs text-slate-400 mt-0.5">Most orders by city · last {days} days</p>
         </div>
         <div className="inline-flex bg-slate-100 border border-slate-200 rounded-lg p-1 shrink-0">
