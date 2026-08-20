@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, getToken, setToken } from '@/lib/api';
-import { SpocContext, type Spoc } from '@/lib/spoc-context';
+import { SpocContext, AccessContext, LEGACY_ACCESS, type Spoc, type Access } from '@/lib/spoc-context';
 import {
   Home,
   History,
@@ -20,21 +20,27 @@ import {
   ClipboardCheck,
   ReceiptText,
   FileText,
-  // Users, // used by the My Team nav item (currently removed)
+  FolderOpen,
+  CheckCircle2,
+  AlertTriangle,
+  Users,
   HardHat,
+  TrendingUp,
   Wallet,
   ExternalLink,
   LogOut,
   Bell,
-  Menu,
   Smartphone,
   ChevronDown,
-  Search,
+  MoreHorizontal,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GetAppModal } from '@/components/get-app-modal';
 import { JobDrawerHost } from '@/components/job-drawer';
+import { Logo } from '@/components/brand/logo';
+import { FilterChip } from '@/components/ui/console';
 
 type NavItem = {
   href?: string;
@@ -42,36 +48,73 @@ type NavItem = {
   label: string;
   icon: typeof History;
   match?: string[];
+  /*
+   * Surface this item requires, matched against the SPOC's grants from
+   * /me. Undefined = always shown. Hiding is a courtesy; the route itself
+   * is guarded server-side, so a hidden item is not the security boundary.
+   */
+  grant?: string;
+  /*
+   * Which live count to hang off this tab, if any. The tab does NOT fetch —
+   * the shell already polls these, and a tab that fetches its own badge is a
+   * request per tab on every navigation.
+   */
+  badge?: 'open' | 'actions';
 };
 
-// Section 1 — operational workflow items the SPOC works through daily.
-// Ratecard moved OUT to section 2 so the divider line falls ABOVE it,
-// grouping the "reference / admin" entries together at the bottom.
-//
-// Home (Summary Dashboard) is the post-login landing page. Order
-// History was split out from /dashboard into its own /history route
-// when the Summary was introduced — kept right after Home so the
-// SPOC's mental model "Home → drill into details" stays intact.
-const SECTION_ONE: NavItem[] = [
-  { href: '/dashboard',           label: 'Overview',                icon: Home },
-  { href: '/history',             label: 'Order History',           icon: History, match: ['/jobs'] },
-  { href: '/tickets/new',         label: 'New Tickets',             icon: Ticket },
-  // Hidden for now (pages replaced with "Coming soon"; originals in git).
-  // { href: '/tickets/approvals',   label: 'Client Delay',            icon: Clock4 },
-  // { href: '/appointments',        label: 'Committed Appointments',  icon: CalendarCheck },
-  // { href: '/tx-location',         label: 'Tx on Location',          icon: MapPin },
-  // { href: '/tickets/under-audit', label: 'Completed & Under Audit', icon: ClipboardCheck },
+/*
+ * ── The tab row ──────────────────────────────────────────────────────────
+ *
+ * PRIMARY is the destination set from the client team's design: the seven
+ * places a SPOC actually works. EXTRAS is everything else the portal still
+ * does — real, live pages that simply are not part of that design.
+ *
+ * They are not deleted and they are not crammed into the row. Nine peers in a
+ * horizontal nav is a row nobody scans; instead the long tail collapses behind
+ * one "Extras" tab that opens on hover or focus. The cost of a menu is that it
+ * hides where you can go, which is why only the tail goes in it — never a
+ * destination someone visits daily.
+ *
+ * Order History sits in EXTRAS rather than PRIMARY because "Open jobs" and
+ * "Completed" together cover the same ground, split the way the design splits
+ * it. The page is untouched and one hover away.
+ */
+const PRIMARY: NavItem[] = [
+  { href: '/dashboard',   label: 'Home',            icon: Home },
+  { href: '/jobs',        label: 'Open jobs',       icon: FolderOpen, badge: 'open' },
+  { href: '/completed',   label: 'Completed',       icon: CheckCircle2 },
+  // Gated on can_view_performance. Absent for every existing SPOC until an
+  // administrator turns it on — see EasyFix_Backend/migrations/2026-08-20-client-spoc-access.sql.
+  { href: '/performance', label: 'Performance',     icon: TrendingUp, grant: 'performance' },
+  { href: '/action-queue', label: 'My action queue', icon: AlertTriangle, badge: 'actions' },
+  { href: '/invoices',    label: 'Invoicing',       icon: FileText, grant: 'invoicing' },
+  { href: '/analytics',   label: 'Analytics',       icon: BarChart3 },
+  { href: '/stores',      label: 'Store SPOC view', icon: Users },
 ];
 
-const SECTION_TWO: NavItem[] = [
-  { href: '/wallet',       label: 'Wallet',          icon: Wallet },
-  { href: '/invoices',     label: 'Invoices',        icon: FileText },
-  { href: '/ratecard',     label: 'Ratecard',        icon: ReceiptText },
-  // My Team — removed from the sidebar (page + route still exist at /team).
-  // { href: '/team',         label: 'My Team',         icon: Users },
-  { href: '/technicians',  label: 'My Technicians',  icon: HardHat },
+/*
+ * The header's capability chips. Deliberately COARSER than the tab row: a tab
+ * is a destination, a chip is an area of responsibility, and collapsing
+ * home/open/completed/actions into one "Operations" chip is what keeps the two
+ * rows from reading as the same list twice.
+ *
+ * `grant: undefined` means the area needs no grant — every SPOC has operations.
+ */
+const AREAS: Array<{ label: string; href: string; match: string[]; grant?: string }> = [
+  { label: 'Operations',  href: '/dashboard',   match: ['/dashboard', '/jobs', '/completed', '/action-queue', '/history', '/tickets'] },
+  { label: 'Performance', href: '/performance', match: ['/performance'], grant: 'performance' },
+  { label: 'Invoicing',   href: '/invoices',    match: ['/invoices', '/wallet'], grant: 'invoicing' },
+];
+
+const EXTRAS: NavItem[] = [
+  { href: '/history',     label: 'Order History',  icon: History },
+  { href: '/tickets/new', label: 'New Tickets',    icon: Ticket },
+  { href: '/wallet',      label: 'Wallet',         icon: Wallet },
+  { href: '/ratecard',    label: 'Ratecard',       icon: ReceiptText },
+  { href: '/technicians', label: 'My Technicians', icon: HardHat },
   { externalHref: 'https://www.easyfix.in/our-team', label: 'Contact Us', icon: ExternalLink },
 ];
+
 
 function initialsOf(name?: string) {
   if (!name) return 'U';
@@ -85,29 +128,20 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [spoc, setSpoc] = useState<Spoc | null>(null);
+  /*
+   * Effective grants, delivered on the same /me response.
+   *
+   * Seeded with LEGACY_ACCESS — what the portal showed everyone before roles
+   * existed. That keeps a frontend-first deploy from hiding Invoices, while
+   * still withholding the new Performance screen. The server's payload
+   * replaces this the moment /me resolves.
+   */
+  const [access, setAccess] = useState<Access>(LEGACY_ACCESS);
   const [loading, setLoading] = useState(true);
   // Set when /me fails for a reason OTHER than 401 (e.g. backend down,
-  // network blip). Drives the "Try again" screen below instead of
+  // network blip). Drives the "Try Again" screen below instead of
   // letting a null SPOC reach useSpoc() and crash the whole dashboard.
   const [bootError, setBootError] = useState<string | null>(null);
-  // Default sidebar OPEN on desktop, CLOSED on mobile.
-  // We can't read window at SSR/render time, so initialise to true and
-  // immediately collapse on first client mount if the viewport is below
-  // the `md` breakpoint (768px). Prevents the 256px-wide sidebar from
-  // hiding the hamburger toggle on phones.
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  // Top-bar global search — routes to Order History with the query.
-  const [search, setSearch] = useState('');
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (window.innerWidth < 768) setSidebarOpen(false);
-  }, []);
-  // Auto-close the sidebar after a nav click on mobile so the SPOC
-  // sees the new page without a tap on the backdrop.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (window.innerWidth < 768) setSidebarOpen(false);
-  }, [pathname]);
   const bootedRef = useRef(false);
 
   useEffect(() => {
@@ -120,7 +154,11 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     if (!getToken()) { router.push('/'); return; }
     (async () => {
       try {
-        const res = await api.get<{ spoc: Spoc }>('/me');
+        const res = await api.get<{ spoc: Spoc; access?: Access }>('/me');
+        // A backend that predates the access model returns no `access` key,
+        // in which case LEGACY_ACCESS stands and the portal looks exactly as
+        // it did before roles existed.
+        if (res?.access) setAccess(res.access);
         if (res?.spoc) setSpoc(res.spoc);
         else setBootError('We could not load your profile. Please try again.');
       } catch (err) {
@@ -167,6 +205,44 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     setAppModalOpen(false);
     try { localStorage.setItem('ef_app_promo_seen', '1'); } catch { /* ignore */ }
   }
+
+  /*
+   * ─── Tab badges ────────────────────────────────────────────────────
+   * The counts on "Open jobs" and "My action queue".
+   *
+   * Fetched HERE, once, rather than by each tab: the shell renders on every
+   * route, so a tab that fetched its own badge would fire a request per tab on
+   * every navigation. Both are advisory — a failed fetch simply leaves the tab
+   * unbadged, never blocks the nav, and never shows a stale zero (the badge is
+   * hidden at 0 rather than rendered as "0").
+   *
+   * Refreshed on the same `jobs:invalidate` event the job drawer already emits
+   * after a mutation, so approving an estimate drops the queue count at once
+   * instead of on the next full page load.
+   */
+  const [openCount, setOpenCount] = useState<number | undefined>(undefined);
+  const [actionCount, setActionCount] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!spoc) return;
+    let cancelled = false;
+    async function refreshCounts() {
+      try {
+        const [orders, queue] = await Promise.allSettled([
+          api.get<{ otherOrders: number }>('/orders/counts'),
+          api.get<{ total: number }>('/action-queue'),
+        ]);
+        if (cancelled) return;
+        if (orders.status === 'fulfilled') setOpenCount(Number(orders.value?.otherOrders) || 0);
+        if (queue.status === 'fulfilled') setActionCount(Number(queue.value?.total) || 0);
+      } catch { /* advisory only */ }
+    }
+    refreshCounts();
+    window.addEventListener('jobs:invalidate', refreshCounts);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('jobs:invalidate', refreshCounts);
+    };
+  }, [spoc]);
 
   // ─── Unread-notice count for the bell badge ────────────────────────
   // Polled once on mount + every 60s while the tab is foregrounded.
@@ -230,6 +306,16 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     router.push('/');
   }
 
+  /*
+   * Nav visibility. An item with no `grant` is always shown; one with a grant
+   * appears only when the SPOC holds it. This mirrors the server guard rather
+   * than replacing it — requireGrant() on the route is what actually denies.
+   */
+  const visible = useMemo(
+    () => (item: NavItem) => !item.grant || access.grants.includes(item.grant),
+    [access]
+  );
+
   const isActive = useMemo(
     () => (item: NavItem) => {
       if (!item.href) return false;
@@ -243,7 +329,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center text-slate-500">
+      <main className="min-h-screen flex items-center justify-center text-ink-500">
         Loading…
       </main>
     );
@@ -259,13 +345,13 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           <Bell className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-slate-900">Couldn’t load your dashboard</h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-sm">
+          <h1 className="text-lg font-semibold text-ink-900">Couldn’t load your dashboard</h1>
+          <p className="mt-1 text-sm text-ink-500 max-w-sm">
             {bootError || 'Your session could not be loaded right now.'}
           </p>
         </div>
         <button type="button" onClick={() => window.location.reload()} className="btn-primary">
-          Try again
+          Try Again
         </button>
       </main>
     );
@@ -278,191 +364,150 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 
   return (
     <SpocContext.Provider value={spoc}>
-    <div className="min-h-screen bg-slate-50">
-      {/* Mobile backdrop — only when sidebar is open and viewport is
-          below md (768px). Tap to close. Pointer-events-none on desktop
-          so it never blocks anything there. */}
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close menu"
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm md:hidden"
-        />
-      )}
-      {/* Sidebar — fixed on every breakpoint so it stays visible while
-          the main column scrolls. Mobile keeps the overlay behaviour
-          (no margin push); desktop pushes the main column right via
-          ml-16 / ml-64 below to make room for the fixed sidebar. */}
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200',
-          // Warm brand-red gradient — keeps EasyFix's friendly identity
-          // front and centre. Subtle multi-stop gradient instead of a
-          // flat saturated red so the column has depth + reads as
-          // polished, not screaming.
-          'bg-gradient-to-b from-[#d9212b] via-[#b91c1c] to-[#7f1d1d] text-white shadow-2xl',
-          sidebarOpen ? 'w-60' : 'w-0 md:w-16 overflow-hidden'
-        )}
-      >
-        {/* Brand block — CLIENT brand first (their logo + company name).
-            Reads as a client portal, not an internal ops console. The
-            client_id is tucked into the logo tile's title attribute so
-            ops can still recover it via hover for debugging but SPOCs
-            see only their own company.
-            Collapsed mode shrinks to a square logo tile (falls back to
-            the company's initials when no logo is on file). */}
-        {sidebarOpen ? (
-          /* Compact brand block — 14px tile + tighter padding so the
-             expanded sidebar fits all 10 nav items + powered-by footer
-             without scrolling on a 720px viewport. */
-          <div className="px-3 py-3 flex flex-col items-center gap-1.5 border-b border-white/15 text-center">
-            <ClientLogoTile
-              url={spoc?.client_logo_url}
-              name={spoc?.client_name}
-              clientId={spoc?.client_id}
-              size="lg"
-            />
-            <div className="text-sm font-bold text-white leading-tight truncate max-w-full">
+    <AccessContext.Provider value={access}>
+    <div className="min-h-screen bg-surface-alt flex flex-col">
+      {/*
+        ── The console shell ────────────────────────────────────────────────
+        Two stacked rows on a light ground, replacing the dark left sidebar:
+
+          row 1  IDENTITY + ACCOUNT — "EasyFix / <client>" on the left, the
+                 account cluster on the right.
+          row 2  DESTINATIONS — every screen as a horizontal tab.
+
+        WHY THE MASTHEAD IS NO LONGER DARK. The previous shell put a dark ink
+        column down the left, and src/brand/tokens.ts still documents that
+        treatment. The client team's design moves the chrome to the top and
+        makes it light, which is a real improvement for this product rather
+        than a preference: a fixed 240px column costs a quarter of the width on
+        a 1280px laptop, and this console's content is wide — job tables,
+        rate cards, month-by-month charts. Horizontal nav gives that width back.
+
+        The `chrome-*` tokens are deliberately left defined in tokens.ts. They
+        still describe a correct dark-on-light relationship, and the mobile
+        drawer and any future dark surface should use them rather than
+        reinventing one.
+      */}
+      <header className="sticky top-0 z-30 bg-surface border-b border-ink-100">
+        <div className="h-14 px-4 md:px-6 flex items-center gap-3">
+          {/*
+            The brand lockup. EasyFix first, then the client — the portal is
+            ours, operated for them, and that ordering is what the shared
+            design shows ("EasyFix / Lenskart"). The mark comes from the one
+            <Logo> owner so a rebrand stays a one-file change.
+          */}
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 shrink-0 min-w-0"
+            aria-label="EasyFix client portal — go to Overview"
+          >
+            {/*
+              The mark and the client name are set to the SAME optical size, as
+              the design has them ("EasyFix / Lenskart" reads as one line, not a
+              logo with a caption).
+
+              h-4 against text-base is not a coincidence: the wordmark's viewBox
+              spans ascender to DESCENDER (the 'y' in EasyFix), so its cap height
+              is roughly 0.72 of the box. A 16px box therefore caps at ~11.5px,
+              which is the cap height of 16px text. Matching the box to the font
+              size instead would render the mark visibly larger.
+            */}
+            <Logo priority alt="" className="h-4 w-auto" />
+            <span className="text-ink-300 select-none text-base" aria-hidden>/</span>
+            <span className="text-base text-ink-900 truncate max-w-[8rem] sm:max-w-[12rem] md:max-w-[18rem]">
               {spoc?.client_name || 'Client Portal'}
-            </div>
-            <div className="text-[9px] uppercase tracking-[0.18em] text-white/70 font-semibold">
-              Service Portal
-            </div>
-          </div>
-        ) : (
-          <div className="py-4 flex items-center justify-center border-b border-white/15">
-            <ClientLogoTile
-              url={spoc?.client_logo_url}
-              name={spoc?.client_name}
-              clientId={spoc?.client_id}
-              size="sm"
-            />
-          </div>
-        )}
-
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {SECTION_ONE.map((item) => (
-            <SidebarLink key={item.label} item={item} active={isActive(item)} collapsed={!sidebarOpen} />
-          ))}
-
-          <div className="my-3 border-t border-white/15" />
-
-          {SECTION_TWO.map((item) => (
-            <SidebarLink key={item.label} item={item} active={isActive(item)} collapsed={!sidebarOpen} />
-          ))}
-        </nav>
-
-        {/* "powered by EasyFix" footer — bold white wordmark against the
-            red sidebar so the attribution stays legible. */}
-        {sidebarOpen && (
-          <div className="px-4 py-3 border-t border-white/15 flex items-center justify-center gap-1.5">
-            <span className="text-[10px] text-white/60 uppercase tracking-wider">powered by</span>
-            <span className="text-xs font-extrabold text-white tracking-tight">
-              EasyFix
             </span>
+          </Link>
+
+
+          {/*
+            The header's capability chips — a read-out of the ACCESS MODEL,
+            which the portal already resolves at boot from /me.
+
+            These are the AREAS the caller holds: Operations is always held
+            (home/open/completed are universal), while Performance and
+            Invoicing appear only when the grant is actually present, so the
+            row is an honest answer to "what am I allowed to see?".
+
+            The ROLE deliberately is NOT one of these. A capability chip is a
+            control — click it and you go there — while a role is a fact about
+            the reader that they cannot change. Mixing the two put a dead chip
+            in a row of live ones; the role now sits under the name in the
+            profile block, where identity belongs.
+
+            Clicking a capability jumps to that area, and the one matching the
+            current route is tinted — the same active/resting treatment the
+            tabs use, so the two rows agree. Hidden below `lg` where the tab
+            strip already needs the width.
+          */}
+          <div className="hidden lg:flex items-center justify-center gap-1.5 flex-1 min-w-0">
+            {AREAS.filter((a) => !a.grant || access.grants.includes(a.grant)).map((a) => (
+              <FilterChip
+                key={a.label}
+                active={a.match.some((m) => pathname.startsWith(m))}
+                onClick={() => router.push(a.href)}
+              >
+                {a.label}
+              </FilterChip>
+            ))}
           </div>
-        )}
-      </aside>
-
-      {/* Main column: navbar + content.
-          Left margin matches sidebar width on desktop so content
-          doesn't sit under the fixed sidebar. Mobile keeps ml-0 since
-          the sidebar overlays instead of pushing. */}
-      <div className={cn(
-        'flex flex-col min-w-0 transition-[margin] duration-200',
-        sidebarOpen ? 'md:ml-60' : 'ml-0 md:ml-16'
-      )}>
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center px-4 md:px-6 gap-4">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen((v) => !v)}
-            aria-label="Toggle sidebar"
-            className="p-2 rounded hover:bg-slate-100 text-slate-700"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          {/* Global search — Enter routes to Order History filtered by the term. */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const term = search.trim();
-              if (term) router.push(`/history?q=${encodeURIComponent(term)}`);
-            }}
-            className="hidden md:flex flex-1 max-w-md"
-          >
-            <div className="relative w-full">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search orders, tickets, technicians…"
-                aria-label="Search"
-                className="w-full h-10 pl-10 pr-4 rounded-full bg-slate-50 border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 focus:bg-white transition"
-              />
-            </div>
-          </form>
-
-          <div className="ml-auto flex items-center gap-3 md:gap-5">
-            {/* Get the App — reopens the mobile-app promo any time. */}
+          <div className="ml-auto lg:ml-0 shrink-0 flex items-center gap-2 md:gap-3">
             <button
               type="button"
               onClick={() => setAppModalOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-primary bg-primary-50 ring-1 ring-primary/20 hover:bg-primary-100 transition"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-primary bg-primary-50 ring-1 ring-primary/20 hover:bg-primary-100 transition"
             >
               <Smartphone className="w-3.5 h-3.5" /> Get the App
             </button>
-            {/* Notification bell — amber/gold treatment matching the
-                target mock. Soft amber tile background, deep amber
-                stroke + matching fill so the bell reads as gold; red
-                indicator dot stays brand-rose for instant
-                "unread" recognition. */}
-            {/* Notifications bell → /notifications. The count comes from
-                the unread-count poll above (initial fetch + 60s tick,
-                plus an event-driven refresh when the notifications
-                page mutates read state). Hides the badge when zero so
-                an idle inbox doesn't show a stale "0" pill. */}
+
+            {/* Notifications → /notifications. Count comes from the unread poll
+                (initial fetch + 60s tick + an event-driven refresh when the
+                notifications page mutates read state). Badge hides at zero so an
+                idle inbox never shows a stale "0". */}
             <Link
               href="/notifications"
               aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
-              className="relative p-2 rounded-full bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200 transition"
+              className="relative p-2 rounded-full bg-gold-tint hover:bg-gold/20 ring-1 ring-gold/30 transition"
             >
-              <Bell
-                className="w-5 h-5 text-amber-500"
-                strokeWidth={2}
-                fill="#FBBF24"
-              />
+              <Bell className="w-5 h-5 text-gold" strokeWidth={2} fill="var(--ef-gold)" />
               {unread > 0 && (
-                // Numeric badge when there's a count; collapses to a
-                // bare dot for 1-digit counts to keep the bell compact.
-                // Caps at 99+ so two-digit counts don't break the layout.
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 ring-2 ring-white text-[10px] font-bold text-white leading-none">
+                // Caps at 99+ so a three-digit count cannot stretch the pill.
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-primary ring-2 ring-white text-xs font-semibold text-white leading-none">
                   {unread > 99 ? '99+' : unread}
                 </span>
               )}
             </Link>
 
-            {/* Profile chip — pill with pink→violet gradient avatar,
-                first name, and a chevron. Links to the profile page. */}
             <Link
               href="/profile"
-              className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition"
+              className="flex items-center gap-2 pl-1 pr-2 sm:pr-3 py-1 rounded-full border border-ink-100 bg-surface hover:bg-surface-alt transition"
               aria-label="Open profile"
             >
-              <span className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 text-white font-extrabold flex items-center justify-center text-xs">
+              <span className="w-7 h-7 rounded-full bg-gradient-to-br from-primary via-primary-600 to-primary-dark text-white font-semibold flex items-center justify-center text-xs">
                 {initials}
               </span>
-              <span className="hidden sm:block leading-tight text-left">
-                <span className="block text-sm font-bold text-slate-900 truncate max-w-[140px]">
-                  {firstName}
-                </span>
-                <span className="block text-[11px] text-slate-500">
-                  Client #{spoc?.client_id ?? '—'}
+              <span className="hidden md:block leading-tight text-left">
+                <span className="block text-sm font-semibold text-ink-900 truncate max-w-[140px]">{firstName}</span>
+                {/*
+                  Role over client id, under the name. Identity in one place:
+                  who you are, what you are, and which client you are in.
+
+                  "No Role" renders in danger red rather than the muted grey the
+                  rest of this line uses — an unconfigured SPOC is a gap for an
+                  administrator to close in CRM -> Manage Clients -> Contacts,
+                  and at this size colour is the only thing that gets noticed.
+                */}
+                <span
+                  className={cn(
+                    'block text-xs truncate max-w-[140px]',
+                    access.unassigned ? 'text-danger-text font-medium' : 'text-ink-500',
+                  )}
+                  title={access.unassigned
+                    ? 'No role assigned yet — an administrator can set one in CRM > Manage Clients > Contacts'
+                    : `Role: ${access.roleName}`}
+                >
+                  {access.roleName} · #{spoc?.client_id ?? '—'}
                 </span>
               </span>
-              <ChevronDown className="w-4 h-4 text-slate-400 hidden sm:block" />
             </Link>
 
             <button
@@ -470,15 +515,54 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
               onClick={() => setLogoutOpen(true)}
               aria-label="Logout"
               title="Logout"
-              className="p-2 rounded hover:bg-primary-50 text-slate-700 hover:text-primary transition"
+              className="p-2 rounded hover:bg-primary-50 text-ink-700 hover:text-primary transition"
             >
               <LogOut className="w-5 h-5" />
             </button>
           </div>
-        </header>
+        </div>
 
-        <main className="flex-1 p-4 md:p-6 overflow-auto">{children}</main>
-      </div>
+        {/*
+          Destinations. One row, horizontally scrollable rather than collapsed
+          into a hamburger: a menu that has to be opened hides where you can go,
+          and this console has only nine places. Grant-gated tabs are filtered
+          out entirely — the server still guards each route, so hiding a tab is
+          a courtesy, not a control.
+        */}
+        {/*
+          Destinations. The tab strip scrolls horizontally rather than
+          collapsing into a hamburger — a menu that must be opened hides where
+          you can go, and this console has few enough places to show them all.
+
+          EXTRAS SITS OUTSIDE THE SCROLLER, and that is structural rather than
+          cosmetic: `overflow-x-auto` establishes a scroll container, and a
+          scroll container CLIPS its absolutely-positioned descendants in both
+          axes. With the menu inside the nav its panel was cut off at the nav's
+          bottom edge and read as "hiding under the page body". Lifting it into
+          a sibling that never scrolls is the fix; raising z-index alone would
+          not have helped, because clipping happens regardless of stacking.
+        */}
+        <div className="px-2 md:px-4 flex items-stretch">
+          <nav
+            aria-label="Primary"
+            className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0"
+          >
+            {PRIMARY.filter(visible).map((item) => (
+              <TabLink
+                key={item.label}
+                item={item}
+                active={isActive(item)}
+                count={item.badge === 'actions' ? actionCount : item.badge === 'open' ? openCount : undefined}
+              />
+            ))}
+          </nav>
+          <div className="shrink-0 flex items-center pl-1 ml-1 border-l border-ink-100">
+            <ExtrasMenu items={EXTRAS.filter(visible)} activeHref={pathname} />
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 md:px-6 py-5 min-w-0">{children}</main>
 
       <ConfirmDialog
         open={logoutOpen}
@@ -498,99 +582,117 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
       {/* Global job details drawer — opens on any job-id click via openJobDrawer(). */}
       <JobDrawerHost />
     </div>
+    </AccessContext.Provider>
     </SpocContext.Provider>
   );
 }
 
-/*
- * ClientLogoTile — sidebar brand block tile.
- *
- * Prefers the actual client logo image (Nginx-served URL from
- * `spoc.client_logo_url`). If the image fails to load (404, CORS,
- * file removed, etc.), flips to a `broken` state and renders the
- * client's INITIALS — same fallback we use when no logo is on file.
- * Avoids the "blank white square" failure mode the previous inline
- * onError → hide handler was causing.
- *
- * Two sizes:
- *   "lg" → 80×80 rounded-xl tile for the expanded sidebar.
- *   "sm" → 40×40 rounded-md tile for the collapsed rail.
- */
-function ClientLogoTile({
-  url, name, clientId, size,
-}: {
-  url?: string | null;
-  name?: string | null;
-  clientId?: number | null;
-  size: 'lg' | 'sm';
-}) {
-  const [broken, setBroken] = useState(false);
-  const initials = (name || 'EF').slice(0, 2).toUpperCase();
-  const titleAttr = size === 'lg'
-    ? `Client #${clientId ?? '—'}`
-    : `${name || 'EasyFix'} · Client #${clientId ?? '—'}`;
-
-  // lg shrunk from 80px → 56px so the whole nav fits without scroll on
-  // a standard 720-768px screen. sm collapsed-rail size unchanged.
-  const tileClass = size === 'lg'
-    ? 'bg-white rounded-lg p-1.5 shadow-md w-14 h-14 grid place-items-center overflow-hidden'
-    : 'w-10 h-10 bg-white rounded-md flex items-center justify-center overflow-hidden p-1';
-  const initialsClass = size === 'lg'
-    ? 'text-primary font-extrabold text-lg tracking-tight'
-    : 'text-primary font-extrabold text-sm tracking-tight';
-
-  return (
-    <div className={tileClass} title={titleAttr} aria-label={name || 'Client'}>
-      {url && !broken ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={name || 'Client logo'}
-          className="max-w-full max-h-full object-contain"
-          onError={() => setBroken(true)}
-        />
-      ) : (
-        <span className={initialsClass}>{initials}</span>
-      )}
-    </div>
-  );
-}
-
-function SidebarLink({
-  item, active, collapsed,
-}: { item: NavItem; active: boolean; collapsed: boolean }) {
+function TabLink({ item, active, count }: { item: NavItem; active: boolean; count?: number }) {
   const Icon = item.icon;
 
+  /*
+   * The active marker is a RED UNDERLINE plus red copy.
+   *
+   * On the old dark chrome, brand red measured 3.00:1 and was legal only as a
+   * shape, so the active item was white copy over a red rail. On this light
+   * surface red-500 on white is 5.77:1 — it passes for normal text, so the
+   * label itself carries the brand colour and the rule reinforces it. Inactive
+   * labels sit at ink-500 and lift to ink-900 on hover, so the row feels live
+   * before you commit to a click.
+   */
   const className = cn(
-    'flex items-center gap-3 px-3 py-2 rounded text-sm transition',
+    'inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm border-b-2 -mb-px transition',
     active
-      ? 'bg-white text-primary font-semibold shadow-sm'
-      : 'text-white/90 hover:bg-white/10 hover:text-white'
+      ? 'border-primary text-primary font-semibold'
+      : 'border-transparent text-ink-500 hover:text-ink-900 hover:border-ink-300',
+  );
+
+  const body = (
+    <>
+      <Icon className="w-4 h-4 shrink-0" aria-hidden />
+      <span>{item.label}</span>
+      {/* Hidden at zero rather than rendered as "0" — an empty queue should read
+          as nothing to do, not as a metric worth a badge. */}
+      {typeof count === 'number' && count > 0 && (
+        <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 rounded-full bg-primary-100 text-primary text-xs font-semibold tabular-nums">
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </>
   );
 
   if (item.externalHref) {
     return (
-      <a
-        href={item.externalHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={className}
-        title={collapsed ? item.label : undefined}
-      >
-        <Icon className="w-4 h-4 shrink-0" />
-        {!collapsed && <span className="truncate">{item.label}</span>}
+      <a href={item.externalHref} target="_blank" rel="noopener noreferrer" className={className}>
+        {body}
       </a>
     );
   }
 
   return (
-    <Link
-      href={item.href!}
-      className={className}
-      title={collapsed ? item.label : undefined}
-    >
-      <Icon className="w-4 h-4 shrink-0" />
-      {!collapsed && <span className="truncate">{item.label}</span>}
+    <Link href={item.href!} className={className} aria-current={active ? 'page' : undefined}>
+      {body}
     </Link>
+  );
+}
+
+/*
+ * The long tail, behind one tab.
+ *
+ * Opens on HOVER and on FOCUS-WITHIN, and the trigger is a real <button> with
+ * aria-haspopup — so it is reachable by keyboard and announced as a menu, which
+ * a hover-only CSS dropdown is not. No JS state: open/close is `group-hover` +
+ * `group-focus-within`, which cannot desynchronise from the pointer the way a
+ * mouseenter/mouseleave pair can when the cursor leaves the window mid-gesture.
+ *
+ * `pt-1` on the panel rather than `mt-1` is deliberate: a margin would leave a
+ * dead gap between trigger and menu, and the menu would close as the pointer
+ * crossed it. Padding keeps the hover target continuous.
+ */
+function ExtrasMenu({ items, activeHref }: { items: NavItem[]; activeHref: string }) {
+  if (!items.length) return null;
+  const holdsActive = items.some((i) => i.href && activeHref.startsWith(i.href));
+
+  return (
+    <div className="relative group">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        className={cn(
+          'inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm border-b-2 -mb-px transition',
+          holdsActive
+            ? 'border-primary text-primary font-semibold'
+            : 'border-transparent text-ink-500 hover:text-ink-900 hover:border-ink-300',
+        )}
+      >
+        <MoreHorizontal className="w-4 h-4 shrink-0" aria-hidden />
+        <span>Extras</span>
+        <ChevronDown className="w-3.5 h-3.5 shrink-0" aria-hidden />
+      </button>
+
+      <div role="menu" className="absolute right-0 top-full z-50 pt-1 hidden group-hover:block group-focus-within:block">
+        <div className="min-w-[13rem] rounded-xl border border-ink-100 bg-surface shadow-lg py-1">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = !!item.href && activeHref.startsWith(item.href);
+            const cls = cn(
+              'flex items-center gap-2.5 px-3 py-2 text-sm transition',
+              active ? 'text-primary font-semibold bg-primary-50' : 'text-ink-700 hover:bg-surface-alt',
+            );
+            return item.externalHref ? (
+              <a key={item.label} role="menuitem" href={item.externalHref} target="_blank" rel="noopener noreferrer" className={cls}>
+                <Icon className="w-4 h-4 shrink-0 text-ink-300" aria-hidden />
+                {item.label}
+              </a>
+            ) : (
+              <Link key={item.label} role="menuitem" href={item.href!} className={cls}>
+                <Icon className="w-4 h-4 shrink-0 text-ink-300" aria-hidden />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }

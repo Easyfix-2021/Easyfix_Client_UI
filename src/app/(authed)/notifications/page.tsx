@@ -37,6 +37,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { tokens } from '@/brand/tokens';
 
 type Notice = {
   notice_id: number;
@@ -149,7 +150,7 @@ export default function NotificationsPage() {
             router.push('/dashboard');
           }
         }}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-primary transition group"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 hover:text-primary transition group"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
         Back
@@ -157,8 +158,8 @@ export default function NotificationsPage() {
 
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
-            <BellRing className="w-6 h-6 text-amber-500" />
+          <h1 className="text-2xl font-semibold text-ink-900 inline-flex items-center gap-2">
+            <BellRing className="w-6 h-6 text-warning" />
             Notifications
           </h1>
         </div>
@@ -166,16 +167,16 @@ export default function NotificationsPage() {
           type="button"
           onClick={markAllRead}
           disabled={busy || counts.unread === 0}
-          className="px-3 py-2 text-sm font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 inline-flex items-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-2 text-sm font-semibold rounded-lg border border-ink-100 bg-surface hover:bg-ink-50 inline-flex items-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
           title={counts.unread === 0 ? 'Nothing to mark' : `Mark ${counts.unread} as read`}
         >
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4 text-emerald-600" />}
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4 text-success" />}
           Mark all as read
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200">
+      <div className="flex items-center gap-1 border-b border-ink-100">
         {(['all', 'unread', 'pinned'] as TabKey[]).map((k) => (
           <button
             key={k}
@@ -185,15 +186,15 @@ export default function NotificationsPage() {
               'px-3 py-2 text-sm font-semibold inline-flex items-center gap-1.5 border-b-2 transition -mb-px',
               tab === k
                 ? 'border-primary text-primary'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
             )}
           >
             {k === 'all'    && 'All'}
             {k === 'unread' && 'Unread'}
             {k === 'pinned' && (<><Pin className="w-3.5 h-3.5" /> Pinned</>)}
             <span className={cn(
-              'ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 h-5 text-[10px] font-bold rounded-full',
-              tab === k ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600',
+              'ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 h-5 text-xs font-semibold rounded-full',
+              tab === k ? 'bg-primary text-white' : 'bg-ink-100 text-ink-500',
             )}>
               {counts[k]}
             </span>
@@ -202,26 +203,26 @@ export default function NotificationsPage() {
       </div>
 
       {opErr && (
-        <div className="rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-900 inline-flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600" />
+        <div className="rounded-lg bg-danger-tint border border-danger/30 px-3 py-2 text-xs text-danger-text inline-flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-danger" />
           {opErr}
         </div>
       )}
 
       {/* Feed */}
       {loading ? (
-        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-10 text-center">
-          <Loader2 className="w-7 h-7 mx-auto animate-spin text-slate-400" />
-          <div className="mt-2 text-sm text-slate-500">Loading notifications…</div>
+        <div className="bg-surface rounded-2xl shadow-sm ring-1 ring-ink-100 p-10 text-center">
+          <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" />
+          <div className="mt-2 text-sm text-ink-500">Loading notifications…</div>
         </div>
       ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center text-sm text-rose-900">
+        <div className="bg-danger-tint border border-danger/30 rounded-2xl p-6 text-center text-sm text-danger-text">
           {error}
         </div>
       ) : visible.length === 0 ? (
         <EmptyState tab={tab} />
       ) : (
-        <ul className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 divide-y divide-slate-100 overflow-hidden">
+        <ul className="bg-surface rounded-2xl shadow-sm ring-1 ring-ink-100 divide-y divide-ink-100 overflow-hidden">
           {visible.map((n) => (
             <NoticeRow
               key={n.notice_id}
@@ -246,7 +247,7 @@ function NoticeRow({
   onToggle: () => void;
 }) {
   const pinned = Number(notice.is_pinned) === 1;
-  const color = notice.category_color || '#64748b';
+  const color = notice.category_color || tokens['ink-500'];
 
   return (
     <li>
@@ -255,7 +256,7 @@ function NoticeRow({
         onClick={onToggle}
         className={cn(
           'w-full text-left px-4 py-3 flex items-start gap-3 transition',
-          notice.is_read ? 'hover:bg-slate-50' : 'bg-amber-50/40 hover:bg-amber-50'
+          notice.is_read ? 'hover:bg-ink-50' : 'bg-warning-tint/40 hover:bg-warning-tint'
         )}
       >
         {/* Category color band — a left-edge stripe + a chip below the
@@ -269,30 +270,30 @@ function NoticeRow({
           <div className="flex items-center gap-2 flex-wrap">
             {notice.category_name && (
               <span
-                className="inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full text-white"
+                className="inline-flex items-center text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full text-white"
                 style={{ backgroundColor: color }}
               >
                 {notice.category_name}
               </span>
             )}
             {pinned && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-warning-tint text-warning-text">
                 <Pin className="w-3 h-3" /> Pinned
               </span>
             )}
-            <span className="text-[11px] text-slate-400 ml-auto shrink-0">
+            <span className="text-xs text-ink-300 ml-auto shrink-0">
               {timeAgo(notice.publish_at || notice.created_at)}
             </span>
           </div>
           <h3 className={cn(
             'mt-1 text-sm leading-snug',
-            notice.is_read ? 'font-semibold text-slate-700' : 'font-bold text-slate-900'
+            notice.is_read ? 'font-semibold text-ink-700' : 'font-semibold text-ink-900'
           )}>
             {notice.title}
           </h3>
           {/* Body: short excerpt by default, full text on expand. */}
           <p className={cn(
-            'mt-1 text-sm text-slate-600 whitespace-pre-wrap',
+            'mt-1 text-sm text-ink-500 whitespace-pre-wrap',
             !expanded && 'line-clamp-2'
           )}>
             {notice.body}
@@ -305,7 +306,7 @@ function NoticeRow({
                   key={i}
                   src={src}
                   alt=""
-                  className="w-full aspect-video object-cover rounded-md border border-slate-200"
+                  className="w-full aspect-video object-cover rounded-md border border-ink-100"
                 />
               ))}
             </div>
@@ -327,7 +328,7 @@ function NoticeRow({
         {/* Unread dot — anchored top-right so the row's primary content
             isn't shifted by its presence/absence. */}
         {!notice.is_read && (
-          <span className="w-2 h-2 mt-1.5 rounded-full bg-rose-500 shrink-0" />
+          <span className="w-2 h-2 mt-1.5 rounded-full bg-primary shrink-0" />
         )}
       </button>
     </li>
@@ -351,10 +352,10 @@ function EmptyState({ tab }: { tab: TabKey }) {
   };
   const m = messages[tab];
   return (
-    <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-10 text-center">
-      <BellRing className="w-10 h-10 mx-auto text-slate-300" />
-      <h3 className="mt-3 text-sm font-bold text-slate-700">{m.title}</h3>
-      <p className="mt-1 text-xs text-slate-500 max-w-xs mx-auto">{m.sub}</p>
+    <div className="bg-surface rounded-2xl shadow-sm ring-1 ring-ink-100 p-10 text-center">
+      <BellRing className="w-10 h-10 mx-auto text-ink-300" />
+      <h3 className="mt-3 text-sm font-semibold text-ink-700">{m.title}</h3>
+      <p className="mt-1 text-xs text-ink-500 max-w-xs mx-auto">{m.sub}</p>
     </div>
   );
 }

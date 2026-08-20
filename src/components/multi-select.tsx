@@ -88,9 +88,9 @@ export function MultiSelect<T extends string | number>({
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border bg-white text-left text-sm transition',
-          'border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30',
-          value.length > 0 ? 'text-slate-800' : 'text-slate-500',
+          'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border bg-surface text-left text-sm transition',
+          'border-ink-100 hover:border-ink-300 focus:outline-none focus:ring-2 focus:ring-primary/30',
+          value.length > 0 ? 'text-ink-900' : 'text-ink-500',
           disabled && 'opacity-60 cursor-not-allowed'
         )}
       >
@@ -101,33 +101,33 @@ export function MultiSelect<T extends string | number>({
               role="button"
               tabIndex={0}
               onClick={clearAll}
-              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700"
+              className="p-0.5 rounded hover:bg-ink-100 text-ink-300 hover:text-ink-700"
               aria-label="Clear selection"
             >
               <X className="w-3.5 h-3.5" />
             </span>
           )}
-          <ChevronDown className={cn('w-4 h-4 text-slate-400 transition', open && 'rotate-180')} />
+          <ChevronDown className={cn('w-4 h-4 text-ink-300 transition', open && 'rotate-180')} />
         </span>
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 min-w-[220px] bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
+        <div className="absolute z-30 mt-1 left-0 right-0 min-w-[220px] bg-surface border border-ink-100 rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
           {showSearch && (
-            <div className="relative border-b border-slate-100 p-2">
-              <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="relative border-b border-ink-100 p-2">
+              <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-ink-300" />
               <input
                 autoFocus
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search…"
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded outline-none focus:border-primary"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-ink-100 rounded outline-none focus:border-primary"
               />
             </div>
           )}
           <ul className="flex-1 overflow-y-auto py-1">
             {filtered.length === 0 && (
-              <li className="px-3 py-3 text-xs text-slate-400 text-center">No matches</li>
+              <li className="px-3 py-3 text-xs text-ink-300 text-center">No matches</li>
             )}
             {filtered.map((o) => {
               const checked = selectedSet.has(o.value);
@@ -138,12 +138,12 @@ export function MultiSelect<T extends string | number>({
                     onClick={() => toggle(o.value)}
                     className={cn(
                       'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-primary-50/60',
-                      checked && 'text-slate-900 font-medium'
+                      checked && 'text-ink-900 font-medium'
                     )}
                   >
                     <span className={cn(
                       'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition',
-                      checked ? 'bg-primary border-primary' : 'border-slate-300 bg-white'
+                      checked ? 'bg-primary border-primary' : 'border-ink-300 bg-surface'
                     )}>
                       {checked && <Check className="w-3 h-3 text-white" />}
                     </span>

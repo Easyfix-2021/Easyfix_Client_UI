@@ -1,0 +1,104 @@
+/*
+ * GENERATED FILE — do not edit.
+ *
+ * Source: src/brand/tokens.ts (semantic map) over src/brand/palette.ts
+ * (the brand primitives). Regenerate with `npm run brand:gen`;
+ * `npm run brand:verify` fails if this file has drifted from its source.
+ *
+ * Each token emits two properties:
+ *   --ef-<name>       the hex — for direct CSS and inline SVG fills
+ *   --ef-<name>-rgb   channels — for Tailwind alpha modifiers, which
+ *                     cannot be rewritten against a finished hex
+ *
+ * SINGLE THEME BY DESIGN: dark masthead and footer, white working
+ * surface. Not a light-mode variant — see src/brand/tokens.ts.
+ *
+ * Deliberately NOT wrapped in @layer base: an @import gives this file its
+ * own PostCSS scope, where `@layer base` has no matching `@tailwind base`
+ * and the build fails outright. Custom-property declarations need no
+ * layering — they are definitions, not rules competing on specificity.
+ */
+:root {
+  color-scheme: light;
+  --ef-red-50: #FBF0F1;
+  --ef-red-50-rgb: 251 240 241;
+  --ef-red-100: #F6DEE0;
+  --ef-red-100-rgb: 246 222 224;
+  --ef-red-500: #C42430;
+  --ef-red-500-rgb: 196 36 48;
+  --ef-red-600: #A71F29;
+  --ef-red-600-rgb: 167 31 41;
+  --ef-red-700: #831820;
+  --ef-red-700-rgb: 131 24 32;
+  --ef-ink-900: #171B1F;
+  --ef-ink-900-rgb: 23 27 31;
+  --ef-ink-700: #363B41;
+  --ef-ink-700-rgb: 54 59 65;
+  --ef-ink-500: #5C636B;
+  --ef-ink-500-rgb: 92 99 107;
+  --ef-ink-300: #9AA1A9;
+  --ef-ink-300-rgb: 154 161 169;
+  --ef-ink-100: #E4E7EA;
+  --ef-ink-100-rgb: 228 231 234;
+  --ef-ink-50: #F4F6F7;
+  --ef-ink-50-rgb: 244 246 247;
+  --ef-white: #FFFFFF;
+  --ef-white-rgb: 255 255 255;
+  --ef-blue-100: #E4EFFA;
+  --ef-blue-100-rgb: 228 239 250;
+  --ef-blue-500: #2A6FBF;
+  --ef-blue-500-rgb: 42 111 191;
+  --ef-blue-700: #1B4C87;
+  --ef-blue-700-rgb: 27 76 135;
+  --ef-blue-900: #10294D;
+  --ef-blue-900-rgb: 16 41 77;
+  --ef-success: #1B9E5A;
+  --ef-success-rgb: 27 158 90;
+  --ef-success-tint: #E2F5EA;
+  --ef-success-tint-rgb: 226 245 234;
+  --ef-success-text: #0E5C34;
+  --ef-success-text-rgb: 14 92 52;
+  --ef-warning: #E0930F;
+  --ef-warning-rgb: 224 147 15;
+  --ef-warning-tint: #FCF0D9;
+  --ef-warning-tint-rgb: 252 240 217;
+  --ef-warning-text: #6B4405;
+  --ef-warning-text-rgb: 107 68 5;
+  --ef-gold: #C99A2E;
+  --ef-gold-rgb: 201 154 46;
+  --ef-gold-tint: #FBF1D8;
+  --ef-gold-tint-rgb: 251 241 216;
+  --ef-gold-text: #6B4A05;
+  --ef-gold-text-rgb: 107 74 5;
+  --ef-chrome-bg: #171B1F;
+  --ef-chrome-bg-rgb: 23 27 31;
+  --ef-chrome-line: #2A3138;
+  --ef-chrome-line-rgb: 42 49 56;
+  --ef-chrome-fg: #FFFFFF;
+  --ef-chrome-fg-rgb: 255 255 255;
+  --ef-chrome-fg-2: #9AA1A9;
+  --ef-chrome-fg-2-rgb: 154 161 169;
+  --ef-chrome-red: #C42430;
+  --ef-chrome-red-rgb: 196 36 48;
+  --ef-chrome-red-fg: #E8737C;
+  --ef-chrome-red-fg-rgb: 232 115 124;
+}
+
+/*
+ * The chrome carries dark UA affordances (scrollbars, form controls) while
+ * the page as a whole stays light. Without this a sidebar scrollbar renders
+ * as a light pill on near-black.
+ */
+.ef-chrome {
+  color-scheme: dark;
+  background: var(--ef-chrome-bg);
+  color: var(--ef-chrome-fg);
+}
+
+/* Alpha-derived, not palette entries — see the generator. */
+:root {
+  --ef-chrome-fg-3: rgba(255, 255, 255, 0.34);
+  --ef-chrome-hover: rgba(255, 255, 255, 0.07);
+  --ef-chrome-sunk: rgba(255, 255, 255, 0.10);
+  --ef-chrome-edge: rgba(255, 255, 255, 0.16);
+}

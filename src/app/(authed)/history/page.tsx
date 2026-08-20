@@ -114,18 +114,22 @@ const BUCKET_OPTIONS: MultiSelectOption<string>[] = [
 
 function statusBadgeClass(status: number) {
   switch (status) {
-    case 0:  return 'bg-amber-50 text-amber-700 ring-amber-200';
-    case 1:  return 'bg-blue-50 text-blue-700 ring-blue-200';
-    case 2:  return 'bg-violet-50 text-violet-700 ring-violet-200';
+    case 0:  return 'bg-warning-tint text-warning-text ring-warning/30';
+    case 1:  return 'bg-info-tint text-info-text ring-info/30';
+    // "Tx On Location" was violet, which the brand has no equivalent for.
+    // `gold` is the nearest free slot: `info` (case 1) and `primary`
+    // (case 10) already carry other statuses in this same function, so
+    // reusing either would collapse two states into one chip colour.
+    case 2:  return 'bg-gold-tint text-gold-text ring-gold/30';
     case 3:
-    case 5:  return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-    case 6:  return 'bg-rose-50 text-rose-700 ring-rose-200';
-    case 7:  return 'bg-slate-100 text-slate-700 ring-slate-200';
-    case 9:  return 'bg-slate-100 text-slate-700 ring-slate-200';
+    case 5:  return 'bg-success-tint text-success-text ring-success/30';
+    case 6:  return 'bg-danger-tint text-danger-text ring-danger/30';
+    case 7:  return 'bg-ink-100 text-ink-700 ring-ink-300/40';
+    case 9:  return 'bg-ink-100 text-ink-700 ring-ink-300/40';
     case 10: return 'bg-primary-100 text-primary ring-primary/30';
-    case 15: return 'bg-amber-50 text-amber-700 ring-amber-200';
-    case 21: return 'bg-slate-100 text-slate-700 ring-slate-200';
-    default: return 'bg-slate-100 text-slate-700 ring-slate-200';
+    case 15: return 'bg-warning-tint text-warning-text ring-warning/30';
+    case 21: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
+    default: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
   }
 }
 
@@ -135,36 +139,43 @@ function statusBadgeClass(status: number) {
  * Estimate Approved, etc.). Keyed by exact label so the same row
  * always renders the same colour across pages.
  *
- * Palette aligns with the legacy Angular dashboard:
- *   Ready for Billing → pink (highlight: invoice is pending action)
- *   Allocated/Ongoing → blue (in flight, no action needed)
- *   Tx On Location    → violet (technician is actively working)
- *   Completed         → emerald (done)
- *   Rejected / Cancel → rose (failure)
- *   Awaiting decision → amber (waiting on someone)
- *   Fallback          → slate (no special meaning)
+ * Palette maps the legacy Angular dashboard's tones onto brand tokens.
+ * The legacy hue is kept in brackets so a reader can still match this
+ * column against the old dashboard:
+ *   Ready for Billing → money  [pink]   (it IS the invoice state)
+ *   Allocated/Ongoing → info   [blue]   (in flight, no action needed)
+ *   Tx On Location    → gold   [violet] (technician is actively working)
+ *   Completed         → success[emerald](done)
+ *   Rejected / Cancel → danger [rose]   (failure)
+ *   Awaiting decision → warning[amber]  (waiting on someone)
+ *   Fallback          → ink    [slate]  (no special meaning)
+ *
+ * `money` and `gold` are used rather than a second helping of `info` /
+ * `primary`: those two already colour other buckets in this function, and
+ * two adjacent columns colour-code status side by side, so a duplicate
+ * would erase a distinction the SPOC reads at a glance.
  */
 function bucketBadgeClass(label: string) {
   switch (label) {
-    case 'Ready for Billing':       return 'bg-pink-50 text-pink-700 ring-pink-200';
+    case 'Ready for Billing':       return 'bg-money/10 text-money ring-money/30';
     case 'Visit Completed':
     case 'Completed':
     case 'Completed on TX App':
-    case 'Estimate Approved':       return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    case 'Estimate Approved':       return 'bg-success-tint text-success-text ring-success/30';
     case 'Tx Allocated':
     case 'Tx Ongoing Order':
-    case 'New Ticket':              return 'bg-blue-50 text-blue-700 ring-blue-200';
-    case 'Tx On Location':          return 'bg-violet-50 text-violet-700 ring-violet-200';
+    case 'New Ticket':              return 'bg-info-tint text-info-text ring-info/30';
+    case 'Tx On Location':          return 'bg-gold-tint text-gold-text ring-gold/30';
     case 'Tx Unallocated':
     case 'Approve Estimate':
     case 'Ready for Full-Fillement':
-    case 'Full-Fillement on Hold':  return 'bg-amber-50 text-amber-700 ring-amber-200';
+    case 'Full-Fillement on Hold':  return 'bg-warning-tint text-warning-text ring-warning/30';
     case 'Cancel Order':
     case 'Estimate Rejected':
-    case 'Un-Authorize':            return 'bg-rose-50 text-rose-700 ring-rose-200';
+    case 'Un-Authorize':            return 'bg-danger-tint text-danger-text ring-danger/30';
     case 'Call Later':
-    case 'Enquiry Order':           return 'bg-slate-100 text-slate-700 ring-slate-200';
-    default:                        return 'bg-slate-100 text-slate-700 ring-slate-200';
+    case 'Enquiry Order':           return 'bg-ink-100 text-ink-700 ring-ink-300/40';
+    default:                        return 'bg-ink-100 text-ink-700 ring-ink-300/40';
   }
 }
 
@@ -451,8 +462,8 @@ export default function OrderHistoryPage() {
       {/* Title + action buttons */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Order History</h1>
-          <p className="text-sm text-slate-500">{currentTab.subtitle}</p>
+          <h1 className="text-2xl font-semibold text-ink-900">My Order History</h1>
+          <p className="text-sm text-ink-500">{currentTab.subtitle}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -487,8 +498,11 @@ export default function OrderHistoryPage() {
           <Link
             href="/jobs/new"
             title="Raise a new technician booking"
-            className="px-5 py-2.5 text-sm font-bold rounded-xl text-white inline-flex items-center gap-1.5 transition hover:-translate-y-0.5"
-            style={{ background: 'linear-gradient(145deg,#ff6b6b,#e53935)', boxShadow: '0 12px 24px -10px rgba(229,57,53,.7)' }}
+            className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white inline-flex items-center gap-1.5 transition hover:-translate-y-0.5"
+            style={{
+              background: 'linear-gradient(145deg,var(--ef-red-500),var(--ef-red-600))',
+              boxShadow: '0 12px 24px -10px rgb(var(--ef-red-600-rgb) / 0.7)',
+            }}
           >
             <Plus className="w-4 h-4" /> New Order
           </Link>
@@ -510,13 +524,13 @@ export default function OrderHistoryPage() {
                 'px-4 py-2 rounded-lg text-sm font-semibold transition border inline-flex items-center gap-2',
                 isActive
                   ? 'bg-primary text-white border-primary shadow-md shadow-primary/30'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  : 'bg-surface text-ink-700 border-ink-100 hover:bg-ink-50'
               )}
             >
               <span>{t.label}</span>
               <span
                 className={cn(
-                  'inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-full text-xs font-bold',
+                  'inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-full text-xs font-semibold',
                   isActive ? 'bg-white/25 text-white' : 'bg-primary/10 text-primary'
                 )}
               >
@@ -531,7 +545,7 @@ export default function OrderHistoryPage() {
       <div className="card p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
               className="input pl-9"
               placeholder="Search by Job ID, Ref ID, customer or mobile…"
@@ -553,7 +567,7 @@ export default function OrderHistoryPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Created — From</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — From</label>
             <input
               type="date"
               className="input"
@@ -563,7 +577,7 @@ export default function OrderHistoryPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Created — To</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — To</label>
             <input
               type="date"
               className="input"
@@ -573,7 +587,7 @@ export default function OrderHistoryPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">City</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">City</label>
             <MultiSelect
               label="All Cities"
               options={cityOptions}
@@ -582,7 +596,7 @@ export default function OrderHistoryPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Client Team</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Client Team</label>
             <MultiSelect
               label="All Members"
               options={teamOptions}
@@ -592,7 +606,7 @@ export default function OrderHistoryPage() {
           </div>
           {tab === 'otherOrders' && (
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Bucket</label>
+              <label className="block text-xs font-medium text-ink-500 mb-1">Bucket</label>
               <MultiSelect
                 label="All Buckets"
                 options={BUCKET_OPTIONS}
@@ -604,7 +618,7 @@ export default function OrderHistoryPage() {
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-ink-500">
             {hasAnyApplied ? (
               <span className="inline-flex items-center gap-1 text-primary font-medium">
                 <Filter className="w-3.5 h-3.5" /> Filters active
@@ -635,7 +649,7 @@ export default function OrderHistoryPage() {
       </div>
 
       {(error || exportError) && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {exportError || error}
         </div>
       )}
@@ -705,10 +719,10 @@ export default function OrderHistoryPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={colCount} className="text-center text-slate-500 py-8">Loading…</td></tr>
+              <tr><td colSpan={colCount} className="text-center text-ink-500 py-8">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={colCount} className="text-center text-slate-500 py-8">No orders found.</td></tr>
+              <tr><td colSpan={colCount} className="text-center text-ink-500 py-8">No orders found.</td></tr>
             )}
             {!loading && tab === 'otherOrders' && items.map((j) => {
               const age = ageInDays(j.requested_date_time);
@@ -718,7 +732,7 @@ export default function OrderHistoryPage() {
                     <button type="button" onClick={() => openJobDrawer(j.job_id)} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
                       #{j.job_id}
                       {j.is_escalated ? (
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Escalated" />
+                        <AlertTriangle className="w-3.5 h-3.5 text-warning" aria-label="Escalated" />
                       ) : null}
                     </button>
                   </td>
@@ -730,7 +744,7 @@ export default function OrderHistoryPage() {
                   </td>
                   <td className="truncate" title={j.city_name || ''}>{j.city_name || '—'}</td>
                   <td className="truncate" title={j.customer_name || ''}>
-                    <div className="text-slate-800 truncate">{j.customer_name || '—'}</div>
+                    <div className="text-ink-900 truncate">{j.customer_name || '—'}</div>
                   </td>
                   <td className="text-xs">{formatDate(j.requested_date_time)}</td>
                   <td>
@@ -739,7 +753,7 @@ export default function OrderHistoryPage() {
                         (CommonUtils.java#getBucketStatusForJob).
                         Examples: status 3/5 → "Completed", 9 → "New Ticket". */}
                     <span className={cn(
-                      'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 leading-tight text-center',
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ring-1 leading-tight text-center',
                       statusBadgeClass(j.job_status)
                     )}>
                       {getBucketStatusForJob(j.job_status) || '—'}
@@ -758,7 +772,7 @@ export default function OrderHistoryPage() {
                       const label = getBucketCurrentStatusForJob(j) || getBucketStatusForJob(j.job_status) || '—';
                       return (
                         <span className={cn(
-                          'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 leading-tight text-center',
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ring-1 leading-tight text-center',
                           bucketBadgeClass(label)
                         )}>
                           {label}
@@ -777,7 +791,7 @@ export default function OrderHistoryPage() {
                   <button type="button" onClick={() => openJobDrawer(j.job_id)} className="text-primary hover:underline font-semibold inline-flex items-center gap-1">
                     #{j.job_id}
                     {j.is_escalated ? (
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Escalated" />
+                      <AlertTriangle className="w-3.5 h-3.5 text-warning" aria-label="Escalated" />
                     ) : null}
                   </button>
                 </td>
@@ -787,21 +801,21 @@ export default function OrderHistoryPage() {
                 <td className="text-xs">{computeTAT(j)}</td>
                 <td className="text-xs">
                   <div>{formatDate(j.requested_date_time)}</div>
-                  {j.time_slot && <div className="text-slate-500">{j.time_slot}</div>}
+                  {j.time_slot && <div className="text-ink-500">{j.time_slot}</div>}
                 </td>
                 <td className="text-xs">{formatDate(j.checkin_date_time)}</td>
                 {/* Billing Value — total comes from SUM(job_services); not
                     yet computed in the new backend. Showing "—" keeps the
                     column shape for legacy parity. */}
-                <td className="text-xs text-slate-400">—</td>
+                <td className="text-xs text-ink-300">—</td>
                 <td>
                   {j.rating ? (
-                    <span className="inline-flex items-center gap-1 text-amber-600">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
+                    <span className="inline-flex items-center gap-1 text-gold">
+                      <Star className="w-3.5 h-3.5 fill-gold stroke-gold" />
                       <span className="text-xs font-semibold">{j.rating}</span>
                     </span>
                   ) : (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-ink-300">—</span>
                   )}
                 </td>
                 <td>
@@ -816,7 +830,7 @@ export default function OrderHistoryPage() {
                       // across two lines.
                       'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap',
                       j.job_reopen_flag === 1
-                        ? 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                        ? 'bg-ink-100 text-ink-500 ring-1 ring-ink-300/40'
                         : 'bg-primary text-white hover:bg-primary-dark'
                     )}
                     title={j.job_reopen_flag === 1 ? 'Invoice was reopened' : 'Reopen invoice'}
@@ -833,7 +847,7 @@ export default function OrderHistoryPage() {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500">
           <span>
             Showing <span className="font-semibold">{firstIdx}</span>–
             <span className="font-semibold">{lastIdx}</span> of{' '}
@@ -906,17 +920,18 @@ function ExportGatePopup({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+        className="w-full max-w-md bg-surface rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Amber header — "warning, not error" tone. Same gradient
+        {/* Warning header — "warning, not error" tone. Same gradient
             family as the rest of our modals so the dashboard feels
-            consistent. */}
-        <div className="bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 px-5 pt-5 pb-6 text-center relative">
+            consistent. Token, not decoration: this header IS the warning
+            state, so it must move if the brand's warning colour moves. */}
+        <div className="bg-gradient-to-br from-warning/80 via-warning to-warning px-5 pt-5 pb-6 text-center relative">
           <button
             type="button"
             onClick={onClose}
@@ -928,18 +943,18 @@ function ExportGatePopup({
           <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur grid place-items-center shadow-lg">
             <AlertTriangle className="w-7 h-7 text-white" />
           </div>
-          <h2 className="mt-3 text-lg font-bold text-white">Nothing to export</h2>
+          <h2 className="mt-3 text-lg font-semibold text-white">Nothing to export</h2>
         </div>
 
         <div className="px-5 py-5">
-          <p className="text-sm text-slate-700 leading-relaxed text-center">
+          <p className="text-sm text-ink-700 leading-relaxed text-center">
             {message}
           </p>
           <div className="mt-5 flex justify-center">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:shadow-md transition"
+              className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-warning/80 to-warning text-white shadow hover:shadow-md transition"
             >
               Got it
             </button>

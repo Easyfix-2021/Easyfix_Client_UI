@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { chartSeries } from '@/brand/charts';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
 
 type Technician = {
@@ -68,18 +69,16 @@ function initialsOf(name: string | null) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-// Deterministic colour per name — same tech keeps the same colour
+// Deterministic colour per name — same tech keeps the same colour.
+// Avatar hues are purely categorical (they only tell person A from
+// person B), so they come from the chart ramp rather than a brand
+// token. `.to` is the darker end, so white initials stay legible.
 function avatarBg(name: string | null) {
-  const palette = [
-    'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500',
-    'bg-violet-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500',
-    'bg-orange-500', 'bg-cyan-500',
-  ];
   let h = 0;
   for (let i = 0; i < (name || '').length; i++) {
     h = (h * 31 + (name || '').charCodeAt(i)) >>> 0;
   }
-  return palette[h % palette.length];
+  return chartSeries[h % chartSeries.length].to;
 }
 
 // ─── Star rating bar (0-5 scale; converts 0-10 inputs by /2) ─────────
@@ -89,9 +88,9 @@ function avatarBg(name: string | null) {
 // and bails to "—" on anything non-numeric so the page never crashes
 // when the backend hands us a rating in an unexpected shape.
 function StarBar({ value, max = 5 }: { value: number | string | null; max?: number }) {
-  if (value == null || value === '') return <span className="text-xs text-slate-400">—</span>;
+  if (value == null || value === '') return <span className="text-xs text-ink-300">—</span>;
   const n = typeof value === 'number' ? value : Number(value);
-  if (Number.isNaN(n)) return <span className="text-xs text-slate-400">—</span>;
+  if (Number.isNaN(n)) return <span className="text-xs text-ink-300">—</span>;
   return (
     <span className="inline-flex items-center gap-0.5">
       {Array.from({ length: max }).map((_, i) => (
@@ -100,12 +99,12 @@ function StarBar({ value, max = 5 }: { value: number | string | null; max?: numb
           className={cn(
             'w-3.5 h-3.5',
             i < Math.round(n)
-              ? 'fill-amber-400 stroke-amber-500'
-              : 'fill-slate-100 stroke-slate-300'
+              ? 'fill-gold stroke-gold'
+              : 'fill-ink-100 stroke-ink-300'
           )}
         />
       ))}
-      <span className="text-xs text-slate-600 font-semibold ml-1">
+      <span className="text-xs text-ink-500 font-semibold ml-1">
         {n.toFixed(1)}
       </span>
     </span>
@@ -115,13 +114,13 @@ function StarBar({ value, max = 5 }: { value: number | string | null; max?: numb
 function StatusBadge({ status }: { status: number | null }) {
   if (status === 1) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-semibold">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-tint text-success-text ring-1 ring-success/40 text-xs font-semibold">
         <Shield className="w-3 h-3" /> Active
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 text-xs font-semibold">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ink-100 text-ink-500 ring-1 ring-ink-300/40 text-xs font-semibold">
       <ShieldOff className="w-3 h-3" /> Inactive
     </span>
   );
@@ -133,7 +132,7 @@ function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }
   // `title` tooltip — users couldn't tell the +N chip was interactive.
   const [expanded, setExpanded] = useState(false);
 
-  if (!csv) return <span className="text-xs text-slate-400">No services</span>;
+  if (!csv) return <span className="text-xs text-ink-300">No services</span>;
   const all = csv.split(',').map((s) => s.trim()).filter(Boolean);
   const shown = expanded ? all : all.slice(0, max);
   const hidden = all.length - shown.length;
@@ -142,7 +141,7 @@ function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }
       {shown.map((s) => (
         <span
           key={s}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold"
         >
           <Briefcase className="w-2.5 h-2.5" />
           {s}
@@ -152,7 +151,7 @@ function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer transition"
+          className="inline-flex items-center px-2 py-0.5 rounded-full bg-ink-50 hover:bg-ink-100 text-ink-700 text-xs font-semibold cursor-pointer transition"
         >
           +{hidden} more
         </button>
@@ -161,7 +160,7 @@ function ServiceTypeChips({ csv, max = 3 }: { csv: string | null; max?: number }
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer transition"
+          className="inline-flex items-center px-2 py-0.5 rounded-full bg-ink-50 hover:bg-ink-100 text-ink-700 text-xs font-semibold cursor-pointer transition"
         >
           Show less
         </button>
@@ -220,10 +219,10 @@ export default function MyTechniciansPage() {
     <div className="space-y-5">
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
+        <h1 className="text-2xl font-semibold text-ink-900 inline-flex items-center gap-2">
           <HardHat className="w-6 h-6 text-primary" /> My Technicians
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-ink-500">
           Easyfixers mapped to your account across cities and service types.
         </p>
       </div>
@@ -231,23 +230,23 @@ export default function MyTechniciansPage() {
       {/* Summary chips */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">
+          <div className="text-xs text-ink-500 uppercase tracking-wide">
             {status === 'true' ? 'Active' : status === 'false' ? 'Inactive' : 'Total'} Technicians
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
+          <div className="text-2xl font-semibold text-ink-900 mt-1">
             {loading && data == null ? '…' : total.toLocaleString('en-IN')}
           </div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">Cities (this page)</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
+          <div className="text-xs text-ink-500 uppercase tracking-wide">Cities (this page)</div>
+          <div className="text-2xl font-semibold text-ink-900 mt-1">
             {new Set(items.map((t) => t.city).filter(Boolean)).size || '—'}
           </div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">Avg Skill (this page)</div>
-          <div className="text-2xl font-bold text-amber-600 mt-1 inline-flex items-center gap-1">
-            <Star className="w-5 h-5 fill-amber-400 stroke-amber-500" />
+          <div className="text-xs text-ink-500 uppercase tracking-wide">Avg Skill (this page)</div>
+          <div className="text-2xl font-semibold text-gold mt-1 inline-flex items-center gap-1">
+            <Star className="w-5 h-5 fill-gold stroke-gold" />
             {pageAvgSkill == null ? '—' : pageAvgSkill.toFixed(1)}
           </div>
         </div>
@@ -256,7 +255,7 @@ export default function MyTechniciansPage() {
       {/* Filter row */}
       <div className="card p-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-9"
             placeholder="Search by name, mobile or email…"
@@ -283,7 +282,7 @@ export default function MyTechniciansPage() {
             type="button"
             onClick={() => setQ('')}
             className="btn-outline text-xs"
-            title="Clear search"
+            title="Clear Search"
           >
             Reset
           </button>
@@ -291,7 +290,7 @@ export default function MyTechniciansPage() {
       </div>
 
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/40 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -299,10 +298,10 @@ export default function MyTechniciansPage() {
       {/* Grid view — only view, table removed per request. */}
       <>
           {loading && (
-            <div className="card p-8 text-center text-slate-500">Loading…</div>
+            <div className="card p-8 text-center text-ink-500">Loading…</div>
           )}
           {!loading && items.length === 0 && (
-            <div className="card p-8 text-center text-slate-500">No technicians found.</div>
+            <div className="card p-8 text-center text-ink-500">No technicians found.</div>
           )}
           {!loading && items.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -310,54 +309,54 @@ export default function MyTechniciansPage() {
                 <div key={t.id} className="card p-4 hover:shadow-md transition">
                   {/* Top: avatar + name + status */}
                   <div className="flex items-start gap-3 mb-3">
-                    <div className={cn(
-                      'w-12 h-12 rounded-xl text-white font-bold flex items-center justify-center shrink-0 text-sm',
-                      avatarBg(t.name)
-                    )}>
+                    <div
+                      className="w-12 h-12 rounded-xl text-white font-semibold flex items-center justify-center shrink-0 text-sm"
+                      style={{ background: avatarBg(t.name) }}
+                    >
                       {initialsOf(t.name)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold text-slate-900 truncate">{t.name || '—'}</div>
+                        <div className="font-semibold text-ink-900 truncate">{t.name || '—'}</div>
                         <StatusBadge status={t.status} />
                       </div>
-                      <div className="text-[11px] text-slate-500">EFR #{t.id}</div>
+                      <div className="text-xs text-ink-500">EFR #{t.id}</div>
                     </div>
                   </div>
 
                   {/* City row — phone/email intentionally hidden so
                       customers' contacts don't leak unnecessarily. */}
                   <div className="text-xs mb-3">
-                    <div className="inline-flex items-center gap-1 text-slate-700 truncate">
-                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                    <div className="inline-flex items-center gap-1 text-ink-700 truncate">
+                      <MapPin className="w-3 h-3 text-ink-300 shrink-0" />
                       <span className="truncate">{t.city || '—'}</span>
                     </div>
                   </div>
 
                   {/* Service-type chips */}
-                  <div className="mb-3 pb-3 border-b border-slate-100">
+                  <div className="mb-3 pb-3 border-b border-ink-100">
                     <ServiceTypeChips csv={t.service_categories} max={4} />
                   </div>
 
                   {/* Ratings + stats — 3-col grid */}
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
+                      <div className="text-xs text-ink-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
                         <Wrench className="w-2.5 h-2.5" /> Skill
                       </div>
                       <StarBar value={(() => { const v = num(t.skill_rating); return v != null ? v / 2 : null; })()} />
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
+                      <div className="text-xs text-ink-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
                         <Award className="w-2.5 h-2.5" /> Tool
                       </div>
                       <StarBar value={(() => { const v = num(t.tool_rating); return v != null ? v / 2 : null; })()} />
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
+                      <div className="text-xs text-ink-500 uppercase tracking-wider mb-0.5 inline-flex items-center gap-0.5">
                         <Briefcase className="w-2.5 h-2.5" /> Jobs
                       </div>
-                      <div className="text-sm font-bold text-slate-800">{Number(t.total_jobs) || 0}</div>
+                      <div className="text-sm font-semibold text-ink-900">{Number(t.total_jobs) || 0}</div>
                     </div>
                   </div>
                 </div>
@@ -368,7 +367,7 @@ export default function MyTechniciansPage() {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500">
           <span>
             Showing <span className="font-semibold">{firstIdx}</span>–
             <span className="font-semibold">{lastIdx}</span> of{' '}
@@ -419,7 +418,7 @@ export default function MyTechniciansPage() {
                   const v = Math.max(1, Math.min(pageCount, Number(e.target.value) || 1));
                   setPage(v);
                 }}
-                className="w-14 px-2 py-1 text-center border border-slate-300 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-14 px-2 py-1 text-center border border-ink-100 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                 aria-label="Go to page"
               />
               of <span className="font-semibold">{pageCount}</span>

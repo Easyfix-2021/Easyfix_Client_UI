@@ -141,14 +141,14 @@ export default function EscalatedOrdersPage() {
       {/* Title */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
-            <Flame className="w-6 h-6 text-orange-500" /> Escalated Orders
+          <h1 className="text-2xl font-semibold text-ink-900 inline-flex items-center gap-2">
+            <Flame className="w-6 h-6 text-danger" /> Escalated Orders
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-500">
             Orders flagged by customers as needing senior attention.
           </p>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 ring-1 ring-orange-200 text-sm font-semibold">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-danger-tint text-danger-text ring-1 ring-danger/30 text-sm font-semibold">
           <Flame className="w-4 h-4" />
           {loading && data == null ? '…' : `${total} escalated`}
         </div>
@@ -158,7 +158,7 @@ export default function EscalatedOrdersPage() {
       <div className="card p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
               className="input pl-9"
               placeholder="Search by Job ID, Ref ID, customer or mobile…"
@@ -180,7 +180,7 @@ export default function EscalatedOrdersPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Created — From</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — From</label>
             <input
               type="date" className="input"
               value={staged.startDate}
@@ -189,7 +189,7 @@ export default function EscalatedOrdersPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Created — To</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — To</label>
             <input
               type="date" className="input"
               value={staged.endDate}
@@ -198,7 +198,7 @@ export default function EscalatedOrdersPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">City</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">City</label>
             <MultiSelect
               label="All Cities" options={cityOptions}
               value={staged.cityIds}
@@ -206,7 +206,7 @@ export default function EscalatedOrdersPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Client Team</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Client Team</label>
             <MultiSelect
               label="All Members" options={teamOptions}
               value={staged.ownerIds}
@@ -216,7 +216,7 @@ export default function EscalatedOrdersPage() {
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-ink-500">
             {hasAnyApplied ? (
               <span className="inline-flex items-center gap-1 text-primary font-medium">
                 <Filter className="w-3.5 h-3.5" /> Filters active
@@ -243,7 +243,7 @@ export default function EscalatedOrdersPage() {
       </div>
 
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -264,50 +264,50 @@ export default function EscalatedOrdersPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="text-center text-slate-500 py-8">Loading…</td></tr>
+              <tr><td colSpan={6} className="text-center text-ink-500 py-8">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-slate-500 py-8">No escalated orders found.</td></tr>
+              <tr><td colSpan={6} className="text-center text-ink-500 py-8">No escalated orders found.</td></tr>
             )}
             {!loading && items.map((j) => (
-              <tr key={j.job_id} className="hover:bg-orange-50/40">
+              <tr key={j.job_id} className="hover:bg-danger-tint/40">
                 <td>
                   <button
                     type="button"
                     onClick={() => openJobDrawer(j.job_id)}
                     className="text-primary hover:underline font-semibold inline-flex items-center gap-1"
                   >
-                    <Flame className="w-3.5 h-3.5 text-orange-500" aria-label="Escalated" />
+                    <Flame className="w-3.5 h-3.5 text-danger" aria-label="Escalated" />
                     #{j.job_id}
                   </button>
                 </td>
                 <td>
-                  <div className="text-slate-800">{j.escalated_by_name || '—'}</div>
+                  <div className="text-ink-900">{j.escalated_by_name || '—'}</div>
                   {j.escalated_by_user && (
-                    <div className="text-xs text-slate-500 capitalize">{j.escalated_by_user}</div>
+                    <div className="text-xs text-ink-500 capitalize">{j.escalated_by_user}</div>
                   )}
                 </td>
                 <td>
                   <span className={cn(
-                    'inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full text-xs font-bold',
+                    'inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full text-xs font-semibold',
                     (j.no_of_escalations ?? 0) >= 3
-                      ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
+                      ? 'bg-danger-tint text-danger-text ring-1 ring-danger/30'
                       : (j.no_of_escalations ?? 0) >= 2
-                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                        : 'bg-orange-50 text-orange-700 ring-1 ring-orange-200'
+                        ? 'bg-warning-tint text-warning-text ring-1 ring-warning/30'
+                        : 'bg-warning-tint/60 text-warning-text ring-1 ring-warning/20'
                   )}>
                     {j.no_of_escalations ?? 0}
                   </span>
                 </td>
                 <td className="text-xs">{formatEscalatedTime(j.escalated_time)}</td>
                 <td className="text-sm">{j.customer_name || '—'}</td>
-                <td className="text-xs text-slate-600 max-w-xs">
+                <td className="text-xs text-ink-500 max-w-xs">
                   {j.escalated_comments ? (
                     <span className="line-clamp-2" title={j.escalated_comments}>
                       {j.escalated_comments}
                     </span>
                   ) : (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-ink-300">—</span>
                   )}
                 </td>
               </tr>
@@ -318,7 +318,7 @@ export default function EscalatedOrdersPage() {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500">
           <span>
             Showing <span className="font-semibold">{firstIdx}</span>–
             <span className="font-semibold">{lastIdx}</span> of{' '}
