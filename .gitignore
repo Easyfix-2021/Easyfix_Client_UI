@@ -4,3 +4,8 @@ node_modules
 
 .env*
 !.env.example
+
+# macOS Finder metadata — written into any directory the folder is opened in.
+# Already ignored in the other EasyFix repos; it was surfacing as untracked
+# noise here on every `git status`.
+.DS_Store
