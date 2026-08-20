@@ -29,6 +29,7 @@ import {
   Menu,
   Smartphone,
   ChevronDown,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -95,6 +96,8 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
   // the `md` breakpoint (768px). Prevents the 256px-wide sidebar from
   // hiding the hamburger toggle on phones.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Top-bar global search — routes to Order History with the query.
+  const [search, setSearch] = useState('');
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.innerWidth < 768) setSidebarOpen(false);
@@ -379,6 +382,28 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
           >
             <Menu className="w-5 h-5" />
           </button>
+
+          {/* Global search — Enter routes to Order History filtered by the term. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const term = search.trim();
+              if (term) router.push(`/history?q=${encodeURIComponent(term)}`);
+            }}
+            className="hidden md:flex flex-1 max-w-md"
+          >
+            <div className="relative w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search orders, tickets, technicians…"
+                aria-label="Search"
+                className="w-full h-10 pl-10 pr-4 rounded-full bg-slate-50 border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 focus:bg-white transition"
+              />
+            </div>
+          </form>
 
           <div className="ml-auto flex items-center gap-3 md:gap-5">
             {/* Get the App — reopens the mobile-app promo any time. */}

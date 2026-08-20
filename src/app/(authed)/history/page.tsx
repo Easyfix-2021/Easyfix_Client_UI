@@ -249,6 +249,26 @@ export default function OrderHistoryPage() {
     }
   }, [tab, staged.bucketValues.length]);
 
+  // Deep-link: the dashboard status tiles (New / In Progress / Completed)
+  // link here with ?flag= and ?statuses=. Seed the tab + status filter
+  // once on mount so the list lands pre-filtered. Read from window
+  // (client-only) to avoid the useSearchParams Suspense requirement.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const flag = sp.get('flag');
+    const statuses = sp.get('statuses');
+    const qParam = sp.get('q');
+    if (flag === 'completedOrders' || flag === 'otherOrders') setTab(flag);
+    if (qParam) setQ(qParam);
+    if (statuses) {
+      const seeded: FilterState = { ...EMPTY_FILTERS, bucketValues: [statuses] };
+      setStaged(seeded);
+      setApplied(seeded);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentTab = useMemo(() => TABS.find((t) => t.key === tab) ?? TABS[0], [tab]);
 
   const cityLookup = useFetchOnce<{ items: { id: number; name: string }[] }>('/lookup/cities');
