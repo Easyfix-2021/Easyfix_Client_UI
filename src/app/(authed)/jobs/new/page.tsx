@@ -677,7 +677,7 @@ export default function NewOrderPage() {
 
   if (!bootstrapped) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-ink-500">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
         <p className="mt-3 text-sm">Loading your order form…</p>
       </div>
@@ -686,7 +686,7 @@ export default function NewOrderPage() {
 
   if (bootError) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-rose-600">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-danger">
         <AlertCircle className="w-8 h-8" />
         <p className="mt-3 text-sm">{bootError}</p>
       </div>
@@ -694,34 +694,34 @@ export default function NewOrderPage() {
   }
 
   return (
-    <form onSubmit={submit} className="-m-4 md:-m-6 px-4 md:px-6 pt-4 md:pt-6 pb-32 min-h-[calc(100vh-4rem)] bg-[#f6f2ea]">
+    <form onSubmit={submit} className="-m-4 md:-m-6 px-4 md:px-6 pt-4 md:pt-6 pb-32 min-h-[calc(100vh-4rem)] bg-ink-50">
      <div className="max-w-6xl mx-auto px-1 sm:px-0">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-500 mb-4">
+      <div className="flex items-center gap-1.5 text-xs sm:text-sm text-ink-500 mb-4">
         <Link href="/dashboard" className="hover:text-primary">Dashboard</Link>
-        <ChevronRight className="w-3 h-3 text-slate-300" />
-        <span className="font-semibold text-slate-800">New Order</span>
+        <ChevronRight className="w-3 h-3 text-ink-300" />
+        <span className="font-semibold text-ink-900">New Order</span>
       </div>
 
       {/* Title — warm editorial header (reference style) */}
       <div className="mb-7 sm:mb-8">
-        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary mb-2">New order</div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-none">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-2">New order</div>
+        <h1 className="text-3xl sm:text-4xl font-semibold text-ink-900 tracking-tight leading-none">
           Book a technician<span className="text-primary">.</span>
         </h1>
-        <p className="text-sm sm:text-base text-slate-500 mt-2.5">Find the customer, tell us the job — we&apos;ll dispatch a technician right away.</p>
+        <p className="text-sm sm:text-base text-ink-500 mt-2.5">Find the customer, tell us the job — we&apos;ll dispatch a technician right away.</p>
       </div>
 
       {/* Find the customer — enter a store code OR a mobile number; either one
           pulls in the contact & address. No mode to choose. */}
-      <div className="bg-white border border-[#ece7de] rounded-3xl shadow-[0_2px_20px_-10px_rgba(20,25,40,0.12)] p-5 sm:p-6 mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary/70 mb-4">
+      <div className="bg-surface border border-ink-100 rounded-3xl shadow-[0_2px_20px_-10px_rgb(var(--ef-ink-900-rgb)_/_0.12)] p-5 sm:p-6 mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/70 mb-4">
           Find the customer — store code or mobile
         </p>
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           {/* Store code */}
           <div data-field="storeCode" className="flex-1 min-w-0">
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wide text-ink-500 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-primary" /> Book by store code
             </label>
             <div className="mt-1.5 relative">
@@ -733,14 +733,14 @@ export default function NewOrderPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setStoreOpen(false); (e.target as HTMLInputElement).blur(); } if (e.key === 'Escape') setStoreOpen(false); }}
                 placeholder="Type a store code or name…"
                 autoComplete="off"
-                className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.storeCode && 'border-rose-300 ring-1 ring-rose-300')}
+                className={cn('w-full rounded-lg border border-ink-100 px-3 py-2 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.storeCode && 'border-danger/40 ring-1 ring-danger/40')}
               />
               {storeLookup === 'loading' && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Looking up…</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-300">Looking up…</span>
               )}
               {/* Suggestions dropdown */}
               {storeOpen && storeSuggestions.length > 0 && (
-                <ul className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg py-1">
+                <ul className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-surface border border-ink-100 rounded-xl shadow-lg py-1">
                   {storeSuggestions.map((s) => (
                     <li key={s.id}>
                       <button
@@ -748,10 +748,10 @@ export default function NewOrderPage() {
                         onMouseDown={(e) => { e.preventDefault(); applyStore(s); }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-primary/5"
                       >
-                        <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 grid place-items-center shrink-0"><Store className="w-3.5 h-3.5" /></span>
+                        <span className="w-7 h-7 rounded-lg bg-info-tint text-info grid place-items-center shrink-0"><Store className="w-3.5 h-3.5" /></span>
                         <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-slate-800 truncate">{s.store_code}</span>
-                          <span className="block text-xs text-slate-500 truncate">{s.store_name || '—'}{s.city_name ? ` · ${s.city_name}` : ''}</span>
+                          <span className="block text-sm font-semibold text-ink-900 truncate">{s.store_code}</span>
+                          <span className="block text-xs text-ink-500 truncate">{s.store_name || '—'}{s.city_name ? ` · ${s.city_name}` : ''}</span>
                         </span>
                       </button>
                     </li>
@@ -762,48 +762,48 @@ export default function NewOrderPage() {
           </div>
 
           {/* OR divider — either entry identifies the customer */}
-          <span className="shrink-0 self-center sm:mb-2 w-9 h-9 rounded-full border border-slate-200 bg-slate-50 grid place-items-center text-[10px] font-extrabold tracking-wide text-slate-400">OR</span>
+          <span className="shrink-0 self-center sm:mb-2 w-9 h-9 rounded-full border border-ink-100 bg-ink-50 grid place-items-center text-xs font-semibold tracking-wide text-ink-300">OR</span>
 
           {/* Customer mobile — either this OR a matched store identifies the customer */}
           <div data-field="customer_mob_no" className="flex-1 min-w-0">
-            <label className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-              <Phone className="w-3.5 h-3.5 text-primary" /> Customer mobile {!storeMatched && <span className="text-rose-500">*</span>}
+            <label className="text-xs font-semibold uppercase tracking-wide text-ink-500 flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5 text-primary" /> Customer mobile {!storeMatched && <span className="text-danger">*</span>}
             </label>
             <div className="mt-1.5 relative">
               <input
-                className={cn('w-full rounded-lg border border-slate-300 px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.customer_mob_no && 'border-rose-300 ring-1 ring-rose-300')}
+                className={cn('w-full rounded-lg border border-ink-100 px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30', fieldErrors.customer_mob_no && 'border-danger/40 ring-1 ring-danger/40')}
                 inputMode="numeric"
                 maxLength={10}
                 value={form.customer_mob_no}
                 onChange={(e) => setField('customer_mob_no', e.target.value.replace(/\D/g, ''))}
                 placeholder="10-digit mobile"
               />
-              {customerLookup.state === 'loading' && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />}
-              {customerLookup.state === 'found' && <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />}
+              {customerLookup.state === 'loading' && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-300 animate-spin" />}
+              {customerLookup.state === 'found' && <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-success" />}
               {customerLookup.state === 'new' && <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />}
             </div>
-            {fieldErrors.customer_mob_no && <p className="mt-1 text-xs text-rose-600">{fieldErrors.customer_mob_no}</p>}
-            {!fieldErrors.customer_mob_no && customerLookup.state === 'found' && <p className="mt-1 text-xs text-emerald-700">Existing customer — name filled below.</p>}
+            {fieldErrors.customer_mob_no && <p className="mt-1 text-xs text-danger">{fieldErrors.customer_mob_no}</p>}
+            {!fieldErrors.customer_mob_no && customerLookup.state === 'found' && <p className="mt-1 text-xs text-success-text">Existing customer — name filled below.</p>}
             {!fieldErrors.customer_mob_no && customerLookup.state === 'new' && <p className="mt-1 text-xs text-primary">New customer — add a name below.</p>}
           </div>
         </div>
         {storeLookup === 'notfound' && !newStore && (
           <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-xs font-semibold text-rose-600">No store found for “{storeCode.trim()}”.</p>
+            <p className="text-xs font-semibold text-danger">No store found for “{storeCode.trim()}”.</p>
             <button type="button"
               onClick={() => { setNewStore(true); setField('client_ref_id', storeCode.trim()); }}
-              className="text-xs font-bold text-primary inline-flex items-center gap-1 hover:underline">
+              className="text-xs font-semibold text-primary inline-flex items-center gap-1 hover:underline">
               <Plus className="w-3.5 h-3.5" /> Book “{storeCode.trim()}” as a new store
             </button>
           </div>
         )}
         {newStore && (
-          <p className="mt-2 text-xs font-semibold text-blue-700 inline-flex items-center gap-1.5">
+          <p className="mt-2 text-xs font-semibold text-info-text inline-flex items-center gap-1.5">
             <Check className="w-3.5 h-3.5" /> New store “{storeCode.trim()}” — add the customer name, mobile &amp; address below.
           </p>
         )}
         {fieldErrors.storeCode && storeLookup !== 'notfound' && (
-          <p className="mt-2 text-xs text-rose-600 inline-flex items-center gap-1">
+          <p className="mt-2 text-xs text-danger inline-flex items-center gap-1">
             <AlertCircle className="w-3 h-3" /> {fieldErrors.storeCode}
           </p>
         )}
@@ -811,45 +811,45 @@ export default function NewOrderPage() {
         {storeLookup === 'found' ? (
           // Matched store — show its details right here, so the SPOC doesn't
           // re-enter the customer/address (those fields are hidden below).
-          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+          <div className="mt-3 rounded-xl border border-success/30 bg-success-tint/60 p-3">
             <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-lg bg-white grid place-items-center text-blue-600 shrink-0">
+              <span className="w-8 h-8 rounded-lg bg-surface grid place-items-center text-info shrink-0">
                 <Store className="w-4 h-4" />
               </span>
               <div className="min-w-0">
-                <div className="text-sm font-bold text-slate-900 truncate">{storeName}</div>
-                <div className="text-[11px] font-semibold text-emerald-700 inline-flex items-center gap-1">
+                <div className="text-sm font-semibold text-ink-900 truncate">{storeName}</div>
+                <div className="text-xs font-semibold text-success-text inline-flex items-center gap-1">
                   <Check className="w-3 h-3" /> Matched — details filled from your directory
                 </div>
               </div>
             </div>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {form.customer_name && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1">
-                  <User className="w-3 h-3 text-emerald-600" /> {form.customer_name}
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-700 bg-surface border border-success/30 rounded-full px-2.5 py-1">
+                  <User className="w-3 h-3 text-success" /> {form.customer_name}
                 </span>
               )}
               {form.customer_mob_no && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1">
-                  <Phone className="w-3 h-3 text-emerald-600" /> {form.customer_mob_no}
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-700 bg-surface border border-success/30 rounded-full px-2.5 py-1">
+                  <Phone className="w-3 h-3 text-success" /> {form.customer_mob_no}
                 </span>
               )}
               {form.address && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white border border-emerald-200 rounded-full px-2.5 py-1 max-w-full">
-                  <MapPin className="w-3 h-3 text-emerald-600 shrink-0" /> <span className="truncate">{form.address}</span>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-700 bg-surface border border-success/30 rounded-full px-2.5 py-1 max-w-full">
+                  <MapPin className="w-3 h-3 text-success shrink-0" /> <span className="truncate">{form.address}</span>
                 </span>
               )}
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[11px] text-slate-400">
+          <p className="mt-1.5 text-xs text-ink-300">
             Fills contact &amp; address — you only add the service, description &amp; appointment.
           </p>
         )}
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 flex items-start gap-2 mb-5">
+        <div className="rounded-lg border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text flex items-start gap-2 mb-5">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {error}
         </div>
       )}
@@ -882,13 +882,13 @@ export default function NewOrderPage() {
                 }
               >
                 <input
-                  className={cn('input', fieldErrors.customer_name && 'ring-1 ring-rose-300')}
+                  className={cn('input', fieldErrors.customer_name && 'ring-1 ring-danger/40')}
                   value={form.customer_name}
                   onChange={(e) => setField('customer_name', e.target.value)}
                   placeholder="Person who'll coordinate with the technician"
                 />
                 {altSummary && (
-                  <p className="mt-1.5 text-xs text-slate-500 inline-flex items-center gap-1">
+                  <p className="mt-1.5 text-xs text-ink-500 inline-flex items-center gap-1">
                     <Tag className="w-3 h-3" /> Alt: {altSummary}
                   </p>
                 )}
@@ -902,7 +902,7 @@ export default function NewOrderPage() {
                 dataField="service_category_ids"
               >
                 {categories.length === 0 ? (
-                  <div className="text-sm text-slate-400 italic border border-dashed border-slate-200 rounded-xl px-4 py-6 text-center">
+                  <div className="text-sm text-ink-300 italic border border-dashed border-ink-100 rounded-xl px-4 py-6 text-center">
                     No categories configured for your account.
                   </div>
                 ) : (
@@ -927,8 +927,8 @@ export default function NewOrderPage() {
                             on
                               ? 'border-primary bg-primary-50/60 shadow-sm'
                               : fieldErrors.service_category_ids
-                                ? 'border-rose-200 hover:border-slate-300 bg-white'
-                                : 'border-slate-200 hover:border-slate-300 bg-white',
+                                ? 'border-danger/30 hover:border-ink-100 bg-surface'
+                                : 'border-ink-100 hover:border-ink-100 bg-surface',
                           )}
                         >
                           {on && (
@@ -936,8 +936,8 @@ export default function NewOrderPage() {
                               <Check className="w-2.5 h-2.5" strokeWidth={3} />
                             </span>
                           )}
-                          <Icon className={cn('w-7 h-7', on ? 'text-primary' : 'text-slate-500')} strokeWidth={1.6} />
-                          <span className={cn('text-xs font-semibold leading-tight', on ? 'text-primary' : 'text-slate-600')}>
+                          <Icon className={cn('w-7 h-7', on ? 'text-primary' : 'text-ink-500')} strokeWidth={1.6} />
+                          <span className={cn('text-xs font-semibold leading-tight', on ? 'text-primary' : 'text-ink-500')}>
                             {cat.name}
                           </span>
                         </button>
@@ -956,7 +956,7 @@ export default function NewOrderPage() {
               >
                 <textarea
                   rows={3}
-                  className={cn('input resize-y', fieldErrors.job_desc && 'ring-1 ring-rose-300')}
+                  className={cn('input resize-y', fieldErrors.job_desc && 'ring-1 ring-danger/40')}
                   value={form.job_desc}
                   onChange={(e) => setField('job_desc', e.target.value)}
                   placeholder="e.g. AC stops cooling after 20 minutes, water leaking near the indoor unit."
@@ -976,7 +976,7 @@ export default function NewOrderPage() {
                           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition',
                           on
                             ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            : 'bg-surface text-ink-700 border-ink-100 hover:border-ink-100'
                         )}
                       >
                         {on && <Check className="w-3.5 h-3.5" />}
@@ -989,7 +989,7 @@ export default function NewOrderPage() {
 
               {/* Payment — segmented control */}
               <Field label="Payment mode" icon={CreditCard}>
-                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                <div className="inline-flex rounded-lg border border-ink-100 bg-ink-50 p-1">
                   {([
                     ['paid', 'Paid by Customer'],
                     ['free', 'Free for Customer'],
@@ -1000,8 +1000,8 @@ export default function NewOrderPage() {
                       className={cn(
                         'px-3 py-1.5 rounded-md text-sm font-medium transition',
                         form.payment === k
-                          ? 'bg-white text-primary shadow-sm border border-slate-200'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-surface text-primary shadow-sm border border-ink-100'
+                          : 'text-ink-500 hover:text-ink-900'
                       )}
                     >
                       {label}
@@ -1012,8 +1012,8 @@ export default function NewOrderPage() {
 
               {/* Custom properties — if any */}
               {customProps.length > 0 && (
-                <div className="md:col-span-2 pt-3 mt-1 border-t border-slate-100">
-                  <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2 inline-flex items-center gap-1">
+                <div className="md:col-span-2 pt-3 mt-1 border-t border-ink-100">
+                  <div className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2 inline-flex items-center gap-1">
                     <Tag className="w-3 h-3" /> Custom properties
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1027,7 +1027,7 @@ export default function NewOrderPage() {
                         dataField={`cp_${cp.name}`}
                       >
                         <input
-                          className={cn('input', fieldErrors[`cp_${cp.name}`] && 'ring-1 ring-rose-300')}
+                          className={cn('input', fieldErrors[`cp_${cp.name}`] && 'ring-1 ring-danger/40')}
                           value={form.custom_props[cp.name] ?? ''}
                           onChange={(e) =>
                             setForm((f) => ({
@@ -1061,35 +1061,35 @@ export default function NewOrderPage() {
                   type="button"
                   onClick={() => setSelectAddressOpen(true)}
                   className={cn(
-                    'w-full text-left rounded-lg border bg-white px-4 py-3 transition',
+                    'w-full text-left rounded-lg border bg-surface px-4 py-3 transition',
                     fieldErrors.address || fieldErrors.city_id
-                      ? 'border-rose-300 ring-1 ring-rose-200'
-                      : 'border-slate-200 hover:border-primary hover:bg-primary/5'
+                      ? 'border-danger/40 ring-1 ring-danger/30'
+                      : 'border-ink-100 hover:border-primary hover:bg-primary/5'
                   )}
                 >
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1.5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 mb-1.5">
                     Address for Technician
                   </div>
                   {form.address || form.building ? (
                     <>
-                      <div className="text-sm text-slate-900 leading-snug">
+                      <div className="text-sm text-ink-900 leading-snug">
                         {[form.building, form.address].filter(Boolean).join(', ')}
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
+                      <div className="text-xs text-ink-500 mt-0.5">
                         {[cities.find((c) => c.id === form.city_id)?.name, form.pin_code, form.landmark]
                           .filter(Boolean)
                           .join(', ')}
                       </div>
                     </>
                   ) : (
-                    <div className="text-sm text-slate-400 italic inline-flex items-center gap-2">
+                    <div className="text-sm text-ink-300 italic inline-flex items-center gap-2">
                       <MapPinned className="w-4 h-4" />
                       Click to select or add an address
                     </div>
                   )}
                 </button>
                 {(fieldErrors.address || fieldErrors.city_id) && (
-                  <p className="text-xs text-rose-600 mt-1.5 inline-flex items-center gap-1">
+                  <p className="text-xs text-danger mt-1.5 inline-flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     {fieldErrors.address || fieldErrors.city_id}
                   </p>
@@ -1104,7 +1104,7 @@ export default function NewOrderPage() {
                 className="md:col-span-2"
               >
                 <input
-                  className={cn('input', fieldErrors.client_ref_id && 'ring-1 ring-rose-300')}
+                  className={cn('input', fieldErrors.client_ref_id && 'ring-1 ring-danger/40')}
                   value={form.client_ref_id}
                   onChange={(e) => setField('client_ref_id', e.target.value)}
                   placeholder="Your internal order / ticket reference"
@@ -1136,7 +1136,7 @@ export default function NewOrderPage() {
               >
                 <input
                   type="date"
-                  className={cn('input', fieldErrors.appt_date && 'ring-1 ring-rose-300')}
+                  className={cn('input', fieldErrors.appt_date && 'ring-1 ring-danger/40')}
                   value={form.appt_date}
                   min={todayLocalISO()}
                   onChange={(e) => setField('appt_date', e.target.value)}
@@ -1161,10 +1161,10 @@ export default function NewOrderPage() {
                           'px-3 py-2 rounded-lg text-sm font-semibold border transition text-left inline-flex items-center gap-1.5',
                           on
                             ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            : 'bg-surface text-ink-700 border-ink-100 hover:border-ink-100'
                         )}
                       >
-                        <Clock className={cn('w-3.5 h-3.5 shrink-0', on ? 'text-white' : 'text-slate-400')} />
+                        <Clock className={cn('w-3.5 h-3.5 shrink-0', on ? 'text-white' : 'text-ink-300')} />
                         <span className="truncate">{s}</span>
                         {on && <Check className="w-4 h-4 ml-auto" />}
                       </button>
@@ -1180,16 +1180,16 @@ export default function NewOrderPage() {
             subtitle="Optional — photos or short videos that help the technician prepare.">
             <div className={cn(
               'rounded-xl border-2 border-dashed p-5 transition',
-              files.length > 0 ? 'border-primary/30 bg-primary-50/30' : 'border-slate-200 bg-slate-50/40'
+              files.length > 0 ? 'border-primary/30 bg-primary-50/30' : 'border-ink-100 bg-ink-50/40'
             )}>
               {files.length === 0 ? (
                 <div className="text-center py-4">
                   <div className="inline-flex items-center gap-2 mb-2">
-                    <ImageLucide className="w-9 h-9 text-slate-300" />
-                    <Film       className="w-9 h-9 text-slate-300" />
+                    <ImageLucide className="w-9 h-9 text-ink-300" />
+                    <Film       className="w-9 h-9 text-ink-300" />
                   </div>
-                  <p className="text-sm text-slate-500 mb-1">No files attached yet.</p>
-                  <p className="text-[11px] text-slate-400 mb-3">
+                  <p className="text-sm text-ink-500 mb-1">No files attached yet.</p>
+                  <p className="text-xs text-ink-300 mb-3">
                     Photos (jpg/png/heic) or videos (mp4/mov) — up to 25 MB each.
                   </p>
                   <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold cursor-pointer hover:bg-primary-dark transition shadow-sm">
@@ -1208,13 +1208,13 @@ export default function NewOrderPage() {
                       />
                     ))}
                   </div>
-                  <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-primary text-sm font-semibold cursor-pointer hover:bg-primary-50 transition">
+                  <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-ink-100 bg-surface text-primary text-sm font-semibold cursor-pointer hover:bg-primary-50 transition">
                     <Plus className="w-4 h-4" /> Add more
                     <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={onPickFiles} />
                   </label>
                 </>
               )}
-              <p className="text-xs text-slate-400 mt-3 text-center">
+              <p className="text-xs text-ink-300 mt-3 text-center">
                 Files attach after the order is created.
               </p>
             </div>
@@ -1227,11 +1227,11 @@ export default function NewOrderPage() {
       {/* Sticky bottom action bar — safe-area aware on iPhone, two-row
           layout on tight mobile widths so the "Book Now" CTA stays
           finger-sized and never gets squeezed under Cancel. */}
-      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-30 bg-white border-t border-slate-200 shadow-xl pb-[env(safe-area-inset-bottom)]">
+      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-30 bg-surface border-t border-ink-100 shadow-xl pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 flex items-center justify-between sm:justify-end gap-2">
           {/* Mobile-only required-fields summary so the SPOC sees
               progress without scrolling up to the hero pill. */}
-          <div className="sm:hidden text-[11px] font-semibold text-slate-600 inline-flex items-center gap-1.5">
+          <div className="sm:hidden text-xs font-semibold text-ink-500 inline-flex items-center gap-1.5">
             <ClipboardList className="w-3.5 h-3.5 text-primary" />
             {filledCount}/{requiredChecks.length}
           </div>
@@ -1239,7 +1239,7 @@ export default function NewOrderPage() {
             <button
               type="button"
               onClick={reset}
-              className="hidden sm:inline-flex text-sm text-slate-600 hover:text-primary underline-offset-2 hover:underline px-2"
+              className="hidden sm:inline-flex text-sm text-ink-500 hover:text-primary underline-offset-2 hover:underline px-2"
             >
               Reset
             </button>
@@ -1462,29 +1462,29 @@ function PlacesAutocomplete({
         autoFocus
       />
       {(acLoading || resolving || geocoding) && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
           <Loader2 className="w-3 h-3 animate-spin" />
           {resolving ? 'Loading…' : geocoding ? 'Filling…' : 'Searching…'}
         </span>
       )}
 
       {open && items.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-surface border border-ink-100 rounded-lg shadow-lg max-h-72 overflow-y-auto">
           {items.map((s) => (
             <button
               key={s.place_id}
               type="button"
               onClick={() => pick(s)}
               disabled={resolving}
-              className="w-full text-left flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 last:border-b-0 hover:bg-primary/5 transition disabled:opacity-50"
+              className="w-full text-left flex items-start gap-3 px-3 py-2.5 border-b border-ink-100 last:border-b-0 hover:bg-primary/5 transition disabled:opacity-50"
             >
               <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900 leading-snug truncate">
+                <div className="text-sm font-semibold text-ink-900 leading-snug truncate">
                   {s.primary}
                 </div>
                 {s.secondary && (
-                  <div className="text-xs text-slate-500 mt-0.5 leading-snug truncate">
+                  <div className="text-xs text-ink-500 mt-0.5 leading-snug truncate">
                     {s.secondary}
                   </div>
                 )}
@@ -1535,14 +1535,14 @@ function FileTile({ file, onRemove }: { file: File; onRemove: () => void }) {
   }, [file.size]);
 
   const badge =
-    isImage ? { label: 'IMG', cls: 'bg-blue-500/90' }
-    : isVideo ? { label: 'VID', cls: 'bg-violet-500/90' }
-    : { label: 'FILE', cls: 'bg-slate-500/90' };
+    isImage ? { label: 'IMG', cls: 'bg-info/90' }
+    : isVideo ? { label: 'VID', cls: 'bg-gold/90' }
+    : { label: 'FILE', cls: 'bg-ink-500/90' };
 
   return (
-    <div className="relative aspect-square rounded-lg bg-white border border-slate-200 overflow-hidden group">
+    <div className="relative aspect-square rounded-lg bg-surface border border-ink-100 overflow-hidden group">
       {/* Thumb */}
-      <div className="absolute inset-0 grid place-items-center bg-slate-100">
+      <div className="absolute inset-0 grid place-items-center bg-ink-100">
         {isImage && objectUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
@@ -1561,18 +1561,18 @@ function FileTile({ file, onRemove }: { file: File; onRemove: () => void }) {
             />
             <div className="absolute inset-0 grid place-items-center pointer-events-none">
               <span className="w-10 h-10 rounded-full bg-white/70 backdrop-blur grid place-items-center shadow-lg">
-                <Play className="w-5 h-5 text-slate-900 ml-0.5" />
+                <Play className="w-5 h-5 text-ink-900 ml-0.5" />
               </span>
             </div>
           </>
         ) : (
-          <FileGeneric className="w-10 h-10 text-slate-300" />
+          <FileGeneric className="w-10 h-10 text-ink-300" />
         )}
       </div>
 
       {/* Type badge top-left */}
       <span className={cn(
-        'absolute top-1.5 left-1.5 text-[9px] font-bold tracking-wider text-white px-1.5 py-0.5 rounded',
+        'absolute top-1.5 left-1.5 text-xs font-semibold tracking-wider text-white px-1.5 py-0.5 rounded',
         badge.cls
       )}>
         {badge.label}
@@ -1583,17 +1583,17 @@ function FileTile({ file, onRemove }: { file: File; onRemove: () => void }) {
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${file.name}`}
-        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 text-slate-700 hover:text-rose-600 hover:bg-white grid place-items-center shadow-sm opacity-0 group-hover:opacity-100 transition"
+        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 text-ink-700 hover:text-danger hover:bg-white grid place-items-center shadow-sm opacity-0 group-hover:opacity-100 transition"
       >
         <X className="w-3.5 h-3.5" />
       </button>
 
       {/* Filename + size strip */}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-2 py-1.5 text-white">
-        <div className="text-[11px] font-medium leading-tight truncate" title={file.name}>
+        <div className="text-xs font-medium leading-tight truncate" title={file.name}>
           {file.name}
         </div>
-        <div className="text-[9px] text-white/80 tracking-wider uppercase">
+        <div className="text-xs text-white/80 tracking-wider uppercase">
           {sizeLabel}
         </div>
       </div>
@@ -1617,15 +1617,15 @@ function StepCard({
   // Mobile: tighter px-4/py-3 on header and p-4 on body so the form
   // fields keep more horizontal room on narrow phones.
   return (
-    <section className="bg-white border border-[#ece7de] rounded-3xl shadow-[0_2px_20px_-10px_rgba(20,25,40,0.12)]">
+    <section className="bg-surface border border-ink-100 rounded-3xl shadow-[0_2px_20px_-10px_rgb(var(--ef-ink-900-rgb)_/_0.12)]">
       <div className="flex items-center gap-3.5 px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-primary-50 text-primary grid place-items-center shrink-0">
           <Icon className="w-5 h-5 sm:w-[22px] sm:h-[22px]" />
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary/70">Step {step}</div>
-          <h2 className="text-base sm:text-lg font-extrabold text-slate-900 leading-tight tracking-tight">{title}</h2>
-          <p className="text-xs sm:text-[13px] text-slate-500 leading-snug mt-0.5">{subtitle}</p>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/70">Step {step}</div>
+          <h2 className="text-base sm:text-lg font-semibold text-ink-900 leading-tight tracking-tight">{title}</h2>
+          <p className="text-xs sm:text-[13px] text-ink-500 leading-snug mt-0.5">{subtitle}</p>
         </div>
       </div>
       <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
@@ -1648,15 +1648,15 @@ function Field({
   return (
     <div className={className} data-field={dataField}>
       <div className="flex items-center justify-between mb-1.5 gap-2">
-        <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider inline-flex items-center gap-1.5">
-          {Icon && <Icon className="w-3 h-3 text-slate-400" />}
-          {label} {required && <span className="text-rose-500">*</span>}
+        <label className="text-xs font-semibold text-ink-700 uppercase tracking-wider inline-flex items-center gap-1.5">
+          {Icon && <Icon className="w-3 h-3 text-ink-300" />}
+          {label} {required && <span className="text-danger">*</span>}
         </label>
         {trailing}
       </div>
       {children}
       {error && (
-        <p className="mt-1 text-xs text-rose-600 inline-flex items-center gap-1">
+        <p className="mt-1 text-xs text-danger inline-flex items-center gap-1">
           <AlertCircle className="w-3 h-3" />
           {error}
         </p>
@@ -1675,11 +1675,11 @@ function SummaryRow({
 }) {
   return (
     <div className="flex gap-2.5">
-      <Icon className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+      <Icon className="w-3.5 h-3.5 text-ink-300 mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
-        <dt className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{label}</dt>
-        <dd className="text-sm text-slate-800 font-medium truncate">{value}</dd>
-        {sub && <dd className="text-xs text-slate-500 truncate">{sub}</dd>}
+        <dt className="text-xs font-semibold text-ink-500 uppercase tracking-wider">{label}</dt>
+        <dd className="text-sm text-ink-900 font-medium truncate">{value}</dd>
+        {sub && <dd className="text-xs text-ink-500 truncate">{sub}</dd>}
       </div>
     </div>
   );
@@ -1744,11 +1744,11 @@ function CategorySelect({
         className={cn(
           'input flex items-center gap-1.5 flex-wrap text-left min-h-[40px]',
           'disabled:opacity-60 disabled:cursor-not-allowed',
-          hasError && 'ring-1 ring-rose-300'
+          hasError && 'ring-1 ring-danger/40'
         )}
       >
         {selectedOptions.length === 0 ? (
-          <span className="text-slate-400 flex-1">{placeholder}</span>
+          <span className="text-ink-300 flex-1">{placeholder}</span>
         ) : (
           <span className="flex flex-wrap gap-1 flex-1">
             {selectedOptions.map((o) => (
@@ -1771,18 +1771,18 @@ function CategorySelect({
             ))}
           </span>
         )}
-        <ChevronDown className={cn('w-4 h-4 text-slate-500 transition-transform', open && 'rotate-180')} />
+        <ChevronDown className={cn('w-4 h-4 text-ink-500 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-lg border border-slate-200 bg-white shadow-lg max-h-[420px] flex flex-col">
-          <div className="p-2 border-b border-slate-100">
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-lg border border-ink-100 bg-surface shadow-lg max-h-[420px] flex flex-col">
+          <div className="p-2 border-b border-ink-100">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-ink-300" />
               <input
                 ref={searchRef}
                 type="text"
-                className="w-full text-sm rounded border border-slate-200 pl-7 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full text-sm rounded border border-ink-100 pl-7 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Search categories…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -1791,7 +1791,7 @@ function CategorySelect({
           </div>
           <ul className="overflow-y-auto flex-1 py-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-3 text-sm text-slate-500 text-center">No matches</li>
+              <li className="px-3 py-3 text-sm text-ink-500 text-center">No matches</li>
             ) : (
               filtered.map((o) => {
                 const checked = selectedSet.has(o.id);
@@ -1807,7 +1807,7 @@ function CategorySelect({
                     >
                       <span className={cn(
                         'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                        checked ? 'bg-primary border-primary text-white' : 'border-slate-300'
+                        checked ? 'bg-primary border-primary text-white' : 'border-ink-100'
                       )}>
                         {checked && <Check className="w-3 h-3" />}
                       </span>
@@ -1819,7 +1819,7 @@ function CategorySelect({
             )}
           </ul>
           {selectedIds.length > 0 && (
-            <div className="border-t border-slate-100 px-3 py-2 flex items-center justify-between text-xs text-slate-500">
+            <div className="border-t border-ink-100 px-3 py-2 flex items-center justify-between text-xs text-ink-500">
               <span>{selectedIds.length} selected</span>
               <button
                 type="button"
@@ -1917,13 +1917,13 @@ function CitySelect({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'w-full flex items-center justify-between gap-2 pl-3 pr-2 py-2 text-sm border rounded-lg bg-white relative transition outline-none min-h-[40px]',
+          'w-full flex items-center justify-between gap-2 pl-3 pr-2 py-2 text-sm border rounded-lg bg-surface relative transition outline-none min-h-[40px]',
           open
             ? 'border-primary ring-2 ring-primary/20'
             : hasError
-              ? 'border-rose-300 ring-1 ring-rose-300'
-              : 'border-slate-200 hover:border-slate-300',
-          selected ? 'text-slate-800' : 'text-slate-400'
+              ? 'border-danger/40 ring-1 ring-danger/40'
+              : 'border-ink-100 hover:border-ink-100',
+          selected ? 'text-ink-900' : 'text-ink-300'
         )}
       >
         <span className="truncate">{buttonLabel}</span>
@@ -1933,33 +1933,33 @@ function CitySelect({
               role="button"
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); selectId(null); }}
-              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700"
+              className="p-0.5 rounded hover:bg-ink-100 text-ink-300 hover:text-ink-700"
               aria-label="Clear selection"
               title="Clear"
             >
               <X className="w-3.5 h-3.5" />
             </span>
           )}
-          <ChevronDown className={cn('w-4 h-4 text-slate-400 transition', open && 'rotate-180')} />
+          <ChevronDown className={cn('w-4 h-4 text-ink-300 transition', open && 'rotate-180')} />
         </span>
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-[420px] overflow-hidden flex flex-col">
-          <div className="relative border-b border-slate-100 p-2">
-            <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <div className="absolute z-30 mt-1 left-0 right-0 bg-surface border border-ink-100 rounded-lg shadow-lg max-h-[420px] overflow-hidden flex flex-col">
+          <div className="relative border-b border-ink-100 p-2">
+            <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none" />
             <input
               autoFocus
               value={query}
               onChange={(e) => { setQuery(e.target.value); setActive(0); }}
               onKeyDown={onKeyDown}
               placeholder="Type to search a city…"
-              className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded outline-none focus:border-primary"
+              className="w-full pl-8 pr-2 py-1.5 text-sm border border-ink-100 rounded outline-none focus:border-primary"
             />
           </div>
           <ul ref={listRef} className="flex-1 overflow-y-auto py-1">
             {filtered.length === 0 && (
-              <li className="px-3 py-3 text-xs text-slate-400 text-center">
+              <li className="px-3 py-3 text-xs text-ink-300 text-center">
                 No matches{query ? ` for "${query}"` : ''}.
               </li>
             )}
@@ -1975,11 +1975,11 @@ function CitySelect({
                     className={cn(
                       'w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left',
                       isActive ? 'bg-primary/10' : '',
-                      isSelected ? 'text-primary font-semibold' : 'text-slate-700'
+                      isSelected ? 'text-primary font-semibold' : 'text-ink-700'
                     )}
                   >
                     <span className="inline-flex items-center gap-1.5 min-w-0">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <MapPin className="w-3.5 h-3.5 text-ink-300 shrink-0" />
                       <span className="truncate">{c.name}</span>
                     </span>
                     {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
@@ -1989,10 +1989,10 @@ function CitySelect({
             })}
           </ul>
           {filtered.length > 8 && (
-            <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
-              <kbd className="px-1 rounded bg-slate-100 font-mono">↑↓</kbd> navigate ·{' '}
-              <kbd className="px-1 rounded bg-slate-100 font-mono">Enter</kbd> select ·{' '}
-              <kbd className="px-1 rounded bg-slate-100 font-mono">Esc</kbd> close
+            <div className="border-t border-ink-100 px-3 py-1.5 text-xs text-ink-300">
+              <kbd className="px-1 rounded bg-ink-100 font-mono">↑↓</kbd> navigate ·{' '}
+              <kbd className="px-1 rounded bg-ink-100 font-mono">Enter</kbd> select ·{' '}
+              <kbd className="px-1 rounded bg-ink-100 font-mono">Esc</kbd> close
             </div>
           )}
         </div>
@@ -2014,19 +2014,19 @@ function SuccessModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center"
+        className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 grid place-items-center mb-3">
-          <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+        <div className="w-14 h-14 mx-auto rounded-full bg-success-tint grid place-items-center mb-3">
+          <CheckCircle2 className="w-8 h-8 text-success" />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-1">Success!</h3>
-        <p className="text-sm text-slate-600 mb-1">Booked a Request Successfully</p>
-        <p className="text-sm text-slate-800 font-semibold mb-5">
+        <h3 className="text-xl font-semibold text-ink-900 mb-1">Success!</h3>
+        <p className="text-sm text-ink-500 mb-1">Booked a Request Successfully</p>
+        <p className="text-sm text-ink-900 font-semibold mb-5">
           Job ID: <span className="text-primary">{jobId}</span>
         </p>
         <button
@@ -2250,19 +2250,19 @@ function SelectAddressDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-8 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-ink-900/40 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-8 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden sm:my-auto max-h-[95vh] sm:max-h-none flex flex-col"
+        className="w-full max-w-xl rounded-t-2xl sm:rounded-2xl bg-surface shadow-2xl overflow-hidden sm:my-auto max-h-[95vh] sm:max-h-none flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-slate-100 shrink-0">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Select Address</h2>
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-ink-100 shrink-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-ink-900">Select Address</h2>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
@@ -2272,7 +2272,7 @@ function SelectAddressDialog({
         <div className="p-4 sm:p-6 space-y-4 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
           {/* Search bar with right-side spinner */}
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none" />
             <input
               autoFocus
               value={query}
@@ -2281,21 +2281,21 @@ function SelectAddressDialog({
               placeholder="Search for a location (try “Ambience Mall” or “Sector 44 Gurgaon”)"
             />
             {acLoading && (
-              <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+              <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 animate-spin" />
             )}
           </div>
 
           {/* Google Places suggestions — only when there's a query */}
           {query.trim().length >= 3 && (
             <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-2 inline-flex items-center gap-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-500 mb-2 inline-flex items-center gap-1.5">
                 <span>Suggestions</span>
-                <span className="text-[9px] font-medium text-slate-400 normal-case tracking-normal">
+                <span className="text-xs font-medium text-ink-300 normal-case tracking-normal">
                   powered by Google
                 </span>
               </h3>
               {suggestions.length === 0 && !acLoading && (
-                <div className="py-3 text-center text-xs text-slate-400">
+                <div className="py-3 text-center text-xs text-ink-300">
                   No places matched “{query}”.
                 </div>
               )}
@@ -2307,21 +2307,21 @@ function SelectAddressDialog({
                         type="button"
                         onClick={() => pickSuggestion(s)}
                         disabled={resolving}
-                        className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-white hover:border-primary hover:bg-primary/5 transition disabled:opacity-50"
+                        className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border border-ink-100 bg-surface hover:border-primary hover:bg-primary/5 transition disabled:opacity-50"
                       >
                         <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-slate-900 leading-snug truncate">
+                          <div className="text-sm font-semibold text-ink-900 leading-snug truncate">
                             {s.primary}
                           </div>
                           {s.secondary && (
-                            <div className="text-xs text-slate-500 mt-0.5 leading-snug truncate">
+                            <div className="text-xs text-ink-500 mt-0.5 leading-snug truncate">
                               {s.secondary}
                             </div>
                           )}
                         </div>
                         {resolving && (
-                          <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin mt-1 shrink-0" />
+                          <Loader2 className="w-3.5 h-3.5 text-ink-300 animate-spin mt-1 shrink-0" />
                         )}
                       </button>
                     </li>
@@ -2336,20 +2336,20 @@ function SelectAddressDialog({
             type="button"
             onClick={fireGeolocation}
             disabled={locating}
-            className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-emerald-50 transition disabled:opacity-50"
+            className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-success-tint transition disabled:opacity-50"
           >
-            <span className="w-10 h-10 rounded-full bg-emerald-50 ring-1 ring-emerald-200 grid place-items-center shrink-0">
+            <span className="w-10 h-10 rounded-full bg-success-tint ring-1 ring-success/30 grid place-items-center shrink-0">
               {locating
-                ? <Loader2 className="w-5 h-5 text-emerald-600 animate-spin" />
-                : <Crosshair className="w-5 h-5 text-emerald-600" />}
+                ? <Loader2 className="w-5 h-5 text-success animate-spin" />
+                : <Crosshair className="w-5 h-5 text-success" />}
             </span>
-            <span className="font-bold text-slate-900">
+            <span className="font-semibold text-ink-900">
               {locating ? 'Getting your location…' : 'Use current location'}
             </span>
           </button>
 
           {error && (
-            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+            <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text inline-flex items-center gap-2">
               <AlertCircle className="w-4 h-4" /> {error}
             </div>
           )}
@@ -2357,7 +2357,7 @@ function SelectAddressDialog({
           {/* Saved address list */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-500">
                 Saved Address
               </h3>
               <button
@@ -2370,13 +2370,13 @@ function SelectAddressDialog({
             </div>
 
             {loading && (
-              <div className="py-6 text-center text-sm text-slate-500 inline-flex items-center justify-center gap-2 w-full">
+              <div className="py-6 text-center text-sm text-ink-500 inline-flex items-center justify-center gap-2 w-full">
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading saved addresses…
               </div>
             )}
 
             {!loading && filtered.length === 0 && (
-              <div className="py-6 text-center text-sm text-slate-500">
+              <div className="py-6 text-center text-sm text-ink-500">
                 {items.length === 0
                   ? (/^\d{10}$/.test(customerMobile)
                       ? 'No saved addresses for this customer yet.'
@@ -2401,14 +2401,14 @@ function SelectAddressDialog({
                       <button
                         type="button"
                         onClick={() => onPickSaved(a)}
-                        className="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl border border-slate-200 bg-white hover:border-primary hover:bg-primary/5 transition"
+                        className="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl border border-ink-100 bg-surface hover:border-primary hover:bg-primary/5 transition"
                       >
-                        <Icon className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
+                        <Icon className="w-5 h-5 text-ink-500 mt-0.5 shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-slate-900 leading-snug">
+                          <div className="text-sm font-semibold text-ink-900 leading-snug">
                             {line1 || '—'}
                           </div>
-                          <div className="text-xs text-slate-500 mt-0.5 leading-snug">
+                          <div className="text-xs text-ink-500 mt-0.5 leading-snug">
                             {line2}
                           </div>
                         </div>
@@ -2570,17 +2570,17 @@ function AddressDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-6 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-ink-900/50 backdrop-blur-sm px-0 sm:px-4 py-0 sm:py-6 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-5xl rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden sm:my-auto flex flex-col max-h-[95vh] sm:max-h-[92vh]"
+        className="w-full max-w-5xl rounded-t-2xl sm:rounded-2xl bg-surface shadow-2xl overflow-hidden sm:my-auto flex flex-col max-h-[95vh] sm:max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ─── Header — gradient strip + soft icon tile ──────────── */}
-        <div className="relative px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 via-white to-white">
+        <div className="relative px-4 sm:px-6 py-3 sm:py-4 border-b border-ink-100 bg-gradient-to-r from-primary/5 via-white to-white">
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -2588,10 +2588,10 @@ function AddressDialog({
                 <MapPinned className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
+                <h2 className="text-base sm:text-lg font-semibold text-ink-900 leading-tight truncate">
                   Add Address Details
                 </h2>
-                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block">
+                <p className="text-xs text-ink-500 mt-0.5 hidden sm:block">
                   Where should the technician be dispatched?
                 </p>
               </div>
@@ -2599,7 +2599,7 @@ function AddressDialog({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0"
+              className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700 shrink-0"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
@@ -2614,7 +2614,7 @@ function AddressDialog({
             <div className="lg:col-span-3 p-4 sm:p-6 space-y-5">
               {/* SECTION 1: Location */}
               <div>
-                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-2">
                   <span className="w-5 h-px bg-primary" /> Location
                 </div>
 
@@ -2714,7 +2714,7 @@ function AddressDialog({
 
               {/* SECTION 2: Property details */}
               <div>
-                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-2">
                   <span className="w-5 h-px bg-primary" /> Property Details
                 </div>
 
@@ -2743,8 +2743,8 @@ function AddressDialog({
 
               {/* SECTION 3: Type pills */}
               <div>
-                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary mb-2">
-                  <span className="w-5 h-px bg-primary" /> Address Type <span className="text-rose-500">*</span>
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-2">
+                  <span className="w-5 h-px bg-primary" /> Address Type <span className="text-danger">*</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {([
@@ -2754,9 +2754,9 @@ function AddressDialog({
                   ] as const).map(({ key, label, Icon, tone }) => {
                     const on = v.address_type === key;
                     const onClass =
-                      tone === 'emerald' ? 'border-emerald-400 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                      : tone === 'blue'  ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-200'
-                      : 'border-amber-400 bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+                      tone === 'emerald' ? 'border-success bg-success-tint text-success-text ring-1 ring-success/30'
+                      : tone === 'blue'  ? 'border-info bg-info-tint text-info-text ring-1 ring-info/30'
+                      : 'border-warning bg-warning-tint text-warning-text ring-1 ring-warning/30';
                     return (
                       <button
                         key={key}
@@ -2766,11 +2766,11 @@ function AddressDialog({
                           'rounded-xl border-2 p-3 flex flex-col items-center gap-1.5 transition',
                           on
                             ? onClass + ' shadow-sm scale-[1.02]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                            : 'border-ink-100 bg-surface text-ink-500 hover:border-ink-100 hover:bg-ink-50'
                         )}
                       >
                         <Icon className="w-5 h-5" />
-                        <span className="text-xs font-bold">{label}</span>
+                        <span className="text-xs font-semibold">{label}</span>
                       </button>
                     );
                   })}
@@ -2778,20 +2778,20 @@ function AddressDialog({
               </div>
 
               {error && (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2 w-full">
+                <div className="rounded-lg border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text inline-flex items-center gap-2 w-full">
                   <AlertCircle className="w-4 h-4 shrink-0" /> {error}
                 </div>
               )}
             </div>
 
             {/* RIGHT — map + use-location CTA (sticky on desktop) */}
-            <div className="lg:col-span-2 bg-slate-50 lg:border-l lg:border-slate-100 p-4 sm:p-6">
+            <div className="lg:col-span-2 bg-ink-50 lg:border-l lg:border-ink-100 p-4 sm:p-6">
               <div className="lg:sticky lg:top-0 space-y-3">
-                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
                   <span className="w-5 h-px bg-primary" /> Map Preview
                 </div>
 
-                <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                <div className="rounded-xl overflow-hidden border border-ink-100 bg-surface shadow-sm">
                   <iframe
                     title="Location preview"
                     src={mapSrc}
@@ -2801,7 +2801,7 @@ function AddressDialog({
                   />
                 </div>
 
-                <p className="text-[11px] text-slate-500 leading-snug">
+                <p className="text-xs text-ink-500 leading-snug">
                   The map updates as you type the address or paste GPS coordinates.
                 </p>
               </div>
@@ -2810,15 +2810,15 @@ function AddressDialog({
         </div>
 
         {/* ─── Sticky footer ────────────────────────────────────── */}
-        <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-white flex items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="text-[11px] sm:text-xs text-slate-500 shrink-0">
-            <span className="text-rose-500">*</span> required
+        <div className="px-4 sm:px-6 py-3 border-t border-ink-100 bg-surface flex items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="text-xs text-ink-500 shrink-0">
+            <span className="text-danger">*</span> required
           </div>
           <div className="flex gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-2 sm:px-4 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+              className="px-3 py-2 sm:px-4 rounded-md text-sm font-semibold border border-ink-100 text-ink-700 hover:bg-ink-50"
             >
               Cancel
             </button>
@@ -2852,10 +2852,10 @@ function DialogField({
 }) {
   return (
     <div>
-      <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 inline-flex items-center gap-1">
-        <Icon className="w-3 h-3 text-slate-400" />
+      <label className="text-xs font-semibold text-ink-500 uppercase tracking-wider mb-1 inline-flex items-center gap-1">
+        <Icon className="w-3 h-3 text-ink-300" />
         {label}
-        {required && <span className="text-rose-500">*</span>}
+        {required && <span className="text-danger">*</span>}
       </label>
       {children}
     </div>
@@ -2876,15 +2876,15 @@ function AlternateModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5"
+        className="bg-surface rounded-xl shadow-2xl w-full max-w-md p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-slate-900 inline-flex items-center gap-2">
+          <h3 className="text-base font-semibold text-ink-900 inline-flex items-center gap-2">
             <Phone className="w-4 h-4 text-primary" />
             Add alternate number
           </h3>
@@ -2892,7 +2892,7 @@ function AlternateModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-slate-500 hover:text-slate-900 p-1"
+            className="text-ink-500 hover:text-ink-900 p-1"
           >
             <X className="w-4 h-4" />
           </button>
@@ -2900,7 +2900,7 @@ function AlternateModal({
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider block mb-1.5">
+            <label className="text-xs font-semibold text-ink-700 uppercase tracking-wider block mb-1.5">
               Alternate contact name
             </label>
             <input
@@ -2912,18 +2912,18 @@ function AlternateModal({
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider block mb-1.5">
+            <label className="text-xs font-semibold text-ink-700 uppercase tracking-wider block mb-1.5">
               Alternate contact no.
             </label>
             <input
-              className={cn('input', error && 'ring-1 ring-rose-300')}
+              className={cn('input', error && 'ring-1 ring-danger/40')}
               inputMode="numeric"
               maxLength={10}
               value={number}
               onChange={(e) => setNumber(e.target.value.replace(/\D/g, ''))}
               placeholder="10-digit mobile"
             />
-            {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
+            {error && <p className="mt-1 text-xs text-danger">{error}</p>}
           </div>
         </div>
 

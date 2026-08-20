@@ -60,19 +60,19 @@ export default function WalletPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Wallet</h1>
-          <p className="text-sm text-slate-500 mt-1">Prepaid balance for all your EasyFix service bookings.</p>
+          <h1 className="text-2xl font-semibold text-ink-900 tracking-tight">My Wallet</h1>
+          <p className="text-sm text-ink-500 mt-1">Prepaid balance for all your EasyFix service bookings.</p>
         </div>
-        <span className="text-[11px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-warning-text bg-warning-tint border border-warning/30 rounded-full px-3 py-1.5">
           Preview · sample data
         </span>
       </div>
 
       {/* Balance hero */}
       <div className="relative overflow-hidden rounded-3xl p-6 sm:p-7 text-white shadow-lg"
-        style={{ background: 'linear-gradient(135deg,#0f766e 0%,#0d9488 55%,#14b8a6 100%)' }}>
+        style={{ background: 'linear-gradient(135deg,var(--ef-blue-900) 0%,var(--ef-blue-700) 55%,var(--ef-blue-500) 100%)' }}>
         <div className="text-sm font-semibold text-white/80">Available Balance</div>
-        <div className="text-5xl font-extrabold tracking-tight mt-1 tabular-nums">{inr(w.balance)}</div>
+        <div className="text-5xl font-semibold tracking-tight mt-1 tabular-nums">{inr(w.balance)}</div>
 
         {/* mini stat row */}
         <div className="mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-4">
@@ -82,8 +82,8 @@ export default function WalletPage() {
             { k: 'Available',     v: w.balance },
           ].map((r) => (
             <div key={r.k}>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-white/70">{r.k}</div>
-              <div className="text-lg font-extrabold tabular-nums">{inr(r.v)}</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-white/70">{r.k}</div>
+              <div className="text-lg font-semibold tabular-nums">{inr(r.v)}</div>
             </div>
           ))}
         </div>
@@ -97,7 +97,7 @@ export default function WalletPage() {
         <button
           type="button"
           onClick={() => setNotice(true)}
-          className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-white text-teal-800 font-bold px-5 py-3 shadow-sm hover:-translate-y-0.5 transition"
+          className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-surface text-money font-semibold px-5 py-3 shadow-sm hover:-translate-y-0.5 transition"
         >
           <Plus className="w-5 h-5" /> Recharge Wallet
         </button>
@@ -108,13 +108,13 @@ export default function WalletPage() {
 
       {/* Low balance alert */}
       {low && (
-        <div className="flex items-start gap-3 rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
-          <span className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 grid place-items-center shrink-0">
+        <div className="flex items-start gap-3 rounded-2xl bg-surface ring-1 ring-ink-100 shadow-sm p-4">
+          <span className="w-10 h-10 rounded-full bg-warning-tint text-warning grid place-items-center shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </span>
           <div>
-            <div className="font-bold text-slate-900">Low Balance Alert</div>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <div className="font-semibold text-ink-900">Low Balance Alert</div>
+            <p className="text-sm text-ink-500 mt-0.5">
               Your wallet balance is running low. Recharge now to continue booking services without interruption.
             </p>
           </div>
@@ -123,48 +123,48 @@ export default function WalletPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatCard icon={Wallet}       tone="teal"    label="Available Balance" value={inr(w.balance)} />
-        <StatCard icon={Gauge}        tone="slate"   label="Prepaid Limit"     value={inr(w.prepaidLimit)} />
-        <StatCard icon={TrendingDown} tone="rose"    label="Total Used"        value={inr(w.used)} />
-        <StatCard icon={TrendingUp}   tone="emerald" label="Total Recharged"   value={inr(w.recharged)} />
+        <StatCard icon={Wallet}       tone="money"   label="Available Balance" value={inr(w.balance)} />
+        <StatCard icon={Gauge}        tone="ink"     label="Prepaid Limit"     value={inr(w.prepaidLimit)} />
+        <StatCard icon={TrendingDown} tone="danger"  label="Total Used"        value={inr(w.used)} />
+        <StatCard icon={TrendingUp}   tone="success" label="Total Recharged"   value={inr(w.recharged)} />
       </div>
 
       {/* Recent activity */}
-      <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-surface rounded-2xl ring-1 ring-ink-100 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-base font-bold text-slate-900">Recent Activity</h2>
-          <Link href="#" className="text-sm font-semibold text-teal-700 inline-flex items-center gap-1 hover:underline">
+          <h2 className="text-base font-semibold text-ink-900">Recent Activity</h2>
+          <Link href="#" className="text-sm font-semibold text-link inline-flex items-center gap-1 hover:underline">
             All transactions <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-ink-100">
           {TXNS.map((t) => {
             const credit = t.amount > 0;
             const Icon = t.kind === 'recharge' ? TrendingUp : t.kind === 'refund' ? RotateCcw : TrendingDown;
             const pill =
-              t.status === 'Refunded' ? 'bg-teal-50 text-teal-700'
-              : t.status === 'Failed' ? 'bg-rose-50 text-rose-700'
-              : t.status === 'Pending' ? 'bg-amber-50 text-amber-700'
-              : 'bg-emerald-50 text-emerald-700';
+              t.status === 'Refunded' ? 'bg-info-tint text-info-text'
+              : t.status === 'Failed' ? 'bg-danger-tint text-danger-text'
+              : t.status === 'Pending' ? 'bg-warning-tint text-warning-text'
+              : 'bg-success-tint text-success-text';
             return (
               <li key={t.id} className="flex items-center gap-3 px-5 py-3.5">
-                <span className={`w-9 h-9 rounded-full grid place-items-center shrink-0 ${credit ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}`}>
+                <span className={`w-9 h-9 rounded-full grid place-items-center shrink-0 ${credit ? 'bg-success-tint text-success' : 'bg-danger-tint text-danger'}`}>
                   <Icon className="w-4 h-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold text-slate-900">{t.title}</div>
-                  <div className="text-xs text-slate-500 truncate">
+                  <div className="text-sm font-semibold text-ink-900">{t.title}</div>
+                  <div className="text-xs text-ink-500 truncate">
                     {t.jobId ? (
-                      <button type="button" onClick={() => openJobDrawer(t.jobId!)} className="hover:text-teal-700 hover:underline">{t.sub}</button>
+                      <button type="button" onClick={() => openJobDrawer(t.jobId!)} className="hover:text-link hover:underline">{t.sub}</button>
                     ) : t.sub}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">{t.when}</div>
+                  <div className="text-xs text-ink-300 mt-0.5">{t.when}</div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className={`text-sm font-extrabold tabular-nums ${credit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <div className={`text-sm font-semibold tabular-nums ${credit ? 'text-success' : 'text-danger'}`}>
                     {credit ? '+' : '−'}{inr(t.amount)}
                   </div>
-                  <span className={`inline-block mt-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${pill}`}>{t.status}</span>
+                  <span className={`inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${pill}`}>{t.status}</span>
                 </div>
               </li>
             );
@@ -174,21 +174,21 @@ export default function WalletPage() {
 
       {/* Footer cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Link href="/invoices" className="flex items-center gap-3 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-5 hover:ring-slate-300 transition">
-          <span className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 grid place-items-center shrink-0"><Receipt className="w-5 h-5" /></span>
+        <Link href="/invoices" className="flex items-center gap-3 bg-surface rounded-2xl ring-1 ring-ink-100 shadow-sm p-5 hover:ring-ink-300 transition">
+          <span className="w-11 h-11 rounded-xl bg-info-tint text-money grid place-items-center shrink-0"><Receipt className="w-5 h-5" /></span>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-slate-900">Billing &amp; Invoices</div>
-            <div className="text-sm text-slate-500">24 bills · Download GST invoices</div>
+            <div className="font-semibold text-ink-900">Billing &amp; Invoices</div>
+            <div className="text-sm text-ink-500">24 bills · Download GST invoices</div>
           </div>
-          <ArrowUpRight className="w-4 h-4 text-slate-300" />
+          <ArrowUpRight className="w-4 h-4 text-ink-300" />
         </Link>
-        <button type="button" onClick={() => setNotice(true)} className="flex items-center gap-3 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-5 text-left hover:ring-slate-300 transition">
-          <span className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 grid place-items-center shrink-0"><PieChart className="w-5 h-5" /></span>
+        <button type="button" onClick={() => setNotice(true)} className="flex items-center gap-3 bg-surface rounded-2xl ring-1 ring-ink-100 shadow-sm p-5 text-left hover:ring-ink-300 transition">
+          <span className="w-11 h-11 rounded-xl bg-info-tint text-money grid place-items-center shrink-0"><PieChart className="w-5 h-5" /></span>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-slate-900">Prepaid Limit</div>
-            <div className="text-sm text-slate-500">Request a higher limit anytime</div>
+            <div className="font-semibold text-ink-900">Prepaid Limit</div>
+            <div className="text-sm text-ink-500">Request a higher limit anytime</div>
           </div>
-          <ArrowUpRight className="w-4 h-4 text-slate-300" />
+          <ArrowUpRight className="w-4 h-4 text-ink-300" />
         </button>
       </div>
     </div>
@@ -199,23 +199,23 @@ function StatCard({
   icon: Icon, tone, label, value,
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  tone: 'teal' | 'slate' | 'rose' | 'emerald';
+  tone: 'money' | 'ink' | 'danger' | 'success';
   label: string;
   value: string;
 }) {
   const toneCls = {
-    teal:    'bg-teal-50 text-teal-700',
-    slate:   'bg-slate-100 text-slate-500',
-    rose:    'bg-rose-50 text-rose-500',
-    emerald: 'bg-emerald-50 text-emerald-600',
+    money:   'bg-info-tint text-money',
+    ink:     'bg-ink-100 text-ink-500',
+    danger:  'bg-danger-tint text-danger',
+    success: 'bg-success-tint text-success',
   }[tone];
   return (
-    <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-5">
+    <div className="bg-surface rounded-2xl ring-1 ring-ink-100 shadow-sm p-5">
       <div className="flex items-center gap-3">
         <span className={`w-11 h-11 rounded-xl grid place-items-center ${toneCls}`}><Icon className="w-5 h-5" /></span>
-        <span className="text-sm font-semibold text-slate-500">{label}</span>
+        <span className="text-sm font-semibold text-ink-500">{label}</span>
       </div>
-      <div className="mt-3 text-2xl font-extrabold text-slate-900 tabular-nums">{value}</div>
+      <div className="mt-3 text-2xl font-semibold text-money tabular-nums">{value}</div>
     </div>
   );
 }

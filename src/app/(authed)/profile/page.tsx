@@ -240,14 +240,14 @@ export default function ClientProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
+      <div className="min-h-[60vh] flex items-center justify-center text-ink-500">
         <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading profile…
       </div>
     );
   }
   if (!p) {
     return (
-      <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+      <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
         {error || 'Profile not found'}
       </div>
     );
@@ -257,38 +257,42 @@ export default function ClientProfilePage() {
     <form onSubmit={save} className="max-w-5xl mx-auto pb-28 space-y-6">
 
       {/* ─── HERO CARD (identical to /profile) ─────────────────── */}
-      <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="relative bg-surface border border-ink-100 rounded-2xl shadow-sm overflow-hidden">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary-dark to-primary" />
         <div className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-start gap-5">
             <div className="shrink-0 mx-auto md:mx-0">
-              {/* Profile avatar — pink/violet gradient matching the
-                  navbar avatar so the SPOC's identity treatment stays
-                  consistent across the dashboard. Same fuchsia → pink
-                  → violet ramp, just sized up for the hero card. */}
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 grid place-items-center text-3xl font-extrabold text-white shadow-md shadow-pink-500/20 ring-4 ring-white">
+              {/* Profile avatar — the SAME brand-red ramp as the navbar chip in
+                  (authed)/layout.tsx, sized up for the hero card. Not a
+                  charts.ts series: there is exactly one signed-in user, so this
+                  distinguishes nothing and has no adjacency problem — and by
+                  charts.ts's own test ("should this move in a rebrand?") the
+                  answer is yes. Keep the two in step; they read as one element. */}
+              <div
+                className="w-24 h-24 rounded-2xl grid place-items-center text-3xl font-semibold text-white shadow-md shadow-ink-900/20 ring-4 ring-white bg-gradient-to-br from-primary via-primary-600 to-primary-dark"
+              >
                 {initialsOf(p.contact_name)}
               </div>
             </div>
 
             <div className="flex-1 min-w-0 text-center md:text-left">
-              <h1 className="text-2xl font-bold text-slate-900 leading-tight">
+              <h1 className="text-2xl font-semibold text-ink-900 leading-tight">
                 {p.contact_name || 'Unnamed'}
               </h1>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-ink-500 mt-1">
                 {p.contact_desgn || 'No designation set'}
               </p>
               <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-3">
-                <Pill icon={Fingerprint} tone="slate">ID #{p.id}</Pill>
-                <Pill icon={ShieldCheck} tone="emerald">Email verified</Pill>
-                <Pill icon={ShieldCheck} tone="blue">Mobile verified</Pill>
+                <Pill icon={Fingerprint} tone="neutral">ID #{p.id}</Pill>
+                <Pill icon={ShieldCheck} tone="success">Email verified</Pill>
+                <Pill icon={ShieldCheck} tone="info">Mobile verified</Pill>
               </div>
             </div>
 
             {/* Right-side client brand block (same as /profile) */}
             {(p.client_logo_url || p.client_name) && (
               <div className="shrink-0 mx-auto md:mx-0 flex flex-col items-center gap-1.5">
-                <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 shadow-sm grid place-items-center overflow-hidden p-2">
+                <div className="w-24 h-24 rounded-2xl bg-surface border border-ink-100 shadow-sm grid place-items-center overflow-hidden p-2">
                   {p.client_logo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -300,13 +304,13 @@ export default function ClientProfilePage() {
                       }}
                     />
                   ) : (
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center px-1">
+                    <span className="text-xs font-semibold text-ink-300 uppercase tracking-wider text-center px-1">
                       {p.client_name}
                     </span>
                   )}
                 </div>
                 {p.client_name && (
-                  <span className="text-[11px] font-semibold text-slate-500 max-w-[6.5rem] text-center truncate">
+                  <span className="text-xs font-semibold text-ink-500 max-w-[6.5rem] text-center truncate">
                     {p.client_name}
                   </span>
                 )}
@@ -320,8 +324,8 @@ export default function ClientProfilePage() {
           One horizontal row, brand-red underline on the active tab.
           Each tab shows its icon + label inline. Buttons are
           type=button so they don't trigger the form's onSubmit. */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
-        <div role="tablist" aria-label="Profile sections" className="flex items-center gap-1 px-2 border-b border-slate-200 overflow-x-auto">
+      <div className="bg-surface border border-ink-100 rounded-xl shadow-sm">
+        <div role="tablist" aria-label="Profile sections" className="flex items-center gap-1 px-2 border-b border-ink-100 overflow-x-auto">
           {TABS.map((t) => {
             const active = tab === t.key;
             const Icon = t.icon;
@@ -336,7 +340,7 @@ export default function ClientProfilePage() {
                   'relative inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold transition whitespace-nowrap',
                   active
                     ? 'text-primary'
-                    : 'text-slate-500 hover:text-slate-800'
+                    : 'text-ink-500 hover:text-ink-900'
                 )}
               >
                 <Icon className="w-4 h-4" />
@@ -393,8 +397,8 @@ export default function ClientProfilePage() {
                   placeholder="https://linkedin.com/in/your-handle"
                 />
               </div>
-              <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-900 inline-flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
+              <div className="rounded-lg bg-info-tint border border-info/30 px-3 py-2 text-xs text-info-text inline-flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-info-text shrink-0" />
                 Email and mobile are verified. Tap the pencil to change — we'll send an OTP to confirm.
               </div>
             </div>
@@ -455,7 +459,7 @@ export default function ClientProfilePage() {
 
       {/* Error inline */}
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -468,12 +472,12 @@ export default function ClientProfilePage() {
         )}
       >
         <div className="max-w-5xl mx-auto px-4 pb-4">
-          <div className="bg-white border border-slate-200 shadow-xl rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-            <div className="text-sm text-slate-600 inline-flex items-center gap-2 min-w-0">
+          <div className="bg-surface border border-ink-100 shadow-xl rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+            <div className="text-sm text-ink-500 inline-flex items-center gap-2 min-w-0">
               {savedFlash ? (
                 <>
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-emerald-700 font-medium">Saved</span>
+                  <Check className="w-4 h-4 text-success shrink-0" />
+                  <span className="text-success-text font-medium">Saved</span>
                 </>
               ) : saving ? (
                 <>
@@ -482,7 +486,7 @@ export default function ClientProfilePage() {
                 </>
               ) : (
                 <>
-                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-warning shrink-0" />
                   <span className="truncate">You have unsaved changes</span>
                 </>
               )}
@@ -492,7 +496,7 @@ export default function ClientProfilePage() {
                 type="button"
                 onClick={discard}
                 disabled={saving}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-ink-700 border border-ink-100 hover:bg-ink-50 disabled:opacity-50 inline-flex items-center gap-1.5"
               >
                 <X className="w-4 h-4" /> Discard
               </button>
@@ -547,12 +551,12 @@ function Pill({
 }: {
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
-  tone: 'slate' | 'emerald' | 'blue';
+  tone: 'neutral' | 'success' | 'info';
 }) {
   const toneClass =
-    tone === 'emerald' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-    : tone === 'blue'  ? 'bg-blue-50 text-blue-700 ring-blue-200'
-    : 'bg-slate-100 text-slate-700 ring-slate-200';
+    tone === 'success' ? 'bg-success-tint text-success-text ring-success/30'
+    : tone === 'info'  ? 'bg-info-tint text-info-text ring-info/30'
+    : 'bg-ink-100 text-ink-700 ring-ink-300/40';
   return (
     <span className={cn(
       'inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ring-1',
@@ -575,21 +579,21 @@ function FormField({
 }) {
   return (
     <div className={cn('flex flex-col', className)}>
-      <label className="text-xs font-semibold text-slate-700 mb-1.5 inline-flex items-center gap-1">
+      <label className="text-xs font-semibold text-ink-700 mb-1.5 inline-flex items-center gap-1">
         {label}
-        {required && <span className="text-rose-500">*</span>}
+        {required && <span className="text-danger">*</span>}
       </label>
       <div className="relative">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-300 pointer-events-none" />
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full pl-10 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition placeholder:text-slate-300"
+          className="w-full pl-10 pr-3 py-2.5 text-sm border border-ink-100 rounded-lg outline-none bg-surface focus:border-primary focus:ring-2 focus:ring-primary/20 transition placeholder:text-ink-300"
         />
       </div>
-      {hint && <p className="text-[11px] text-slate-500 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-ink-500 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -603,13 +607,13 @@ function ReadOnlyField({
 }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-slate-700 mb-1.5 inline-flex items-center gap-1">
+      <label className="text-xs font-semibold text-ink-700 mb-1.5 inline-flex items-center gap-1">
         {label}
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+        <ShieldCheck className="w-3.5 h-3.5 text-success" />
       </label>
       <div className="relative">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-        <div className="w-full pl-10 pr-12 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-mono">
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-300 pointer-events-none" />
+        <div className="w-full pl-10 pr-12 py-2.5 text-sm border border-ink-100 rounded-lg bg-ink-50 text-ink-700 font-mono">
           {value || '—'}
         </div>
         {onEditClick && (
@@ -617,7 +621,7 @@ function ReadOnlyField({
             type="button"
             onClick={onEditClick}
             title={`Change ${label.toLowerCase()}`}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-md grid place-items-center text-slate-500 hover:text-primary hover:bg-primary-50 transition"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-md grid place-items-center text-ink-500 hover:text-primary hover:bg-primary-50 transition"
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
@@ -759,11 +763,11 @@ function ChangeIdentifierModal({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg bg-surface rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
         {/* Header — gradient hero with icon. Matches the reference
-            design but in our brand palette instead of blue. */}
-        <div className="bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 px-5 pt-5 pb-6 text-center relative">
+            design but in our brand red instead of its blue. */}
+        <div className="bg-gradient-to-br from-primary via-primary-600 to-primary-dark px-5 pt-5 pb-6 text-center relative">
           <button
             type="button"
             onClick={onClose}
@@ -775,7 +779,7 @@ function ChangeIdentifierModal({
           <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur grid place-items-center shadow-lg">
             {isPhone ? <Smartphone className="w-7 h-7 text-white" /> : <Mail className="w-7 h-7 text-white" />}
           </div>
-          <h2 className="mt-3 text-lg font-bold text-white">{Title}</h2>
+          <h2 className="mt-3 text-lg font-semibold text-white">{Title}</h2>
           <p className="mt-0.5 text-xs text-white/80 whitespace-nowrap">
             {step === 'enter'
               ? `Enter your new ${label}. We'll send a one-time code to verify.`
@@ -789,17 +793,17 @@ function ChangeIdentifierModal({
               above, new below) but greyed-out + read-only so the SPOC
               sees it's the *current* value, not editable. */}
           <div>
-            <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+            <label className="text-xs font-semibold text-ink-700 mb-1.5 block">
               Previous {label}
             </label>
-            <div className="w-full px-3 py-2.5 text-sm font-mono font-bold text-slate-700 border border-slate-200 rounded-lg bg-slate-50">
+            <div className="w-full px-3 py-2.5 text-sm font-mono font-semibold text-ink-700 border border-ink-100 rounded-lg bg-ink-50">
               {oldValue || '—'}
             </div>
           </div>
 
           {step === 'enter' && (
             <div>
-              <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+              <label className="text-xs font-semibold text-ink-700 mb-1.5 block">
                 New {label}
               </label>
               <input
@@ -815,14 +819,14 @@ function ChangeIdentifierModal({
                   else setNewValue(e.target.value);
                 }}
                 placeholder={isPhone ? '10-digit mobile number' : 'name@company.com'}
-                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                className="w-full px-3 py-2.5 text-sm border border-ink-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </div>
           )}
 
           {step === 'otp' && (
             <div>
-              <label className="text-xs font-semibold text-slate-700 mb-2 block text-center">
+              <label className="text-xs font-semibold text-ink-700 mb-2 block text-center">
                 Verification code
               </label>
               <div className="flex items-center justify-center gap-2">
@@ -837,19 +841,19 @@ function ChangeIdentifierModal({
                     onChange={(e) => setOtpAt(i, e.target.value)}
                     onKeyDown={(e) => handleOtpKey(i, e)}
                     onPaste={handleOtpPaste}
-                    className="w-12 h-14 text-center text-xl font-bold border-2 border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-12 h-14 text-center text-xl font-semibold border-2 border-ink-100 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 ))}
               </div>
               <div className="mt-3 text-center text-xs">
                 {resendIn > 0 ? (
-                  <span className="text-slate-500">Resend code in {resendIn}s</span>
+                  <span className="text-ink-500">Resend code in {resendIn}s</span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => sendOtp(true)}
                     disabled={busy}
-                    className="text-indigo-600 hover:text-indigo-800 font-semibold disabled:opacity-60"
+                    className="text-primary hover:text-primary-dark font-semibold disabled:opacity-60"
                   >
                     Resend code
                   </button>
@@ -859,13 +863,13 @@ function ChangeIdentifierModal({
           )}
 
           {info && step === 'otp' && (
-            <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-xs text-indigo-900">
+            <div className="rounded-lg bg-info-tint border border-info/30 px-3 py-2 text-xs text-info-text">
               {info}
             </div>
           )}
           {err && (
-            <div className="rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-900 inline-flex items-start gap-2 w-full">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-rose-600" />
+            <div className="rounded-lg bg-danger-tint border border-danger/30 px-3 py-2 text-xs text-danger-text inline-flex items-start gap-2 w-full">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-danger" />
               <span>{err}</span>
             </div>
           )}
@@ -874,7 +878,7 @@ function ChangeIdentifierModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 transition"
+              className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg border border-ink-100 hover:bg-ink-50 transition"
             >
               Cancel
             </button>
@@ -883,7 +887,7 @@ function ChangeIdentifierModal({
                 type="button"
                 onClick={() => sendOtp(false)}
                 disabled={busy || !newValue}
-                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
+                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-primary to-primary-dark text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Send code
@@ -893,7 +897,7 @@ function ChangeIdentifierModal({
                 type="button"
                 onClick={verify}
                 disabled={busy || otp.some((c) => !c)}
-                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
+                className="flex-1 px-3 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-primary to-primary-dark text-white shadow hover:shadow-md disabled:opacity-60 transition inline-flex items-center justify-center gap-1.5"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Update
@@ -929,12 +933,12 @@ function SuccessToastModal({
   }, [onClose]);
   if (!mounted) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl px-6 py-5 max-w-xs text-center animate-in fade-in zoom-in-95">
-        <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 grid place-items-center">
-          <Check className="w-6 h-6 text-emerald-600" />
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-ink-900/50 backdrop-blur-sm">
+      <div className="bg-surface rounded-2xl shadow-2xl px-6 py-5 max-w-xs text-center animate-in fade-in zoom-in-95">
+        <div className="w-12 h-12 mx-auto rounded-full bg-success-tint grid place-items-center">
+          <Check className="w-6 h-6 text-success" />
         </div>
-        <div className="mt-3 text-sm font-semibold text-slate-800">{message}</div>
+        <div className="mt-3 text-sm font-semibold text-ink-900">{message}</div>
       </div>
     </div>,
     document.body
@@ -1018,23 +1022,23 @@ function ManagerSelect({
 
   return (
     <div ref={rootRef} className="relative">
-      <label className="text-xs font-semibold text-slate-700 mb-1.5 inline-flex items-center gap-1">
+      <label className="text-xs font-semibold text-ink-700 mb-1.5 inline-flex items-center gap-1">
         Reporting manager
-        <span className="text-rose-500">*</span>
+        <span className="text-danger">*</span>
       </label>
 
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'w-full flex items-center justify-between gap-2 pl-10 pr-2 py-2.5 text-sm border rounded-lg bg-white relative transition outline-none',
+          'w-full flex items-center justify-between gap-2 pl-10 pr-2 py-2.5 text-sm border rounded-lg bg-surface relative transition outline-none',
           open
             ? 'border-primary ring-2 ring-primary/20'
-            : 'border-slate-200 hover:border-slate-300',
-          selected ? 'text-slate-800' : 'text-slate-400'
+            : 'border-ink-100 hover:border-ink-300',
+          selected ? 'text-ink-900' : 'text-ink-300'
         )}
       >
-        <Network className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        <Network className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-300 pointer-events-none" />
         <span className="truncate">{buttonLabel}</span>
         <span className="flex items-center gap-1 shrink-0">
           {selected && (
@@ -1042,33 +1046,33 @@ function ManagerSelect({
               role="button"
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); selectId(null); }}
-              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700"
+              className="p-0.5 rounded hover:bg-ink-100 text-ink-300 hover:text-ink-700"
               aria-label="Clear selection"
               title="Clear"
             >
               <X className="w-3.5 h-3.5" />
             </span>
           )}
-          <ChevronDown className={cn('w-4 h-4 text-slate-400 transition', open && 'rotate-180')} />
+          <ChevronDown className={cn('w-4 h-4 text-ink-300 transition', open && 'rotate-180')} />
         </span>
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
-          <div className="relative border-b border-slate-100 p-2">
-            <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <div className="absolute z-30 mt-1 left-0 right-0 bg-surface border border-ink-100 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+          <div className="relative border-b border-ink-100 p-2">
+            <Search className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none" />
             <input
               autoFocus
               value={query}
               onChange={(e) => { setQuery(e.target.value); setActive(0); }}
               onKeyDown={onKeyDown}
               placeholder="Type to search by name or email…"
-              className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-200 rounded outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+              className="w-full pl-8 pr-2 py-1.5 text-sm border border-ink-100 rounded outline-none focus:border-ink-300 focus:ring-2 focus:ring-ink-100"
             />
           </div>
           <ul ref={listRef} className="flex-1 overflow-y-auto py-1">
             {filtered.length === 0 && (
-              <li className="px-3 py-3 text-xs text-slate-400 text-center">
+              <li className="px-3 py-3 text-xs text-ink-300 text-center">
                 No matches{query ? ` for "${query}"` : ''}.
               </li>
             )}
@@ -1084,13 +1088,13 @@ function ManagerSelect({
                     className={cn(
                       'w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left',
                       isActive ? 'bg-primary/10' : '',
-                      isSelected ? 'text-primary font-semibold' : 'text-slate-700'
+                      isSelected ? 'text-primary font-semibold' : 'text-ink-700'
                     )}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{m.name || `User #${m.id}`}</span>
                       {m.email && (
-                        <span className="block text-xs text-slate-500 truncate">{m.email}</span>
+                        <span className="block text-xs text-ink-500 truncate">{m.email}</span>
                       )}
                     </span>
                     {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
@@ -1118,21 +1122,21 @@ function ToggleCard({
         'flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition',
         checked
           ? 'border-primary bg-primary-50/40 shadow-sm'
-          : 'border-slate-200 bg-white hover:border-slate-300'
+          : 'border-ink-100 bg-surface hover:border-ink-300'
       )}
     >
       <div className={cn(
         'w-9 h-9 rounded-lg grid place-items-center shrink-0 transition',
-        checked ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'
+        checked ? 'bg-primary text-white' : 'bg-ink-100 text-ink-500'
       )}>
         <Icon className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-slate-900">{title}</span>
+          <span className="text-sm font-semibold text-ink-900">{title}</span>
           <span className={cn(
             'relative inline-flex shrink-0 w-9 h-5 rounded-full transition',
-            checked ? 'bg-primary' : 'bg-slate-300'
+            checked ? 'bg-primary' : 'bg-ink-300'
           )}>
             <input
               type="checkbox"
@@ -1141,12 +1145,12 @@ function ToggleCard({
               className="sr-only"
             />
             <span className={cn(
-              'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+              'absolute top-0.5 w-4 h-4 bg-surface rounded-full shadow transition-transform',
               checked ? 'translate-x-[18px]' : 'translate-x-0.5'
             )} />
           </span>
         </div>
-        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{hint}</p>
+        <p className="text-xs text-ink-500 mt-1 leading-relaxed">{hint}</p>
       </div>
     </label>
   );
@@ -1373,22 +1377,22 @@ function ContactsTab() {
     <div className="space-y-4">
       {/* Header — count + action buttons */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-slate-600">
-          <span className="font-semibold text-slate-900">{contacts.length}</span>{' '}
+        <div className="text-sm text-ink-500">
+          <span className="font-semibold text-ink-900">{contacts.length}</span>{' '}
           contact{contacts.length === 1 ? '' : 's'} in your directory
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={downloadTemplate}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-ink-100 text-ink-700 hover:bg-ink-50 transition"
           >
             <Download className="w-3.5 h-3.5" /> Template
           </button>
           <button
             type="button"
             onClick={() => { setShowBulk(true); setBulkFile(null); setBulkReport(null); }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-ink-100 text-ink-700 hover:bg-ink-50 transition"
           >
             <Upload className="w-3.5 h-3.5" /> Bulk Upload
           </button>
@@ -1403,15 +1407,15 @@ function ContactsTab() {
       </div>
 
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text inline-flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       )}
 
       {/* Table */}
-      <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <div className="border border-ink-100 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+          <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wider">
             <tr>
               <th className="text-left px-4 py-2 font-semibold">Name</th>
               <th className="text-left px-4 py-2 font-semibold">Phone</th>
@@ -1420,14 +1424,14 @@ function ContactsTab() {
               <th className="text-right px-4 py-2 font-semibold">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-ink-100">
             {loading && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-500">
                 <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading contacts…
               </td></tr>
             )}
             {!loading && contacts.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-500">
                 No contacts yet. Click <span className="font-semibold">Add Contact</span> to start the directory.
               </td></tr>
             )}
@@ -1438,14 +1442,14 @@ function ContactsTab() {
               return (
               <tr key={c.id} className={cn(
                 'transition',
-                isActive ? 'hover:bg-slate-50/60' : 'bg-slate-50/50 text-slate-400 hover:bg-slate-100/60'
+                isActive ? 'hover:bg-ink-50/60' : 'bg-ink-50/50 text-ink-300 hover:bg-ink-100/60'
               )}>
                 <td className="px-4 py-2.5 font-medium">
-                  <span className={isActive ? 'text-slate-900' : 'text-slate-500'}>
+                  <span className={isActive ? 'text-ink-900' : 'text-ink-500'}>
                     {c.contact_name || '—'}
                   </span>
                   {!isActive && (
-                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-600 uppercase tracking-wider">
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-ink-100 text-ink-500 uppercase tracking-wider">
                       Inactive
                     </span>
                   )}
@@ -1470,11 +1474,11 @@ function ContactsTab() {
                       title={isActive ? 'Deactivate contact' : 'Activate contact'}
                       className={cn(
                         'relative inline-flex items-center w-10 h-5 rounded-full transition disabled:opacity-50',
-                        isActive ? 'bg-emerald-500' : 'bg-slate-300'
+                        isActive ? 'bg-success' : 'bg-ink-300'
                       )}
                     >
                       <span className={cn(
-                        'inline-block w-4 h-4 bg-white rounded-full shadow transition-transform',
+                        'inline-block w-4 h-4 bg-surface rounded-full shadow transition-transform',
                         isActive ? 'translate-x-[22px]' : 'translate-x-0.5'
                       )} />
                     </button>
@@ -1483,7 +1487,7 @@ function ContactsTab() {
                       onClick={() => openEdit(c)}
                       disabled={busy}
                       title="Edit contact"
-                      className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition disabled:opacity-50"
+                      className="p-1.5 rounded-md text-ink-500 hover:text-primary hover:bg-primary/10 transition disabled:opacity-50"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -1502,7 +1506,7 @@ function ContactsTab() {
           consistent across the app. Hidden when fewer than pageSize
           contacts exist (nothing to paginate). */}
       {!loading && contacts.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 pt-3 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500 pt-3 border-t border-ink-100">
           <span>
             Showing <span className="font-semibold">{firstIdx}</span>–
             <span className="font-semibold">{lastIdx}</span> of{' '}
@@ -1559,7 +1563,7 @@ function ContactsTab() {
                   const v = Math.max(1, Math.min(pageCount, Number(e.target.value) || 1));
                   setPage(v);
                 }}
-                className="w-14 px-2 py-1 text-center border border-slate-300 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-14 px-2 py-1 text-center border border-ink-100 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                 aria-label="Go to page"
               />
               of <span className="font-semibold">{pageCount}</span>
@@ -1594,22 +1598,22 @@ function ContactsTab() {
           fixed-inset-0 overlay). */}
       {editorOpen && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-900/30 backdrop-blur-sm px-4"
           onClick={() => !busy && setEditorOpen(false)}
         >
           <div
-            className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+            className="w-full max-w-lg rounded-xl bg-surface shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-ink-100">
+              <h2 className="text-lg font-semibold text-ink-900">
                 {editingId == null ? 'Add Contact' : 'Edit Contact'}
               </h2>
               <button
                 type="button"
                 onClick={() => setEditorOpen(false)}
                 disabled={busy}
-                className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1646,7 +1650,7 @@ function ContactsTab() {
                 placeholder="optional"
               />
               {editorError && (
-                <div className="sm:col-span-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 inline-flex items-center gap-2">
+                <div className="sm:col-span-2 rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text inline-flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" /> {editorError}
                 </div>
               )}
@@ -1655,7 +1659,7 @@ function ContactsTab() {
                   type="button"
                   onClick={() => setEditorOpen(false)}
                   disabled={busy}
-                  className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="px-4 py-2 rounded-md text-sm font-semibold border border-ink-100 text-ink-700 hover:bg-ink-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1677,29 +1681,29 @@ function ContactsTab() {
       {/* Bulk upload modal — same portal trick as the editor */}
       {showBulk && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-900/30 backdrop-blur-sm px-4"
           onClick={() => !busy && setShowBulk(false)}
         >
           <div
-            className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+            className="w-full max-w-lg rounded-xl bg-surface shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-ink-100">
+              <h2 className="text-lg font-semibold text-ink-900 inline-flex items-center gap-2">
                 <Upload className="w-5 h-5 text-primary" /> Bulk Upload Contacts
               </h2>
               <button
                 type="button"
                 onClick={() => setShowBulk(false)}
                 disabled={busy}
-                className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-sm text-slate-600">
-                Upload an <code className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">.xlsx</code> file with one row per contact.
+              <p className="text-sm text-ink-500">
+                Upload an <code className="font-mono text-xs bg-ink-100 px-1 py-0.5 rounded">.xlsx</code> file with one row per contact.
                 Don&apos;t have one? <button type="button" onClick={downloadTemplate} className="text-primary font-semibold hover:underline">Download the template</button>.
               </p>
               <input
@@ -1707,26 +1711,26 @@ function ContactsTab() {
                 accept=".xlsx"
                 onChange={(e) => setBulkFile(e.target.files?.[0] ?? null)}
                 disabled={busy}
-                className="block w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary hover:file:bg-primary-100"
+                className="block w-full text-sm text-ink-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary hover:file:bg-primary-100"
               />
               {bulkReport && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-sm">
-                  <div className="font-semibold text-slate-800">Result:</div>
+                <div className="rounded-lg border border-ink-100 bg-ink-50 p-3 space-y-1.5 text-sm">
+                  <div className="font-semibold text-ink-900">Result:</div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="text-slate-600">Total: <span className="font-semibold text-slate-900">{bulkReport.summary.total}</span></div>
-                    <div className="text-emerald-700">Created: <span className="font-semibold">{bulkReport.summary.created}</span></div>
-                    <div className="text-amber-700">Skipped: <span className="font-semibold">{bulkReport.summary.skipped}</span></div>
-                    <div className="text-rose-700">Invalid: <span className="font-semibold">{bulkReport.summary.invalid}</span></div>
+                    <div className="text-ink-500">Total: <span className="font-semibold text-ink-900">{bulkReport.summary.total}</span></div>
+                    <div className="text-success-text">Created: <span className="font-semibold">{bulkReport.summary.created}</span></div>
+                    <div className="text-warning-text">Skipped: <span className="font-semibold">{bulkReport.summary.skipped}</span></div>
+                    <div className="text-danger-text">Invalid: <span className="font-semibold">{bulkReport.summary.invalid}</span></div>
                   </div>
                   {bulkReport.results.some((r) => r.status !== 'created') && (
                     <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer text-slate-600 hover:text-slate-900">Show errors</summary>
+                      <summary className="cursor-pointer text-ink-500 hover:text-ink-900">Show errors</summary>
                       <ul className="mt-2 max-h-40 overflow-auto space-y-1">
                         {bulkReport.results
                           .filter((r) => r.status !== 'created')
                           .map((r, i) => (
-                            <li key={i} className="text-slate-700">
-                              Row {r.rowNumber}: <span className="font-mono text-rose-700">{r.errors?.join(', ') || r.reason || r.status}</span>
+                            <li key={i} className="text-ink-700">
+                              Row {r.rowNumber}: <span className="font-mono text-danger-text">{r.errors?.join(', ') || r.reason || r.status}</span>
                             </li>
                           ))}
                       </ul>
@@ -1739,7 +1743,7 @@ function ContactsTab() {
                   type="button"
                   onClick={() => setShowBulk(false)}
                   disabled={busy}
-                  className="px-4 py-2 rounded-md text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="px-4 py-2 rounded-md text-sm font-semibold border border-ink-100 text-ink-700 hover:bg-ink-50 disabled:opacity-50"
                 >
                   Close
                 </button>
@@ -1767,22 +1771,22 @@ function PaymentCard({
   value: number; onChange: (v: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-ink-100 bg-surface p-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center">
+        <div className="w-9 h-9 rounded-lg bg-success-tint text-success-text grid place-items-center">
           <Wallet className="w-4 h-4" />
         </div>
         <div className="min-w-0">
-          <span className="text-sm font-semibold text-slate-900">Payment mode</span>
-          <p className="text-xs text-slate-500">How you settle invoices.</p>
+          <span className="text-sm font-semibold text-ink-900">Payment mode</span>
+          <p className="text-xs text-ink-500">How you settle invoices.</p>
         </div>
       </div>
       <div className="relative mt-2">
-        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-300 pointer-events-none" />
         <select
           value={String(value)}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full pl-10 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition appearance-none cursor-pointer"
+          className="w-full pl-10 pr-3 py-2 text-sm border border-ink-100 rounded-lg outline-none bg-surface focus:border-primary focus:ring-2 focus:ring-primary/20 transition appearance-none cursor-pointer"
         >
           {PAYMENT_MODES.map((m) => (
             <option key={m.value} value={String(m.value)}>{m.label}</option>

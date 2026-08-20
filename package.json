@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 5181",
-    "build": "next build",
+    "build": "npm run brand:verify && npm run check:brand && next build",
     "start": "next start -p 5181",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "brand:gen": "node scripts/gen-brand-css.mjs",
+    "brand:verify": "node scripts/gen-brand-css.mjs --verify",
+    "check:brand": "node scripts/check-brand-tokens.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",

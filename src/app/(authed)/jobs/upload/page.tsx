@@ -127,8 +127,8 @@ export default function JobUploadPage() {
     <div className="space-y-5">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Bulk Job Upload</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-2xl font-semibold text-ink-900">Bulk Job Upload</h1>
+        <p className="mt-1 text-sm text-ink-500">
           Every row in the uploaded file creates an <strong>Unconfirmed</strong> order on your account.
           EasyFix operators complete city / PIN / service type / time slot via the per-row Confirm &amp;
           Schedule action before booking.
@@ -137,11 +137,11 @@ export default function JobUploadPage() {
 
       {/* Upload form */}
       <section className="card p-5 space-y-4 max-w-3xl">
-        <h2 className="text-base font-semibold text-slate-800">Upload Excel</h2>
+        <h2 className="text-base font-semibold text-ink-900">Upload Excel</h2>
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-ink-500 uppercase tracking-wide mb-1.5">
               .xlsx file <span className="text-primary">*</span>
             </label>
             <input
@@ -151,14 +151,14 @@ export default function JobUploadPage() {
               className="block w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-dark"
               required
             />
-            <p className="text-xs text-slate-500 mt-1.5">
+            <p className="text-xs text-ink-500 mt-1.5">
               Row 1 = header, data from row 2. Columns: Client Reference ID · Customer Name · Mobile ·
               Address · Date of Appointment (dd-mm-yyyy) · Product Quantity · Mode of Payment ·
               Type of Service · Job Description · Special Comments.
             </p>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-ink-700">
             <input
               type="checkbox"
               className="rounded text-primary focus:ring-primary"
@@ -183,7 +183,7 @@ export default function JobUploadPage() {
           </div>
 
           {error && (
-            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 flex items-start gap-2">
+            <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {error}
             </div>
           )}
@@ -194,7 +194,7 @@ export default function JobUploadPage() {
       {report && (
         <section className="card p-5 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-base font-semibold text-slate-800">
+            <h2 className="text-base font-semibold text-ink-900">
               Report · {report.summary.dryRun ? 'Dry run' : 'Upload complete'}
             </h2>
             {createdAny && (
@@ -208,14 +208,14 @@ export default function JobUploadPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Total rows" v={report.summary.totalRows} tint="bg-slate-100 text-slate-700" />
+            <Stat label="Total rows" v={report.summary.totalRows} tint="bg-ink-100 text-ink-700" />
             <Stat
               label="Created / Valid"
               v={report.summary.createdCount || report.results.filter((r) => r.status === 'valid').length}
-              tint="bg-emerald-100 text-emerald-700"
+              tint="bg-success-tint text-success-text"
             />
-            <Stat label="Failed" v={report.summary.failedCount} tint="bg-rose-100 text-rose-700" />
-            <Stat label="Skipped" v={report.summary.skipCount} tint="bg-slate-100 text-slate-600" />
+            <Stat label="Failed" v={report.summary.failedCount} tint="bg-danger-tint text-danger-text" />
+            <Stat label="Skipped" v={report.summary.skipCount} tint="bg-ink-100 text-ink-500" />
           </div>
 
           <div className="overflow-x-auto">
@@ -247,8 +247,8 @@ export default function JobUploadPage() {
                           className={cn(
                             'badge ring-1',
                             valid
-                              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                              : 'bg-rose-50 text-rose-700 ring-rose-200'
+                              ? 'bg-success-tint text-success-text ring-success/30'
+                              : 'bg-danger-tint text-danger-text ring-danger/30'
                           )}
                         >
                           {displayStatus(r.status)}
@@ -278,7 +278,7 @@ export default function JobUploadPage() {
 function Stat({ label, v, tint }: { label: string; v: number | string; tint: string }) {
   return (
     <div className={cn('rounded-lg p-3', tint)}>
-      <div className="text-2xl font-bold tabular-nums">{v}</div>
+      <div className="text-2xl font-semibold tabular-nums">{v}</div>
       <div className="text-xs opacity-80">{label}</div>
     </div>
   );

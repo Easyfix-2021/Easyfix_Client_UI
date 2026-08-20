@@ -133,18 +133,22 @@ type EstimatePreview = {
 // ─── Status badge colors ────────────────────────────────────────────
 function statusBadgeClass(status: number) {
   switch (status) {
-    case 0:  return 'bg-amber-50 text-amber-700 ring-amber-200';
-    case 1:  return 'bg-blue-50 text-blue-700 ring-blue-200';
+    case 0:  return 'bg-warning-tint text-warning-text ring-warning/30';
+    case 1:  return 'bg-info-tint text-info-text ring-info/30';
+    // In-Progress had no brand equivalent for its violet, and `info` is the
+    // nearest meaning. It ends up matching Scheduled's chip, which is safe
+    // here: the status label always renders inside the chip, so colour never
+    // carries the state on its own.
     case 2:
-    case 20: return 'bg-violet-50 text-violet-700 ring-violet-200';
+    case 20: return 'bg-info-tint text-info-text ring-info/30';
     case 3:
-    case 5:  return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-    case 6:  return 'bg-rose-50 text-rose-700 ring-rose-200';
-    case 9:  return 'bg-amber-50 text-amber-700 ring-amber-200';
+    case 5:  return 'bg-success-tint text-success-text ring-success/30';
+    case 6:  return 'bg-danger-tint text-danger-text ring-danger/30';
+    case 9:  return 'bg-warning-tint text-warning-text ring-warning/30';
     case 10: return 'bg-primary/10 text-primary ring-primary/30';
-    case 15: return 'bg-amber-50 text-amber-700 ring-amber-200';
-    case 21: return 'bg-slate-100 text-slate-700 ring-slate-200';
-    default: return 'bg-slate-100 text-slate-700 ring-slate-200';
+    case 15: return 'bg-warning-tint text-warning-text ring-warning/30';
+    case 21: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
+    default: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
   }
 }
 
@@ -322,14 +326,14 @@ export default function JobDetailPage() {
 
   if (job.loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
+      <div className="min-h-[60vh] flex items-center justify-center text-ink-500">
         <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading job…
       </div>
     );
   }
   if (!job.data) {
     return (
-      <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+      <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
         {job.error || 'Job not found'}
       </div>
     );
@@ -432,16 +436,16 @@ export default function JobDetailPage() {
       <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-primary"
+            className="inline-flex items-center gap-1 text-sm text-ink-500 hover:text-primary"
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          <div className="h-5 w-px bg-slate-300" />
+          <div className="h-5 w-px bg-ink-100" />
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Hash className="w-5 h-5 text-primary shrink-0" />
-            <h1 className="text-lg font-bold text-slate-900">Job {j.job_id}</h1>
+            <h1 className="text-lg font-semibold text-ink-900">Job {j.job_id}</h1>
             {j.is_escalated ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 ring-1 ring-orange-200 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-tint text-warning-text ring-1 ring-warning/30 text-xs font-semibold">
                 <AlertTriangle className="w-3 h-3" /> Escalated
               </span>
             ) : null}
@@ -479,7 +483,7 @@ export default function JobDetailPage() {
             <button
               type="button"
               onClick={openPo}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-success hover:bg-success-text text-white text-sm font-semibold shadow-sm shrink-0"
               title={`Open PO${poImages.length > 1 ? ` (${poImages.length} files)` : ''}`}
             >
               <ShoppingCart className="w-4 h-4" />
@@ -503,7 +507,7 @@ export default function JobDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 items-center">
           {j.job_reference_id && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-mono font-semibold">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink-100 text-ink-700 text-xs font-mono font-semibold">
               RefId · {j.job_reference_id}
             </span>
           )}
@@ -513,26 +517,26 @@ export default function JobDetailPage() {
             </span>
           )}
           {j.job_type && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-info-tint text-info-text text-xs font-semibold">
               <Tag className="w-3 h-3" /> {j.job_type}
             </span>
           )}
           {j.source_type && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink-100 text-ink-500 text-xs font-semibold">
               Source · {j.source_type}
             </span>
           )}
           {/* Payment-mode chip — derived from tbl_job.collected_by.
-              Emerald for "Free for customer" (no charge to end user),
-              amber for "Paid by Customer" so a SPOC scanning the page
-              can spot at a glance which jobs will have a customer-
-              facing invoice attached. */}
+              Success green for "Free for customer" (no charge to end
+              user), warning amber for "Paid by Customer" so a SPOC
+              scanning the page can spot at a glance which jobs will have
+              a customer-facing invoice attached. */}
           {paymentModeLabel(j.collected_by) && (
             <span className={cn(
               'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold',
               j.collected_by === 2
-                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                ? 'bg-success-tint text-success-text ring-1 ring-success/30'
+                : 'bg-warning-tint text-warning-text ring-1 ring-warning/30'
             )}>
               <IndianRupee className="w-3 h-3" />
               {paymentModeLabel(j.collected_by)}
@@ -568,13 +572,13 @@ export default function JobDetailPage() {
                 {i > 0 && (
                   <div className={cn(
                     'absolute top-4 left-0 right-1/2 h-0.5',
-                    timeline[i - 1].reached ? 'bg-primary' : 'bg-slate-200'
+                    timeline[i - 1].reached ? 'bg-primary' : 'bg-ink-100'
                   )} />
                 )}
                 {i < timeline.length - 1 && (
                   <div className={cn(
                     'absolute top-4 left-1/2 right-0 h-0.5',
-                    m.reached ? 'bg-primary' : 'bg-slate-200'
+                    m.reached ? 'bg-primary' : 'bg-ink-100'
                   )} />
                 )}
                 <div className="relative flex flex-col items-center text-center">
@@ -582,18 +586,18 @@ export default function JobDetailPage() {
                     'w-8 h-8 rounded-full grid place-items-center border-2 transition',
                     m.reached
                       ? 'bg-primary border-primary text-white shadow-md shadow-primary/30'
-                      : 'bg-white border-slate-300 text-slate-400'
+                      : 'bg-surface border-ink-300 text-ink-300'
                   )}>
                     {m.reached ? <CheckCircle2 className="w-4 h-4" /> : <span className="w-2 h-2 rounded-full bg-current" />}
                   </div>
                   <div className={cn(
                     'text-xs font-semibold mt-2',
-                    m.reached ? 'text-slate-900' : 'text-slate-400'
+                    m.reached ? 'text-ink-900' : 'text-ink-300'
                   )}>
                     {m.label}
                   </div>
                   {m.reached && m.date && (
-                    <div className="text-[10px] text-slate-500 mt-0.5 px-1">
+                    <div className="text-xs text-ink-500 mt-0.5 px-1">
                       {formatDateTime(m.date)}
                     </div>
                   )}
@@ -670,13 +674,13 @@ export default function JobDetailPage() {
           Mirrors legacy job-detail.component.html lines 709-771.
           Three exclusive states driven by the timestamp columns on
           tbl_job:
-            • approval_sent_on AND no action     → SENT (blue/grey card,
+            • approval_sent_on AND no action     → SENT (info card,
                                                     "Estimate Sent for
                                                     Approval", scroll-to-
                                                     line-items "View" btn)
-            • approved_on present                → APPROVED (emerald card,
+            • approved_on present                → APPROVED (success card,
                                                     Approved By + On)
-            • approval_reject_on present         → REJECTED (rose card,
+            • approval_reject_on present         → REJECTED (danger card,
                                                     Rejected By + On +
                                                     rejection reason)
           Card is hidden when nothing has been sent yet (legacy parity). */}
@@ -692,13 +696,13 @@ export default function JobDetailPage() {
         return (
           <Section title="Estimate Status" icon={FileText}>
             {state === 'sent' && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3">
-                <div className="flex items-center gap-2 text-blue-900">
-                  <Mail className="w-5 h-5 text-blue-600" />
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/30 bg-info-tint/60 px-4 py-3">
+                <div className="flex items-center gap-2 text-info-text">
+                  <Mail className="w-5 h-5 text-info" />
                   <span className="font-semibold">Estimate Sent for Approval</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="text-blue-900/70 font-medium">
+                  <span className="text-info-text/70 font-medium">
                     {formatDateTime(sent)}
                   </span>
                   {/* Open the Nginx-served Estimate PDF in a new tab.
@@ -708,7 +712,7 @@ export default function JobDetailPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-info/30 text-info-text hover:bg-info-tint transition"
                   >
                     <Eye className="w-4 h-4" />
                   </a>
@@ -716,10 +720,10 @@ export default function JobDetailPage() {
               </div>
             )}
             {state === 'approved' && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-1.5">
+              <div className="rounded-lg border border-success/30 bg-success-tint/60 px-4 py-3 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-emerald-900">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <div className="flex items-center gap-2 text-success-text">
+                    <CheckCircle2 className="w-5 h-5 text-success" />
                     <span className="font-semibold">Estimate Approved</span>
                   </div>
                   <a
@@ -727,28 +731,28 @@ export default function JobDetailPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-success/30 text-success-text hover:bg-success-tint transition"
                   >
                     <Eye className="w-4 h-4" />
                   </a>
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
-                    <dt className="text-emerald-900/60 font-medium">Approved By:</dt>
-                    <dd className="text-emerald-900">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
+                    <dt className="text-success-text/60 font-medium">Approved By:</dt>
+                    <dd className="text-success-text">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
                   </div>
                   <div className="flex gap-2">
-                    <dt className="text-emerald-900/60 font-medium">Approved On:</dt>
-                    <dd className="text-emerald-900">{formatDateTime(approved) || '—'}</dd>
+                    <dt className="text-success-text/60 font-medium">Approved On:</dt>
+                    <dd className="text-success-text">{formatDateTime(approved) || '—'}</dd>
                   </div>
                 </dl>
               </div>
             )}
             {state === 'rejected' && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50/60 px-4 py-3 space-y-1.5">
+              <div className="rounded-lg border border-danger/30 bg-danger-tint/60 px-4 py-3 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-rose-900">
-                    <XCircle className="w-5 h-5 text-rose-600" />
+                  <div className="flex items-center gap-2 text-danger-text">
+                    <XCircle className="w-5 h-5 text-danger" />
                     <span className="font-semibold">Estimate Rejected</span>
                   </div>
                   <a
@@ -756,27 +760,27 @@ export default function JobDetailPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-white border border-rose-200 text-rose-700 hover:bg-rose-100 transition"
+                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-danger/30 text-danger-text hover:bg-danger-tint transition"
                   >
                     <Eye className="w-4 h-4" />
                   </a>
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
-                    <dt className="text-rose-900/60 font-medium">Rejected By:</dt>
-                    <dd className="text-rose-900">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
+                    <dt className="text-danger-text/60 font-medium">Rejected By:</dt>
+                    <dd className="text-danger-text">{j.approved_by_contact_name || j.client_spoc_name || '—'}</dd>
                   </div>
                   <div className="flex gap-2">
-                    <dt className="text-rose-900/60 font-medium">Rejected On:</dt>
-                    <dd className="text-rose-900">{formatDateTime(rejected) || '—'}</dd>
+                    <dt className="text-danger-text/60 font-medium">Rejected On:</dt>
+                    <dd className="text-danger-text">{formatDateTime(rejected) || '—'}</dd>
                   </div>
                 </dl>
                 {j.approval_reject_reason && (
                   <div className="mt-2 pl-7 text-sm">
-                    <div className="text-rose-900/60 font-medium uppercase tracking-wide text-[11px] mb-0.5">
+                    <div className="text-danger-text/60 font-medium uppercase tracking-wide text-xs mb-0.5">
                       Reason Remark
                     </div>
-                    <p className="text-rose-900 whitespace-pre-wrap">{j.approval_reject_reason}</p>
+                    <p className="text-danger-text whitespace-pre-wrap">{j.approval_reject_reason}</p>
                   </div>
                 )}
               </div>
@@ -793,27 +797,27 @@ export default function JobDetailPage() {
           the legacy reverse() call in job-detail.model.ts:173. */}
       {(j.approval_sent_on_date_time || j.approved_on_date_time || j.approval_reject_date_time) && (
         <Section title="Estimate Lifecycle" icon={Activity}>
-          <ol className="relative border-l-2 border-slate-200 ml-3 space-y-5 pl-6 py-1">
+          <ol className="relative border-l-2 border-ink-100 ml-3 space-y-5 pl-6 py-1">
             {/* Newest event first */}
             {(j.approved_on_date_time || j.approval_reject_date_time) && (
               <li className="relative">
                 <span className={cn(
                   'absolute -left-[34px] top-1 w-4 h-4 rounded-full grid place-items-center ring-2 ring-white',
                   j.approval_reject_date_time
-                    ? 'bg-rose-500'
-                    : 'bg-emerald-500'
+                    ? 'bg-danger'
+                    : 'bg-success'
                 )}>
                   {j.approval_reject_date_time
                     ? <XCircle className="w-3 h-3 text-white" />
                     : <CheckCircle2 className="w-3 h-3 text-white" />}
                 </span>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-ink-500">
                   {formatDateTime(j.approval_reject_date_time || j.approved_on_date_time)}
                 </div>
-                <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                <div className="mt-0.5 text-sm font-semibold text-ink-900">
                   Estimate {j.approval_reject_date_time ? 'Rejected' : 'Approved'}
                 </div>
-                <div className="text-xs text-slate-600 mt-0.5">
+                <div className="text-xs text-ink-500 mt-0.5">
                   Action By: <span className="font-medium">{j.approved_by_contact_name || j.client_spoc_name || '—'}</span>
                 </div>
               </li>
@@ -821,16 +825,16 @@ export default function JobDetailPage() {
             {/* Sent event */}
             {j.approval_sent_on_date_time && (
               <li className="relative">
-                <span className="absolute -left-[34px] top-1 w-4 h-4 rounded-full bg-blue-500 grid place-items-center ring-2 ring-white">
+                <span className="absolute -left-[34px] top-1 w-4 h-4 rounded-full bg-info grid place-items-center ring-2 ring-white">
                   <Mail className="w-3 h-3 text-white" />
                 </span>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-ink-500">
                   {formatDateTime(j.approval_sent_on_date_time)}
                 </div>
-                <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                <div className="mt-0.5 text-sm font-semibold text-ink-900">
                   Estimate Sent to Client
                 </div>
-                <div className="text-xs text-slate-600 mt-0.5">
+                <div className="text-xs text-ink-500 mt-0.5">
                   Sent By: <span className="font-medium">{j.owner_name || j.created_by_name || '—'}</span>
                 </div>
               </li>
@@ -862,7 +866,7 @@ export default function JobDetailPage() {
       {/* Services list (all, including non-pending) */}
       {j.services && j.services.length > 0 && (
         <Section title="All Services" icon={Briefcase}
-          titleRight={<span className="text-xs text-slate-500">{j.services.length} item{j.services.length === 1 ? '' : 's'}</span>}
+          titleRight={<span className="text-xs text-ink-500">{j.services.length} item{j.services.length === 1 ? '' : 's'}</span>}
         >
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -884,11 +888,11 @@ export default function JobDetailPage() {
                     <td className="text-right font-mono">{num(s.total_charge).toFixed(2)}</td>
                     <td>
                       {s.job_service_status === 1 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-tint text-success-text ring-1 ring-success/30 text-xs font-semibold">
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 text-xs font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ink-100 text-ink-500 ring-1 ring-ink-300/40 text-xs font-semibold">
                           Inactive
                         </span>
                       )}
@@ -904,15 +908,15 @@ export default function JobDetailPage() {
       {/* Image gallery */}
       {Object.keys(imagesByCategory).length > 0 && (
         <Section title="Job Images" icon={ImageIcon}
-          titleRight={<span className="text-xs text-slate-500">{j.images.length} total</span>}
+          titleRight={<span className="text-xs text-ink-500">{j.images.length} total</span>}
         >
           <div className="space-y-4">
             {Object.entries(imagesByCategory).map(([cat, imgs]) => (
               <div key={cat}>
-                <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2 inline-flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-slate-400" />
+                <div className="text-xs font-semibold text-ink-700 uppercase tracking-wide mb-2 inline-flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-ink-300" />
                   {cat}
-                  <span className="text-slate-400 font-normal">({imgs.length})</span>
+                  <span className="text-ink-300 font-normal">({imgs.length})</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {imgs.map((img) => {
@@ -922,13 +926,13 @@ export default function JobDetailPage() {
                         key={img.image_id}
                         type="button"
                         onClick={() => setZoomImage(src)}
-                        className="aspect-square rounded-lg bg-slate-100 overflow-hidden hover:ring-2 hover:ring-primary transition group relative"
+                        className="aspect-square rounded-lg bg-ink-100 overflow-hidden hover:ring-2 hover:ring-primary transition group relative"
                         title={img.job_stage || ''}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={src} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
                         {img.job_stage && (
-                          <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate">
+                          <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-xs px-1 py-0.5 truncate">
                             {img.job_stage}
                           </div>
                         )}
@@ -945,7 +949,7 @@ export default function JobDetailPage() {
       {/* Comments / Remarks */}
       {j.remarks && (
         <Section title="Comments & Remarks" icon={MessageSquare}>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{j.remarks}</p>
+          <p className="text-sm text-ink-700 whitespace-pre-wrap">{j.remarks}</p>
         </Section>
       )}
 
@@ -961,7 +965,7 @@ export default function JobDetailPage() {
         <button
           type="button"
           onClick={() => setCallDialog(true)}
-          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 overflow-hidden"
+          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-info/30 hover:shadow-xl hover:shadow-info/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-info via-info to-info-text overflow-hidden"
         >
           {/* Decorative sheen — sits behind the content, ignores clicks */}
           <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
@@ -970,7 +974,7 @@ export default function JobDetailPage() {
               <PhoneCall className="w-5 h-5" />
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-bold">Contact</span>
+              <span className="block text-sm font-semibold">Contact</span>
               <span className="block text-xs text-white/80 truncate">Call customer or technician</span>
             </span>
           </div>
@@ -979,7 +983,7 @@ export default function JobDetailPage() {
         <button
           type="button"
           onClick={() => setFlashOk('Feedback coming soon')}
-          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 overflow-hidden"
+          className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-gold/30 hover:shadow-xl hover:shadow-gold/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-gold via-gold to-gold-text overflow-hidden"
         >
           <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
           <div className="relative flex items-center gap-3">
@@ -987,7 +991,7 @@ export default function JobDetailPage() {
               <Star className="w-5 h-5 fill-current" />
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-bold">Send Feedback</span>
+              <span className="block text-sm font-semibold">Send Feedback</span>
               <span className="block text-xs text-white/85 truncate">Share what worked or didn&apos;t</span>
             </span>
           </div>
@@ -997,7 +1001,7 @@ export default function JobDetailPage() {
           <button
             type="button"
             onClick={openEscalateDialog}
-            className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-rose-500 via-red-500 to-red-600 overflow-hidden"
+            className="group relative w-full text-left p-4 rounded-xl text-white shadow-lg shadow-danger/30 hover:shadow-xl hover:shadow-danger/40 hover:-translate-y-0.5 transition bg-gradient-to-br from-danger via-danger to-danger-text overflow-hidden"
           >
             <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/0 to-white/15 pointer-events-none" />
             <div className="relative flex items-center gap-3">
@@ -1005,7 +1009,7 @@ export default function JobDetailPage() {
                 <Flame className="w-5 h-5" />
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-bold">Escalate</span>
+                <span className="block text-sm font-semibold">Escalate</span>
                 <span className="block text-xs text-white/85 truncate">Flag this for urgent ops attention</span>
               </span>
             </div>
@@ -1015,15 +1019,15 @@ export default function JobDetailPage() {
 
       {/* Success flash — short toast under the action buttons */}
       {flashOk && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 inline-flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="rounded-lg border border-success/30 bg-success-tint px-4 py-2.5 text-sm text-success-text inline-flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-success" />
           {flashOk}
         </div>
       )}
 
       {/* Error inline */}
       {actError && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {actError}
         </div>
       )}
@@ -1034,12 +1038,12 @@ export default function JobDetailPage() {
           (no Click2Call backend required). Sub-buttons are hidden when
           the respective number isn't on file (Handyman, Easyfix Support). */}
       <Modal open={callDialog} onClose={() => setCallDialog(false)}>
-        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
-          <h2 className="text-lg font-bold text-slate-900">Who Would Need To Contact</h2>
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-ink-100">
+          <h2 className="text-lg font-semibold text-ink-900">Who Would Need To Contact</h2>
           <button
             type="button"
             onClick={() => setCallDialog(false)}
-            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700"
             aria-label="Close"
           >
             <XIcon className="w-4 h-4" />
@@ -1050,7 +1054,7 @@ export default function JobDetailPage() {
             <a
               href={`tel:${j.customer_mob_no}`}
               className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-              style={{ backgroundColor: '#6D20BF' }}
+              style={{ backgroundColor: 'var(--ef-blue-500)' }}
             >
               <User className="w-4 h-4" /> Call Customer
             </a>
@@ -1058,7 +1062,7 @@ export default function JobDetailPage() {
             <button
               type="button"
               disabled
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-slate-400 bg-slate-100 font-semibold text-sm cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-ink-300 bg-ink-100 font-semibold text-sm cursor-not-allowed"
             >
               <User className="w-4 h-4" /> Customer · no number on file
             </button>
@@ -1067,7 +1071,7 @@ export default function JobDetailPage() {
             <a
               href={`tel:${j.easyfixer_mobile}`}
               className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-              style={{ backgroundColor: '#6D20BF' }}
+              style={{ backgroundColor: 'var(--ef-blue-500)' }}
             >
               <HardHat className="w-4 h-4" /> Call Handyman
             </a>
@@ -1075,7 +1079,7 @@ export default function JobDetailPage() {
             <button
               type="button"
               disabled
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-slate-400 bg-slate-100 font-semibold text-sm cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-ink-300 bg-ink-100 font-semibold text-sm cursor-not-allowed"
             >
               <HardHat className="w-4 h-4" /> Handyman · not yet allocated
             </button>
@@ -1083,7 +1087,7 @@ export default function JobDetailPage() {
           <a
             href="tel:+918068499000"
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-white font-semibold text-sm shadow-sm hover:opacity-90 transition"
-            style={{ backgroundColor: '#6D20BF' }}
+            style={{ backgroundColor: 'var(--ef-blue-500)' }}
           >
             <Headphones className="w-4 h-4" /> Call Easyfix Support
           </a>
@@ -1098,16 +1102,16 @@ export default function JobDetailPage() {
         onClose={() => setEscalateDialog(false)}
         allowBackdropClose={!acting}
       >
-        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-slate-100">
-          <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
-            <Flame className="w-5 h-5" style={{ color: '#E31E25' }} />
+        <div className="px-6 pt-5 pb-3 flex items-center justify-between border-b border-ink-100">
+          <h2 className="text-lg font-semibold text-ink-900 inline-flex items-center gap-2">
+            <Flame className="w-5 h-5" style={{ color: 'var(--ef-red-600)' }} />
             Escalate Job
           </h2>
           <button
             type="button"
             onClick={() => setEscalateDialog(false)}
             disabled={acting}
-            className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            className="w-8 h-8 rounded-full grid place-items-center text-ink-300 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-50"
             aria-label="Close"
           >
             <XIcon className="w-4 h-4" />
@@ -1115,8 +1119,8 @@ export default function JobDetailPage() {
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Reason <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold text-ink-700 mb-1.5">
+              Reason <span className="text-danger">*</span>
             </label>
             <select
               value={escalateReasonId}
@@ -1130,14 +1134,14 @@ export default function JobDetailPage() {
               ))}
             </select>
             {escalateReasons.length === 0 && (
-              <p className="text-[11px] text-slate-400 mt-1 inline-flex items-center gap-1">
+              <p className="text-xs text-ink-300 mt-1 inline-flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Loading reasons…
               </p>
             )}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Comment <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold text-ink-700 mb-1.5">
+              Comment <span className="text-danger">*</span>
             </label>
             <textarea
               rows={3}
@@ -1149,7 +1153,7 @@ export default function JobDetailPage() {
             />
           </div>
           {actError && (
-            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
               {actError}
             </div>
           )}
@@ -1158,7 +1162,7 @@ export default function JobDetailPage() {
               type="button"
               onClick={() => setEscalateDialog(false)}
               disabled={acting}
-              className="px-4 py-2 rounded-md text-sm font-semibold border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+              className="px-4 py-2 rounded-md text-sm font-semibold border border-warning/30 bg-warning-tint text-warning-text hover:bg-warning/20 disabled:opacity-60"
             >
               No, Cancel
             </button>
@@ -1166,7 +1170,7 @@ export default function JobDetailPage() {
               type="button"
               onClick={submitEscalate}
               disabled={acting}
-              className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5"
+              className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-success hover:bg-success-text disabled:opacity-60 inline-flex items-center gap-1.5"
             >
               {acting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</> : 'Submit'}
             </button>
@@ -1214,7 +1218,7 @@ function Section({
   children: React.ReactNode;
 }) {
   // h-full + flex-col let two side-by-side sections in a CSS grid row
-  // stretch to the same height — the white card body fills the
+  // stretch to the same height — the bg-surface card body fills the
   // remaining space below the header, so the Customer & Location card
   // and Job Information card line up flush at the bottom even when
   // one has more fields than the other.
@@ -1225,11 +1229,11 @@ function Section({
           <div className="w-8 h-8 rounded-lg bg-primary/10 grid place-items-center">
             <Icon className="w-4 h-4 text-primary" />
           </div>
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          <h2 className="text-base font-semibold text-ink-900">{title}</h2>
         </div>
         {titleRight}
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex-1">
+      <div className="bg-surface border border-ink-100 rounded-xl p-5 shadow-sm flex-1">
         {children}
       </div>
     </div>
@@ -1246,18 +1250,18 @@ function QuickStat({
   accent?: boolean;
 }) {
   return (
-    <div className="bg-white px-4 py-3 min-w-0">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1 inline-flex items-center gap-1">
+    <div className="bg-surface px-4 py-3 min-w-0">
+      <div className="text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1 inline-flex items-center gap-1">
         <Icon className="w-3 h-3" />
         {label}
       </div>
       <div className={cn(
         'text-sm truncate font-semibold',
-        accent ? 'text-emerald-700' : 'text-slate-800'
+        accent ? 'text-success-text' : 'text-ink-900'
       )}>
         {value}
       </div>
-      {sub && <div className="text-xs text-slate-500 truncate">{sub}</div>}
+      {sub && <div className="text-xs text-ink-500 truncate">{sub}</div>}
     </div>
   );
 }
@@ -1271,12 +1275,12 @@ function Field({
 }) {
   return (
     <div className="flex gap-3">
-      <div className="w-7 h-7 rounded-md bg-slate-50 grid place-items-center shrink-0 mt-0.5">
-        <Icon className="w-3.5 h-3.5 text-slate-400" />
+      <div className="w-7 h-7 rounded-md bg-ink-50 grid place-items-center shrink-0 mt-0.5">
+        <Icon className="w-3.5 h-3.5 text-ink-300" />
       </div>
       <div className="min-w-0 flex-1">
-        <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">{label}</dt>
-        <dd className="text-sm text-slate-800">{children}</dd>
+        <dt className="text-xs font-semibold uppercase tracking-wider text-ink-500 mb-0.5">{label}</dt>
+        <dd className="text-sm text-ink-900">{children}</dd>
       </div>
     </div>
   );
@@ -1313,13 +1317,13 @@ function Modal({
   if (!open || !mounted) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-900/30 backdrop-blur-sm px-4"
       role="dialog"
       aria-modal="true"
       onClick={() => allowBackdropClose && onClose()}
     >
       <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
+        className="w-full max-w-lg rounded-xl bg-surface shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

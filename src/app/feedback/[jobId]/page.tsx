@@ -208,8 +208,8 @@ export default function CustomerFeedbackPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-50">
-        <div className="text-center text-slate-500">
+      <div className="min-h-screen grid place-items-center bg-ink-50">
+        <div className="text-center text-ink-500">
           <Loader2 className="w-8 h-8 animate-spin mx-auto" />
           <p className="mt-3 text-sm">Loading your job…</p>
         </div>
@@ -219,11 +219,11 @@ export default function CustomerFeedbackPage() {
 
   if (loadError || !job) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 px-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-md text-center">
-          <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
-          <h1 className="text-xl font-bold text-slate-900 mt-3">Link not valid</h1>
-          <p className="text-sm text-slate-500 mt-2">
+      <div className="min-h-screen grid place-items-center bg-ink-50 px-4">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-sm p-8 max-w-md text-center">
+          <AlertCircle className="w-10 h-10 text-danger mx-auto" />
+          <h1 className="text-xl font-semibold text-ink-900 mt-3">Link not valid</h1>
+          <p className="text-sm text-ink-500 mt-2">
             {loadError || 'We could not find this job.'} If you received this link via SMS or email,
             please check that the link is complete.
           </p>
@@ -234,18 +234,18 @@ export default function CustomerFeedbackPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen grid place-items-center bg-gradient-to-br from-rose-50 via-white to-amber-50 px-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-8 max-w-md text-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 grid place-items-center mx-auto">
-            <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+      <div className="min-h-screen grid place-items-center bg-gradient-to-br from-primary-50 via-white to-gold-tint px-4">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-lg p-8 max-w-md text-center">
+          <div className="w-16 h-16 rounded-full bg-success-tint grid place-items-center mx-auto">
+            <CheckCircle2 className="w-9 h-9 text-success" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mt-4">Thank you!</h1>
-          <p className="text-sm text-slate-500 mt-2">
+          <h1 className="text-2xl font-semibold text-ink-900 mt-4">Thank you!</h1>
+          <p className="text-sm text-ink-500 mt-2">
             {job.already_rated && job.existing_rating
               ? `Your ${job.existing_rating}-star rating was already recorded for this job.`
               : 'Your feedback has been recorded. We use it to keep our technicians at the top of their game.'}
           </p>
-          <div className="mt-6 text-xs text-slate-400 uppercase tracking-[0.18em] font-semibold">
+          <div className="mt-6 text-xs text-ink-300 uppercase tracking-[0.18em] font-semibold">
             Powered by <span className="text-primary">EasyFix</span>
           </div>
         </div>
@@ -254,29 +254,29 @@ export default function CustomerFeedbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-12">
+    <div className="min-h-screen bg-ink-50 pb-12">
       {/* Header band */}
       <div className="bg-gradient-to-r from-primary via-primary-dark to-primary text-white">
         <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between">
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/80 font-semibold">
+            <div className="text-xs uppercase tracking-[0.18em] text-white/80 font-semibold">
               {job.client_name || 'EasyFix Service'}
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold leading-tight mt-0.5">
+            <h1 className="text-xl sm:text-2xl font-semibold leading-tight mt-0.5">
               How was your service?
             </h1>
           </div>
-          <div className="text-right text-[11px] text-white/85">
+          <div className="text-right text-xs text-white/85">
             <div>Order ID</div>
-            <div className="font-mono font-bold text-base">#{job.job_id}</div>
+            <div className="font-mono font-semibold text-base">#{job.job_id}</div>
           </div>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 -mt-4">
         {/* Technician card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-fuchsia-400 via-pink-500 to-violet-600 grid place-items-center text-white font-extrabold text-xl shrink-0 ring-2 ring-white shadow-md shadow-pink-500/20 overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-sm p-4 sm:p-5 flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary via-primary-600 to-primary-dark grid place-items-center text-white font-semibold text-xl shrink-0 ring-2 ring-white shadow-md shadow-primary/20 overflow-hidden">
             {job.easyfixer_image
               ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -292,14 +292,14 @@ export default function CustomerFeedbackPage() {
               : techInitials}
           </div>
           <div className="min-w-0">
-            <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold">
+            <div className="text-xs text-ink-500 uppercase tracking-wide font-semibold">
               {job.service_category || 'Service'}
             </div>
-            <div className="text-lg font-bold text-slate-900 leading-tight truncate">
+            <div className="text-lg font-semibold text-ink-900 leading-tight truncate">
               With {job.easyfixer_name || 'EasyFix Technician'}
             </div>
             {job.customer_name && (
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="text-xs text-ink-500 mt-0.5">
                 Hi {job.customer_name.replace(/^Mr\.?\s+|^Ms\.?\s+|^Mrs\.?\s+/i, '').split(' ')[0] || job.customer_name}, please share your experience.
               </div>
             )}
@@ -307,8 +307,8 @@ export default function CustomerFeedbackPage() {
         </div>
 
         {/* Rating emojis */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mt-4">
-          <h2 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-sm p-4 sm:p-5 mt-4">
+          <h2 className="text-sm font-semibold text-ink-700 mb-3 uppercase tracking-wider">
             How was your experience?
           </h2>
           <div className="flex justify-between sm:justify-around items-center">
@@ -331,14 +331,14 @@ export default function CustomerFeedbackPage() {
             })}
           </div>
           <div className="text-center mt-4">
-            <div className="text-lg sm:text-xl font-extrabold text-slate-900">{ctx.title}</div>
-            <div className="text-sm text-slate-500 mt-1">{ctx.subtitle}</div>
+            <div className="text-lg sm:text-xl font-semibold text-ink-900">{ctx.title}</div>
+            <div className="text-sm text-ink-500 mt-1">{ctx.subtitle}</div>
           </div>
         </div>
 
         {/* Tag picker */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mt-4">
-          <h2 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-sm p-4 sm:p-5 mt-4">
+          <h2 className="text-sm font-semibold text-ink-700 mb-3 uppercase tracking-wider">
             {ctx.ask}
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -352,7 +352,7 @@ export default function CustomerFeedbackPage() {
                   className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold border transition ${
                     on
                       ? 'bg-primary text-white border-primary shadow-sm shadow-primary/30'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-primary/40 hover:bg-primary/5'
+                      : 'bg-surface text-ink-700 border-ink-100 hover:border-primary/40 hover:bg-primary/5'
                   }`}
                 >
                   {tag}
@@ -363,13 +363,13 @@ export default function CustomerFeedbackPage() {
         </div>
 
         {/* Review textarea */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mt-4">
-          <h2 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+        <div className="bg-surface rounded-2xl border border-ink-100 shadow-sm p-4 sm:p-5 mt-4">
+          <h2 className="text-sm font-semibold text-ink-700 mb-3 uppercase tracking-wider">
             A quick comment
           </h2>
           <textarea
             rows={3}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-y"
+            className="w-full rounded-lg border border-ink-100 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-y"
             placeholder="Tell us a bit about your experience…"
             value={review}
             onChange={(e) => setReview(e.target.value)}
@@ -377,7 +377,7 @@ export default function CustomerFeedbackPage() {
         </div>
 
         {submitError && (
-          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-sm px-3 py-2 inline-flex items-center gap-2 w-full">
+          <div className="mt-3 rounded-lg border border-danger/30 bg-danger-tint text-danger-text text-sm px-3 py-2 inline-flex items-center gap-2 w-full">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {submitError}
           </div>
@@ -389,7 +389,7 @@ export default function CustomerFeedbackPage() {
             type="button"
             onClick={submit}
             disabled={submitting}
-            className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-white font-bold text-sm shadow-md shadow-primary/30 bg-gradient-to-br from-primary to-primary-dark hover:opacity-95 transition disabled:opacity-60"
+            className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold text-sm shadow-md shadow-primary/30 bg-gradient-to-br from-primary to-primary-dark hover:opacity-95 transition disabled:opacity-60"
           >
             {submitting
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
@@ -398,14 +398,14 @@ export default function CustomerFeedbackPage() {
           <button
             type="button"
             onClick={() => setShowRaiseIssue(true)}
-            className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-slate-700 font-bold text-sm border border-slate-200 bg-white hover:border-slate-300 transition"
+            className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-ink-700 font-semibold text-sm border border-ink-100 bg-surface hover:border-ink-300 transition"
           >
             <Send className="w-4 h-4" /> Raise an issue
           </button>
         </div>
 
         {/* Powered-by footer */}
-        <div className="text-center mt-6 text-[10px] uppercase tracking-[0.18em] text-slate-400 font-semibold">
+        <div className="text-center mt-6 text-xs uppercase tracking-[0.18em] text-ink-300 font-semibold">
           Powered by <span className="text-primary">EasyFix</span>
         </div>
       </div>
@@ -413,24 +413,24 @@ export default function CustomerFeedbackPage() {
       {/* Raise Issue modal — keeps the legacy "email ops" affordance. */}
       {showRaiseIssue && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm grid place-items-center px-4"
+          className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-sm grid place-items-center px-4"
           onClick={() => setShowRaiseIssue(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5"
+            className="bg-surface rounded-2xl shadow-2xl max-w-md w-full p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-slate-900">Raise an issue</h3>
+              <h3 className="text-lg font-semibold text-ink-900">Raise an issue</h3>
               <button
                 type="button"
                 onClick={() => setShowRaiseIssue(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 grid place-items-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-ink-100 grid place-items-center text-ink-300"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-ink-500 mb-4">
               For urgent issues, please email{' '}
               <a
                 href={`mailto:solutions@easyfix.in?subject=${encodeURIComponent(`${job.client_name || 'EasyFix'} — Order #${job.job_id}`)}&body=${encodeURIComponent(`Job #${job.job_id}\nTechnician: ${job.easyfixer_name || ''}\n\nIssue:\n`)}`}
@@ -443,7 +443,7 @@ export default function CustomerFeedbackPage() {
             <button
               type="button"
               onClick={() => setShowRaiseIssue(false)}
-              className="w-full py-2.5 rounded-lg text-sm font-bold border border-slate-200 hover:bg-slate-50 transition"
+              className="w-full py-2.5 rounded-lg text-sm font-semibold border border-ink-100 hover:bg-ink-50 transition"
             >
               Close
             </button>

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { chartSeries } from '@/brand/charts';
 
 type TeamMember = {
   id: number;
@@ -95,26 +96,25 @@ function initialsOf(name: string | null) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 // Deterministic colour per name so the same person stays the same colour.
+// Avatar hues are purely categorical (they only tell person A from
+// person B), so they come from the chart ramp rather than a brand
+// token. `.to` is the darker end, so white initials stay legible.
 function avatarBg(name: string | null) {
-  const palette = [
-    'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500',
-    'bg-violet-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500',
-  ];
   let h = 0;
   for (let i = 0; i < (name || '').length; i++) h = (h * 31 + (name || '').charCodeAt(i)) >>> 0;
-  return palette[h % palette.length];
+  return chartSeries[h % chartSeries.length].to;
 }
 
 function StatusBadge({ status }: { status: number | null }) {
   if (status === 1) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-semibold">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-tint text-success-text ring-1 ring-success/40 text-xs font-semibold">
         <Shield className="w-3 h-3" /> Active
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 text-xs font-semibold">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ink-100 text-ink-500 ring-1 ring-ink-300/40 text-xs font-semibold">
       <ShieldOff className="w-3 h-3" /> Inactive
     </span>
   );
@@ -148,36 +148,36 @@ function HierarchyNode({
           onClick={() => hasChildren && onToggle(node.id)}
           className={cn(
             'shrink-0 w-5 h-5 grid place-items-center rounded',
-            hasChildren ? 'hover:bg-slate-200 cursor-pointer' : 'cursor-default'
+            hasChildren ? 'hover:bg-ink-100 cursor-pointer' : 'cursor-default'
           )}
           aria-label={hasChildren ? (isOpen ? 'Collapse' : 'Expand') : undefined}
           tabIndex={hasChildren ? 0 : -1}
         >
           {hasChildren && (
             <ChevronRight
-              className={cn('w-4 h-4 text-slate-500 transition', isOpen && 'rotate-90')}
+              className={cn('w-4 h-4 text-ink-500 transition', isOpen && 'rotate-90')}
             />
           )}
         </button>
 
-        <div className={cn(
-          'shrink-0 w-9 h-9 rounded-full text-white font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-sm',
-          avatarBg(node.name)
-        )}>
+        <div
+          className="shrink-0 w-9 h-9 rounded-full text-white font-semibold text-xs flex items-center justify-center ring-2 ring-white shadow-sm"
+          style={{ background: avatarBg(node.name) }}
+        >
           {initialsOf(node.name)}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-slate-800 truncate">{node.name || '—'}</span>
+            <span className="font-semibold text-ink-900 truncate">{node.name || '—'}</span>
             <StatusBadge status={node.status} />
             {hasChildren && (
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-ink-500">
                 {node.children.length} report{node.children.length === 1 ? '' : 's'}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-ink-500 mt-0.5 flex-wrap">
             {node.designation && (
               <span className="inline-flex items-center gap-1">
                 <Badge className="w-3 h-3" /> {node.designation}
@@ -198,7 +198,7 @@ function HierarchyNode({
       </div>
 
       {hasChildren && isOpen && (
-        <ul className="border-l border-slate-200 ml-[20px]">
+        <ul className="border-l border-ink-100 ml-[20px]">
           {node.children.map((c) => (
             <HierarchyNode
               key={c.id}
@@ -293,16 +293,16 @@ export default function MyTeamPage() {
       {/* Title */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-ink-900 inline-flex items-center gap-2">
             <Users className="w-6 h-6 text-primary" /> My Team
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-500">
             Reporting managers and SPOC team members linked to your client account.
           </p>
         </div>
 
         {/* View toggle — the new bit the legacy UI didn't have */}
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="inline-flex rounded-lg border border-ink-100 bg-surface p-1 shadow-sm">
           <button
             type="button"
             onClick={() => setView('table')}
@@ -310,7 +310,7 @@ export default function MyTeamPage() {
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition',
               view === 'table'
                 ? 'bg-primary text-white shadow'
-                : 'text-slate-700 hover:bg-slate-100'
+                : 'text-ink-700 hover:bg-ink-50'
             )}
           >
             <LayoutGrid className="w-4 h-4" /> Table
@@ -322,7 +322,7 @@ export default function MyTeamPage() {
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition',
               view === 'hierarchy'
                 ? 'bg-primary text-white shadow'
-                : 'text-slate-700 hover:bg-slate-100'
+                : 'text-ink-700 hover:bg-ink-50'
             )}
           >
             <GitBranch className="w-4 h-4" /> Hierarchy
@@ -335,7 +335,7 @@ export default function MyTeamPage() {
         {view === 'table' && (
           <>
             <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
               <input
                 className="input pl-9"
                 placeholder="Search by name, email, mobile, designation…"
@@ -366,7 +366,7 @@ export default function MyTeamPage() {
           </div>
         )}
         <div className={cn('flex items-center gap-2', view === 'table' ? '' : 'ml-auto')}>
-          <label className="text-xs font-medium text-slate-600">Status</label>
+          <label className="text-xs font-medium text-ink-500">Status</label>
           <select
             className="input max-w-[140px]"
             value={status}
@@ -380,7 +380,7 @@ export default function MyTeamPage() {
       </div>
 
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/40 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -402,26 +402,26 @@ export default function MyTeamPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="text-center text-slate-500 py-8">Loading…</td></tr>
+                <tr><td colSpan={6} className="text-center text-ink-500 py-8">Loading…</td></tr>
               )}
               {!loading && total === 0 && (
-                <tr><td colSpan={6} className="text-center text-slate-500 py-8">No team members found.</td></tr>
+                <tr><td colSpan={6} className="text-center text-ink-500 py-8">No team members found.</td></tr>
               )}
               {!loading && pagedForTable.map((m, idx) => (
                 <tr key={m.id} className="hover:bg-primary-50/40">
-                  <td className="text-xs text-slate-500">{firstIdx + idx}</td>
+                  <td className="text-xs text-ink-500">{firstIdx + idx}</td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <div className={cn(
-                        'w-8 h-8 rounded-full text-white font-bold text-[11px] flex items-center justify-center shrink-0',
-                        avatarBg(m.name)
-                      )}>
+                      <div
+                        className="w-8 h-8 rounded-full text-white font-semibold text-xs flex items-center justify-center shrink-0"
+                        style={{ background: avatarBg(m.name) }}
+                      >
                         {initialsOf(m.name)}
                       </div>
-                      <span className="font-semibold text-slate-800">{m.name || '—'}</span>
+                      <span className="font-semibold text-ink-900">{m.name || '—'}</span>
                     </div>
                   </td>
-                  <td className="text-sm text-slate-600">{m.designation || '—'}</td>
+                  <td className="text-sm text-ink-500">{m.designation || '—'}</td>
                   <td className="text-sm font-mono">{m.mobile || '—'}</td>
                   <td className="text-sm">{m.email || '—'}</td>
                   <td><StatusBadge status={m.status} /></td>
@@ -433,7 +433,7 @@ export default function MyTeamPage() {
 
         {/* Pagination — only meaningful for the Table view. */}
         {total > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500">
             <span>
               Showing <span className="font-semibold">{firstIdx}</span>–
               <span className="font-semibold">{lastIdx}</span> of{' '}
@@ -472,10 +472,10 @@ export default function MyTeamPage() {
       {view === 'hierarchy' && (
         <div className="card p-2">
           {loading && (
-            <div className="text-center text-slate-500 py-8">Loading…</div>
+            <div className="text-center text-ink-500 py-8">Loading…</div>
           )}
           {!loading && tree.length === 0 && (
-            <div className="text-center text-slate-500 py-8">No team members found.</div>
+            <div className="text-center text-ink-500 py-8">No team members found.</div>
           )}
           {!loading && tree.length > 0 && (
             <ul className="text-sm">

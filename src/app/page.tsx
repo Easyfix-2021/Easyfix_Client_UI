@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { Logo } from '@/components/brand/logo';
 import {
   Headphones,
   Facebook,
@@ -23,21 +24,28 @@ import {
   X,
 } from 'lucide-react';
 import { api, ApiError, setToken, getToken } from '@/lib/api';
+import { vendor } from '@/brand/charts';
 
 type View = 'signin' | 'signup';
 type Step = 'identifier' | 'otp';
 
+/*
+ * `bg` is each network's OWN mark, taken from the vendor map in
+ * src/brand/charts.ts — WhatsApp green belongs to WhatsApp, so a rebrand
+ * must not repaint it. Applied as an inline background rather than a
+ * Tailwind class for the same reason: it is not a token.
+ */
 const SOCIAL_LINKS: Array<{
   label: string;
   href: string;
   Icon: typeof Facebook;
   bg: string;
 }> = [
-  { label: 'Facebook',  href: 'https://www.facebook.com/easyfixservices',  Icon: Facebook,      bg: 'bg-[#1877F2]' },
-  { label: 'Instagram', href: 'https://www.instagram.com/easyfixservices', Icon: Instagram,     bg: 'bg-[#E1306C]' },
-  { label: 'LinkedIn',  href: 'https://www.linkedin.com/company/easyfix',  Icon: Linkedin,      bg: 'bg-[#0A66C2]' },
-  { label: 'WhatsApp',  href: 'https://wa.me/919999999999',                Icon: MessageCircle, bg: 'bg-[#25D366]' },
-  { label: 'YouTube',   href: 'https://www.youtube.com/@easyfix',          Icon: Youtube,       bg: 'bg-[#FF0000]' },
+  { label: 'Facebook',  href: 'https://www.facebook.com/easyfixservices',  Icon: Facebook,      bg: vendor.facebook },
+  { label: 'Instagram', href: 'https://www.instagram.com/easyfixservices', Icon: Instagram,     bg: vendor.instagram },
+  { label: 'LinkedIn',  href: 'https://www.linkedin.com/company/easyfix',  Icon: Linkedin,      bg: vendor.linkedin },
+  { label: 'WhatsApp',  href: 'https://wa.me/919999999999',                Icon: MessageCircle, bg: vendor.whatsapp },
+  { label: 'YouTube',   href: 'https://www.youtube.com/@easyfix',          Icon: Youtube,       bg: vendor.youtube },
 ];
 
 export default function LoginPage() {
@@ -135,7 +143,7 @@ export default function LoginPage() {
 
   return (
     <main
-      className="relative min-h-screen w-full overflow-x-hidden bg-white bg-no-repeat bg-cover bg-center"
+      className="relative min-h-screen w-full overflow-x-hidden bg-surface bg-no-repeat bg-cover bg-center"
       style={{ backgroundImage: "url('/background.png')" }}
     >
       {/* Header — Sign In / Know More on the left, EasyFix logo centered over the right column */}
@@ -161,14 +169,7 @@ export default function LoginPage() {
             </a>
           </nav>
           <div className="hidden md:flex justify-center">
-            <Image
-              src="/logoTrans.png"
-              alt="EasyFix"
-              width={220}
-              height={66}
-              priority
-              className="h-16 lg:h-20 w-auto"
-            />
+            <Logo priority className="h-16 lg:h-20 w-auto" />
           </div>
         </div>
       </header>
@@ -179,7 +180,7 @@ export default function LoginPage() {
         <div className="flex flex-col justify-center max-w-xl">
           {view === 'signin' && step === 'identifier' && (
             <>
-              <h1 className="text-white font-extrabold text-3xl md:text-5xl leading-tight tracking-wide">
+              <h1 className="text-white font-semibold text-3xl md:text-5xl leading-tight tracking-wide">
                 Power up your customer support
               </h1>
               <p className="text-white text-lg md:text-2xl font-medium mt-6 md:mt-8">
@@ -190,7 +191,7 @@ export default function LoginPage() {
                 <input
                   autoFocus
                   type="text"
-                  className="w-full rounded-xl px-4 py-4 text-base bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-white/80 shadow"
+                  className="w-full rounded-xl px-4 py-4 text-base bg-surface text-ink-900 placeholder:text-ink-300 outline-none focus:ring-2 focus:ring-white/80 shadow"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Registered Mobile Number or Email Address"
@@ -198,7 +199,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading || !identifier.trim()}
-                  className="rounded-xl bg-white/95 text-[#d9212b] font-bold px-12 py-3 text-base hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed shadow"
+                  className="rounded-xl bg-white/95 text-primary font-semibold px-12 py-3 text-base hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   {loading ? 'Sending OTP…' : 'Send OTP'}
                 </button>
@@ -209,7 +210,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => switchView('signup')}
-                  className="text-white font-bold underline underline-offset-2"
+                  className="text-white font-semibold underline underline-offset-2"
                 >
                   Signup Now
                 </button>
@@ -219,11 +220,11 @@ export default function LoginPage() {
 
           {view === 'signin' && step === 'otp' && (
             <>
-              <h1 className="text-white font-extrabold text-3xl md:text-5xl leading-tight tracking-wide">
+              <h1 className="text-white font-semibold text-3xl md:text-5xl leading-tight tracking-wide">
                 Verify your OTP
               </h1>
               <p className="text-white text-base md:text-xl font-medium mt-4">
-                We sent a 4-digit code to <span className="font-bold">{identifier}</span>
+                We sent a 4-digit code to <span className="font-semibold">{identifier}</span>
               </p>
 
               <form onSubmit={(e) => { e.preventDefault(); void verifyOtp(); }} className="mt-8 md:mt-10 space-y-5 max-w-md">
@@ -233,7 +234,7 @@ export default function LoginPage() {
                   maxLength={4}
                   type="text"
                   disabled={loading}
-                  className="w-full rounded-xl px-4 py-4 text-2xl tracking-[0.6em] text-center font-bold bg-white text-slate-900 placeholder:text-slate-400 placeholder:tracking-normal placeholder:text-base placeholder:font-normal outline-none focus:ring-2 focus:ring-white/80 shadow disabled:opacity-60"
+                  className="w-full rounded-xl px-4 py-4 text-2xl tracking-[0.6em] text-center font-semibold bg-surface text-ink-900 placeholder:text-ink-300 placeholder:tracking-normal placeholder:text-base placeholder:font-normal outline-none focus:ring-2 focus:ring-white/80 shadow disabled:opacity-60"
                   value={otp}
                   onChange={(e) => onOtpChange(e.target.value)}
                   placeholder="Enter OTP"
@@ -259,7 +260,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => sendOtp()}
                     disabled={loading}
-                    className="text-white font-bold underline underline-offset-2 text-sm md:text-base disabled:opacity-50"
+                    className="text-white font-semibold underline underline-offset-2 text-sm md:text-base disabled:opacity-50"
                   >
                     Resend OTP
                   </button>
@@ -270,7 +271,7 @@ export default function LoginPage() {
 
           {view === 'signup' && !signupSent && (
             <>
-              <h1 className="text-white font-extrabold text-3xl md:text-5xl leading-tight tracking-wide">
+              <h1 className="text-white font-semibold text-3xl md:text-5xl leading-tight tracking-wide">
                 Create Account
               </h1>
               <p className="text-white text-base md:text-lg mt-4 max-w-md">
@@ -281,14 +282,14 @@ export default function LoginPage() {
                 <input
                   autoFocus
                   type="text"
-                  className="w-full rounded-xl px-4 py-4 text-base bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-white/80 shadow"
+                  className="w-full rounded-xl px-4 py-4 text-base bg-surface text-ink-900 placeholder:text-ink-300 outline-none focus:ring-2 focus:ring-white/80 shadow"
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   placeholder="Client Id"
                 />
                 <input
                   type="email"
-                  className="w-full rounded-xl px-4 py-4 text-base bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-white/80 shadow"
+                  className="w-full rounded-xl px-4 py-4 text-base bg-surface text-ink-900 placeholder:text-ink-300 outline-none focus:ring-2 focus:ring-white/80 shadow"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Email Id"
@@ -296,7 +297,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading || !clientId.trim() || !email.trim()}
-                  className="rounded-xl bg-white/95 text-[#d9212b] font-bold px-12 py-3 text-base hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed shadow"
+                  className="rounded-xl bg-white/95 text-primary font-semibold px-12 py-3 text-base hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   {loading ? 'Sending…' : 'Sign Up'}
                 </button>
@@ -307,7 +308,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => switchView('signin')}
-                  className="text-white font-bold underline underline-offset-2"
+                  className="text-white font-semibold underline underline-offset-2"
                 >
                   Sign In
                 </button>
@@ -317,25 +318,25 @@ export default function LoginPage() {
 
           {view === 'signup' && signupSent && (
             <>
-              <h1 className="text-white font-extrabold text-3xl md:text-4xl leading-tight tracking-wide">
+              <h1 className="text-white font-semibold text-3xl md:text-4xl leading-tight tracking-wide">
                 Verification email sent
               </h1>
               <p className="text-white text-base md:text-lg mt-4 max-w-md">
                 We&apos;ve sent a verification link to{' '}
-                <span className="font-bold">{email}</span>. The link is valid for 2 hours.
+                <span className="font-semibold">{email}</span>. The link is valid for 2 hours.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 max-w-md text-sm md:text-base">
                 <button
                   type="button"
                   onClick={() => setSignupSent(false)}
-                  className="text-white font-bold underline underline-offset-2"
+                  className="text-white font-semibold underline underline-offset-2"
                 >
                   Change email
                 </button>
                 <button
                   type="button"
                   onClick={() => submitSignup()}
-                  className="text-white font-bold underline underline-offset-2"
+                  className="text-white font-semibold underline underline-offset-2"
                 >
                   Resend email
                 </button>
@@ -369,31 +370,42 @@ export default function LoginPage() {
           verify / signup, or the inactive-client guard from the backend). */}
       {error && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/40 px-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="error-modal-title"
           onClick={() => setError(null)}
         >
           <div
-            className="w-full max-w-md rounded-lg bg-white shadow-2xl overflow-hidden"
+            className="w-full max-w-md rounded-lg bg-surface shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-8 pt-8 pb-6 text-center">
               <h2
                 id="error-modal-title"
-                className="text-3xl font-semibold text-slate-900"
+                className="text-3xl font-semibold text-ink-900"
               >
                 Error
               </h2>
-              <p className="mt-5 text-slate-700 leading-relaxed">{error}</p>
+              <p className="mt-5 text-ink-700 leading-relaxed">{error}</p>
             </div>
             <div className="pb-8 flex justify-center">
               <button
                 type="button"
                 autoFocus
                 onClick={() => setError(null)}
-                className="rounded-md bg-[#2778c4] hover:bg-[#1f64a8] text-white font-semibold px-10 py-2.5 shadow transition"
+                className="rounded-md bg-[var(--ok-btn)] hover:bg-[var(--ok-btn-hover)] text-white font-semibold px-10 py-2.5 shadow transition"
+                /*
+                 * The legacy SweetAlert dialog's confirm blue, which the
+                 * vendor map carries as `playStore` / `playStorePressed`
+                 * — somebody else's colour, so it stays out of the token
+                 * set. Piped through custom properties because a hover
+                 * state cannot be expressed as an inline style.
+                 */
+                style={{
+                  '--ok-btn': vendor.playStore,
+                  '--ok-btn-hover': vendor.playStorePressed,
+                } as React.CSSProperties}
               >
                 OK
               </button>
@@ -423,8 +435,8 @@ export default function LoginPage() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={label}
-              className={`w-11 h-11 rounded-full ${bg} text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform`}
-              style={{ transitionDelay: socialOpen ? `${i * 40}ms` : '0ms' }}
+              className="w-11 h-11 rounded-full text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform"
+              style={{ backgroundColor: bg, transitionDelay: socialOpen ? `${i * 40}ms` : '0ms' }}
             >
               <Icon className="w-5 h-5" strokeWidth={2} />
             </a>
@@ -437,7 +449,7 @@ export default function LoginPage() {
           onClick={() => setSocialOpen((v) => !v)}
           aria-label={socialOpen ? 'Close contact options' : 'Open contact options'}
           aria-expanded={socialOpen}
-          className="w-14 h-14 rounded-full bg-white text-[#d9212b] shadow-xl ring-1 ring-[#d9212b]/20 hover:scale-105 active:scale-95 transition flex items-center justify-center"
+          className="w-14 h-14 rounded-full bg-surface text-primary shadow-xl ring-1 ring-primary/20 hover:scale-105 active:scale-95 transition flex items-center justify-center"
         >
           {socialOpen ? <X className="w-6 h-6" /> : <Headphones className="w-6 h-6" />}
         </button>

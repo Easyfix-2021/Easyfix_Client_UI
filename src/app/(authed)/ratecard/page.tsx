@@ -85,10 +85,10 @@ export default function RateCardPage() {
       {/* Title + summary */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 inline-flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-ink-900 inline-flex items-center gap-2">
             <ReceiptText className="w-6 h-6 text-primary" /> Rate Card
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-500">
             Your contracted service rates across categories and skill levels.
           </p>
         </div>
@@ -97,19 +97,19 @@ export default function RateCardPage() {
       {/* Summary chips */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">Total Services</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{totalRowCount}</div>
+          <div className="text-xs text-ink-500 uppercase tracking-wide">Total Services</div>
+          <div className="text-2xl font-semibold text-ink-900 mt-1">{totalRowCount}</div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">Categories</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{grouped.length}</div>
+          <div className="text-xs text-ink-500 uppercase tracking-wide">Categories</div>
+          <div className="text-2xl font-semibold text-ink-900 mt-1">{grouped.length}</div>
         </div>
       </div>
 
       {/* Search */}
       <div className="card p-3">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-9"
             placeholder="Search by category, type, rate card name or amount…"
@@ -120,7 +120,7 @@ export default function RateCardPage() {
       </div>
 
       {error && (
-        <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="rounded border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -128,10 +128,10 @@ export default function RateCardPage() {
       {/* GROUPED — collapsible categories with per-group totals */}
       <div className="space-y-3">
           {loading && (
-            <div className="card text-center text-slate-500 py-8">Loading…</div>
+            <div className="card text-center text-ink-500 py-8">Loading…</div>
           )}
           {!loading && grouped.length === 0 && (
-            <div className="card text-center text-slate-500 py-8">
+            <div className="card text-center text-ink-500 py-8">
               {q ? 'No matches for your search.' : 'No rate card configured for your account.'}
             </div>
           )}
@@ -146,20 +146,20 @@ export default function RateCardPage() {
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left bg-primary-50/40 hover:bg-primary-50 transition"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <ChevronRight className={cn('w-4 h-4 text-slate-500 transition shrink-0', isOpen && 'rotate-90')} />
+                    <ChevronRight className={cn('w-4 h-4 text-ink-500 transition shrink-0', isOpen && 'rotate-90')} />
                     <Tag className="w-4 h-4 text-primary shrink-0" />
-                    <span className="font-semibold text-slate-800 truncate">{category}</span>
-                    <span className="inline-flex items-center justify-center px-2 h-5 rounded-full bg-white text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                    <span className="font-semibold text-ink-900 truncate">{category}</span>
+                    <span className="inline-flex items-center justify-center px-2 h-5 rounded-full bg-surface text-xs font-semibold text-ink-500 ring-1 ring-ink-100">
                       {rows.length}
                     </span>
                   </div>
-                  <span className="inline-flex items-center gap-0.5 font-bold text-emerald-700 shrink-0">
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-money shrink-0">
                     <IndianRupee className="w-3.5 h-3.5" />
                     {inr.format(groupTotal)}
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="overflow-x-auto border-t border-slate-100">
+                  <div className="overflow-x-auto border-t border-ink-100">
                     <table className="data-table">
                       <thead>
                         <tr>
@@ -172,11 +172,11 @@ export default function RateCardPage() {
                       <tbody>
                         {rows.map((r, i) => (
                           <tr key={r.client_service_id} className="hover:bg-primary-50/30">
-                            <td className="text-xs text-slate-500">{i + 1}</td>
+                            <td className="text-xs text-ink-500">{i + 1}</td>
                             <td className="text-sm">{r.service_type_name || '—'}</td>
-                            <td className="text-sm text-slate-600">{r.rate_card_name || '—'}</td>
+                            <td className="text-sm text-ink-500">{r.rate_card_name || '—'}</td>
                             <td className="text-right">
-                              <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-700">
+                              <span className="inline-flex items-center gap-0.5 font-semibold text-money">
                                 <IndianRupee className="w-3.5 h-3.5" />
                                 {r.total_amount != null ? inr.format(r.total_amount) : '—'}
                               </span>

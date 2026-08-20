@@ -60,7 +60,7 @@ export function ConfirmDialog({
   if (!open) return null;
 
   const confirmClass = tone === 'danger'
-    ? 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-400 text-white'
+    ? 'bg-danger hover:bg-danger-text focus:ring-danger/40 text-white'
     : 'bg-primary hover:bg-primary-dark focus:ring-primary/40 text-white';
 
   return (
@@ -82,14 +82,14 @@ export function ConfirmDialog({
       {/* Card */}
       <div
         className={cn(
-          'relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150'
+          'relative bg-surface rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-150'
         )}
       >
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="absolute top-3 right-3 p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="absolute top-3 right-3 p-1 rounded text-ink-300 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-40 disabled:cursor-not-allowed"
           aria-label="Close"
         >
           <X className="w-4 h-4" />
@@ -98,15 +98,15 @@ export function ConfirmDialog({
         <div className="flex items-start gap-4">
           <div className={cn(
             'shrink-0 w-11 h-11 rounded-full flex items-center justify-center',
-            tone === 'danger' ? 'bg-rose-50 text-rose-600' : 'bg-primary/10 text-primary'
+            tone === 'danger' ? 'bg-danger-tint text-danger' : 'bg-primary/10 text-primary'
           )}>
             <Icon className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 id="confirm-dialog-title" className="text-lg font-bold text-slate-900">
+            <h2 id="confirm-dialog-title" className="text-lg font-semibold text-ink-900">
               {title}
             </h2>
-            <p className="mt-1 text-sm text-slate-600">{message}</p>
+            <p className="mt-1 text-sm text-ink-500">{message}</p>
           </div>
         </div>
 
@@ -115,7 +115,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-ink-700 border border-ink-100 hover:bg-ink-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {cancelLabel}
           </button>

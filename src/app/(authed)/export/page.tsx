@@ -27,8 +27,8 @@ export default function ExportPage() {
 
   return (
     <div className="space-y-4 max-w-xl">
-      <h1 className="text-2xl font-bold flex items-center gap-2"><FileSpreadsheet /> Export Jobs</h1>
-      <p className="text-sm text-slate-600">
+      <h1 className="text-2xl font-semibold flex items-center gap-2"><FileSpreadsheet /> Export Jobs</h1>
+      <p className="text-sm text-ink-500">
         Download a spreadsheet of your jobs filtered by status and date range. Excel format (.xlsx).
       </p>
 
@@ -54,7 +54,7 @@ export default function ExportPage() {
             <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && <div className="text-sm text-danger">{error}</div>}
         <button onClick={go} disabled={busy} className="btn-primary">
           {busy ? 'Generating…' : 'Download Excel'}
         </button>

@@ -1,10 +1,13 @@
+/* Brand tokens FIRST — everything below references them. */
+@import '../styles/brand-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 font-sans;
+    @apply bg-ink-50 text-ink-900 font-sans;
   }
 
   /*
@@ -18,14 +21,14 @@
    *   - `::-webkit-scrollbar-*` → Chrome / Edge / Safari fallback for
    *     the same visual.
    *
-   * Tone: slate-300 thumb at rest, slate-400 on hover. Transparent
+   * Tone: ink-300 thumb at rest, ink-500 on hover. Transparent
    * track so the scrollbar disappears against any background colour.
    * Width: 8px — slim enough to feel modern, wide enough that a
    * trackpad-less user can still grab it.
    */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+    scrollbar-color: rgb(var(--ef-ink-300-rgb) / 0.55) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -35,7 +38,7 @@
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.55);
+    background-color: rgb(var(--ef-ink-300-rgb) / 0.55);
     border-radius: 9999px;
     /* Tiny transparent border so the pill doesn't kiss the track
        edges — gives it the floating-pill look the modern apps use. */
@@ -43,7 +46,7 @@
     background-clip: padding-box;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.75);
+    background-color: rgb(var(--ef-ink-500-rgb) / 0.75);
     background-clip: padding-box;
   }
   /* Corner where horizontal + vertical scrollbars meet — keep it
@@ -58,22 +61,22 @@
     @apply inline-flex items-center gap-1.5 rounded bg-primary text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50;
   }
   .btn-outline {
-    @apply inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50;
+    @apply inline-flex items-center gap-1.5 rounded border border-ink-100 bg-surface px-3 py-1.5 text-sm font-medium hover:bg-ink-50 disabled:opacity-50;
   }
   .input {
-    @apply w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary;
+    @apply w-full rounded border border-ink-100 bg-surface px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary;
   }
   .card {
-    @apply rounded-lg border bg-white shadow-sm;
+    @apply rounded-lg border bg-surface shadow-sm;
   }
   .data-table {
     @apply w-full text-sm;
   }
   .data-table th {
-    @apply text-left bg-slate-100 px-3 py-2 font-medium text-slate-700 border-b;
+    @apply text-left bg-ink-50 px-3 py-2 font-medium text-ink-700 border-b;
   }
   .data-table td {
-    @apply px-3 py-2 border-b border-slate-100;
+    @apply px-3 py-2 border-b border-ink-100;
   }
   .badge {
     @apply inline-block px-2 py-0.5 rounded-full text-xs font-medium;
