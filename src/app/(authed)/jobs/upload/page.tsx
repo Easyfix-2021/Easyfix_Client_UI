@@ -16,33 +16,19 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { Upload, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { api, ApiError, getToken } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-// Template endpoint sits OUTSIDE the JSON api wrapper — we fetch it
-// directly to get the binary .xlsx response. The path matches the
-// /api/client/* prefix so it routes through the same auth.
-const TEMPLATE_PATH = '/api/client/jobs/upload-template';
+// api.download prefixes /api/client itself, so this is the path WITHIN that
+// namespace. It also surfaces a JSON error envelope as its real message
+// instead of the bare status the hand-rolled version reported.
+const TEMPLATE_PATH = '/jobs/upload-template';
 
 async function downloadTemplate(onErr: (msg: string) => void) {
   try {
-    const token = getToken();
-    const res = await fetch(TEMPLATE_PATH, {
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) { onErr(`Template download failed (HTTP ${res.status})`); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'easyfix-jobs-upload-template.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    await api.download(TEMPLATE_PATH, 'easyfix-jobs-upload-template.xlsx');
   } catch (err) {
-    onErr(err instanceof Error ? err.message : 'Template download failed');
+    onErr(err instanceof ApiError ? err.message : 'Template download failed');
   }
 }
 
@@ -99,21 +85,12 @@ export default function JobUploadPage() {
     fd.set('file', file);
     setLoading(true);
     try {
-      // FormData payload — note: api.post stringifies plain objects, but
-      // FormData passes through untouched in fetch. We use a raw fetch
-      // here to avoid the wrapper trying to JSON-encode the body.
-      const token = getToken();
-      const res = await fetch(`/api/client/jobs/upload?dryRun=${dryRun}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || body?.success === false) {
-        throw new ApiError(body?.error || `HTTP ${res.status}`, res.status, body?.details);
-      }
-      setReport(body.data as Report);
+      // api.upload, not api.post: `post` JSON.stringify's its body and pins
+      // Content-Type to application/json, which would send "[object FormData]"
+      // with no multipart boundary. `upload` lets fetch set the header so the
+      // boundary is generated, and applies the same bearer + envelope handling
+      // every other verb does.
+      setReport(await api.upload<Report>(`/jobs/upload?dryRun=${dryRun}`, fd));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Upload failed');
     } finally {

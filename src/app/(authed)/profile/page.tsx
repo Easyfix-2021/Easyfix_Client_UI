@@ -31,7 +31,7 @@ import {
   Users as UsersIcon, Plus, Upload, Download, AlertCircle,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
-import { api, ApiError, getToken } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
@@ -1180,6 +1180,12 @@ function ToggleCard({
  *   GET    /api/client/contacts/template       (xlsx download)
  *   POST   /api/client/contacts/bulk-upload    (multipart)
  */
+/** What POST /api/client/contacts/bulk-upload returns in its `data`. */
+type BulkContactReport = {
+  summary: { total: number; created: number; skipped: number; invalid: number };
+  results: Array<{ rowNumber: number; status: string; errors?: string[]; reason?: string }>;
+};
+
 function ContactsTab() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1227,10 +1233,7 @@ function ContactsTab() {
   // Bulk upload state
   const [showBulk, setShowBulk] = useState(false);
   const [bulkFile, setBulkFile] = useState<File | null>(null);
-  const [bulkReport, setBulkReport] = useState<{
-    summary: { total: number; created: number; skipped: number; invalid: number };
-    results: Array<{ rowNumber: number; status: string; errors?: string[]; reason?: string }>;
-  } | null>(null);
+  const [bulkReport, setBulkReport] = useState<BulkContactReport | null>(null);
 
   async function loadContacts() {
     setLoading(true); setError(null);
@@ -1329,24 +1332,18 @@ function ContactsTab() {
     } finally { setBusy(false); }
   }
 
-  // Template download — we hit the endpoint with a Bearer token via
-  // fetch (instead of <a>) so the JWT travels in the Authorization
-  // header. Same pattern as downloadBlob in src/lib/api.ts.
+  /*
+   * Template download. api.download carries the Bearer token (the JWT has to
+   * travel in the Authorization header, which a plain <a href> cannot do) and
+   * owns the save mechanics — including revoking the object URL on a LATER
+   * tick. The copy that lived here revoked synchronously, which can cancel the
+   * save before the browser has finished reading the blob.
+   */
   async function downloadTemplate() {
     try {
-      const token = getToken();
-      const res = await fetch('/api/client/contacts/template', {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) throw new Error(`Failed (${res.status})`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'contacts-template.xlsx';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      await api.download('/contacts/template', 'contacts-template.xlsx');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
+      setError(err instanceof ApiError ? err.message : 'Download failed');
     }
   }
 
@@ -1354,19 +1351,19 @@ function ContactsTab() {
     if (!bulkFile) { setError('Pick a file first'); return; }
     setBusy(true); setError(null); setBulkReport(null);
     try {
-      const token = getToken();
       const form = new FormData();
       form.append('file', bulkFile);
-      const res = await fetch('/api/client/contacts/bulk-upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: form,
-      });
-      const json = await res.json();
-      if (!res.ok || json.isError) {
-        throw new Error(json.message || 'Upload failed');
-      }
-      setBulkReport(json.data);
+      /*
+       * api.upload, not a raw fetch. Besides removing the third copy of the
+       * multipart boilerplate, this FIXES the error message: the hand-rolled
+       * version tested `json.isError` and read `json.message`, neither of which
+       * /api/client/* ever sends — the envelope is
+       * `{ success: false, error }` (utils/response.js#modernError). So a real
+       * failure — "file exceeds 10MB", a missing file — always
+       * surfaced as the generic "Upload failed". api.upload throws an ApiError
+       * carrying `error`, which the catch below already renders.
+       */
+      setBulkReport(await api.upload<BulkContactReport>('/contacts/bulk-upload', form));
       await loadContacts();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');

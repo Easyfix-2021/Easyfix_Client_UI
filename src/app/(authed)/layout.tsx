@@ -34,6 +34,7 @@ import {
   ChevronDown,
   MoreHorizontal,
   BarChart3,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -107,6 +108,13 @@ const AREAS: Array<{ label: string; href: string; match: string[]; grant?: strin
 ];
 
 const EXTRAS: NavItem[] = [
+  /*
+   * Your COMPANY's record — agreement terms, documents, branches, rates,
+   * targets. Distinct from the avatar chip's /profile, which is the signed-in
+   * person's own contact record. In EXTRAS rather than PRIMARY because it is a
+   * place you visit when something needs checking or correcting, not daily.
+   */
+  { href: '/client-profile', label: 'Client Profile', icon: Building2 },
   { href: '/history',     label: 'Order History',  icon: History },
   { href: '/tickets/new', label: 'New Tickets',    icon: Ticket },
   { href: '/wallet',      label: 'Wallet',         icon: Wallet },

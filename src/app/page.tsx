@@ -97,7 +97,26 @@ export default function LoginPage() {
     e?.preventDefault();
     setError(null); setLoading(true);
     try {
-      await api.post<{ delivered: boolean }>('/auth/login-otp', { identifier: identifier.trim() });
+      const res = await api.post<{ delivered: boolean; message?: string }>(
+        '/auth/login-otp', { identifier: identifier.trim() },
+      );
+      /*
+       * STOP HERE IF NOBODY MATCHED. The endpoint answers 200 with
+       * `delivered: false` for an unknown identifier — it is not an error, it
+       * is "no OTP was sent". This page used to discard the response and step
+       * to the OTP screen regardless, so an unregistered person typed a code
+       * that could never exist and only learned the truth from the verify call.
+       *
+       * delivered=false covers BOTH "no SPOC matches" and "client inactive";
+       * the backend sends a specific `message` for the inactive case, so it
+       * wins when present. Same guard and wording as the mobile client app
+       * (Easyfix_Client_App/app/login.tsx), which already got this right —
+       * keeping them identical keeps the two front doors saying one thing.
+       */
+      if (!res?.delivered) {
+        setError(res?.message || "This email or mobile isn't registered. Check with your EasyFix contact.");
+        return;
+      }
       setStep('otp');
       setOtp('');
     } catch (err) {

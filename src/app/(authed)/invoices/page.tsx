@@ -40,6 +40,7 @@ import {
   AlertTriangle, CheckCircle2, Download, FileDown, Loader2, ReceiptText, Wallet,
 } from 'lucide-react';
 import { useFetchOnce } from '@/lib/hooks';
+import { saveBlob } from '@/lib/api';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, Segmented,
   DataTable, Row, Cell, StatusPill, Pill, ActionButton, EmptyState,
@@ -235,20 +236,13 @@ export default function InvoicesPage() {
         PAYMENT[r.status].label,
       ].map(esc).join(','));
     }
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `invoices-${period}-${ymd(new Date().toISOString())}.csv`;
-    // Same shape as downloadBlob() in src/lib/api.ts and the two other blob
-    // downloads in this app: the anchor has to be IN the document for the
-    // click to fire in Firefox, and the object URL is revoked on a later tick
-    // — revoking it synchronously can cancel the save before the browser has
-    // finished reading the blob.
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Built locally rather than fetched, so this needs the SAVE half only —
+    // saveBlob() owns the two details every hand-rolled copy of this got wrong
+    // somewhere (anchor in the document for Firefox, revoke on a later tick).
+    saveBlob(
+      new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }),
+      `invoices-${period}-${ymd(new Date().toISOString())}.csv`,
+    );
   }
 
   if (loading) {
