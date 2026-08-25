@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { Upload, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { formatIst } from '@/lib/format';
 
 // api.download prefixes /api/client itself, so this is the path WITHIN that
 // namespace. It also surfaces a JSON error envelope as its real message
@@ -60,9 +61,7 @@ function displayStatus(s: string): 'Valid' | 'Invalid' {
 
 function formatAppointment(s: string | null | undefined): string {
   if (!s) return '—';
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatIst(s, { day: '2-digit', month: 'short', year: 'numeric' }, { fallback: s });
 }
 
 export default function JobUploadPage() {

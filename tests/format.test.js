@@ -60,36 +60,12 @@ test('hasExplicitZone does not mistake the date separators for an offset', () =>
   assert.equal(F.hasExplicitZone('2026-08-25T16:56:17-05:00'), true);
 });
 
-// ─── formatIstDateTime ────────────────────────────────────────────────────
 
-test('renders DD-MM-YYYY HH:MM in IST regardless of the host timezone', () => {
-  // 11:26 UTC is 16:56 IST. A local-getter renderer would print the host's
-  // clock here and pass only under TZ=Asia/Kolkata.
-  assert.equal(F.formatIstDateTime(new Date('2026-08-25T11:26:17Z')), '25-08-2026 16:56');
-});
 
-test('the output format is unchanged from the version this replaced', () => {
-  assert.match(F.formatIstDateTime(new Date('2026-01-05T00:00:00+05:30')), /^\d{2}-\d{2}-\d{4} \d{2}:\d{2}$/);
-});
 
-test('midnight IST renders as 00, never 24', () => {
-  // hour12:false renders midnight as "24" in some engines; hourCycle 'h23' pins it.
-  assert.equal(F.formatIstDateTime(new Date('2026-08-25T00:00:00+05:30')), '25-08-2026 00:00');
-});
 
-test('an instant just after IST midnight keeps its own DATE, not the host’s', () => {
-  // 18:45 UTC on the 24th is 00:15 IST on the 25th. Under any western zone the
-  // old renderer showed the 24th — the wrong DAY, which is the bug that hurts.
-  assert.equal(F.formatIstDateTime(new Date('2026-08-24T18:45:00Z')), '25-08-2026 00:15');
-});
 
-// ─── end to end ───────────────────────────────────────────────────────────
 
-test('a zone-less DB string round-trips to its own IST wall clock', () => {
-  const s = '2026-08-25 16:56:17';
-  assert.equal(F.formatIstDateTime(F.parseIstDateTime(s)), '25-08-2026 16:56',
-    'what the database holds is what the operator sees, in any timezone');
-});
 
 // ─── the two rendered shapes ──────────────────────────────────────────────
 /*

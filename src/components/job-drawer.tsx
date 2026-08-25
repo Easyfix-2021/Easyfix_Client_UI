@@ -16,6 +16,7 @@ import {
 import { useFetch } from '@/lib/hooks';
 import { seriesGradient } from '@/brand/charts';
 import { STATUS_LABELS } from '@/lib/utils';
+import { formatIst } from '@/lib/format';
 
 type JobFull = {
   job_id: number;
@@ -79,9 +80,10 @@ function statusPillCls(s: number) {
 }
 function fmtDT(d: string | null) {
   if (!d) return null;
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return null;
-  return dt.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  const out = formatIst(d,
+    { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true },
+    { locale: 'en-GB', fallback: '' });
+  return out || null;
 }
 function paymentLabel(c: number | null) {
   if (c === 1) return 'Paid by Customer';

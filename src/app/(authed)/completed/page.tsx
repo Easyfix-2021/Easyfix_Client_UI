@@ -57,6 +57,7 @@ import {
   SplitLayout, Panel, DetailPane, MetaRow, ListRow, Pill, StatusPill,
   ActionButton, EmptyState,
 } from '@/components/ui/console';
+import { formatIst } from '@/lib/format';
 
 /* ─── contracts ─────────────────────────────────────────────────────────────
  * Only the columns this page reads, named exactly as jobService.LIST_COLUMNS
@@ -130,12 +131,8 @@ const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtDay = (d: Date | null) =>
   d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—';
-const fmtStamp = (s?: string | null) => {
-  const d = parse(s);
-  return d
-    ? d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-    : '—';
-};
+const fmtStamp = (s?: string | null) =>
+  formatIst(s, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 /* ─── window ───────────────────────────────────────────────────────────────
  * The "This month" chip. Both windows are applied SERVER-side on

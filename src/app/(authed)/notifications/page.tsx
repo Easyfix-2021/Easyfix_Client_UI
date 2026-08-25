@@ -38,6 +38,7 @@ import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 import { tokens } from '@/brand/tokens';
+import { formatIst, parseIstDateTime } from '@/lib/format';
 
 type Notice = {
   notice_id: number;
@@ -367,7 +368,13 @@ function EmptyState({ tab }: { tab: TabKey }) {
  */
 function timeAgo(iso: string | null): string {
   if (!iso) return '';
-  const d = new Date(iso);
+  /*
+   * parseIstDateTime, because this value feeds ARITHMETIC and not just a
+   * render. Read as browser-local from a zone behind IST the instant lands in
+   * the future, diffMs goes negative and — unlike the CRM's relativeTime,
+   * which clamps — this ladder would print "-37800s ago".
+   */
+  const d = parseIstDateTime(iso);
   if (Number.isNaN(d.getTime())) return '';
   const diffMs = Date.now() - d.getTime();
   const sec = Math.round(diffMs / 1000);
@@ -378,5 +385,5 @@ function timeAgo(iso: string | null): string {
   if (hr < 24)         return `${hr}h ago`;
   const day = Math.round(hr / 24);
   if (day < 14)        return `${day}d ago`;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatIst(d, { day: '2-digit', month: 'short', year: 'numeric' }, { fallback: '' });
 }

@@ -30,6 +30,7 @@ import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
 import { useSpoc } from '@/lib/spoc-context';
 import { cn } from '@/lib/utils';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
+import { formatIst } from '@/lib/format';
 
 type EscalatedJob = {
   job_id: number;
@@ -67,11 +68,9 @@ function filtersDiffer(a: FilterState, b: FilterState) {
 // so escalated time renders identically.
 function formatEscalatedTime(iso: string | null) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const date = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  return `${date} ${time}`;
+  const date = formatIst(iso, { month: 'long', day: 'numeric', year: 'numeric' }, { locale: 'en-US', fallback: '' });
+  const time = formatIst(iso, { hour: 'numeric', minute: '2-digit', hour12: true }, { locale: 'en-US', fallback: '' });
+  return date ? `${date} ${time}` : '—';
 }
 
 export default function EscalatedOrdersPage() {
