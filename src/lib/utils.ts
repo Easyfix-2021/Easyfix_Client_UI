@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { formatIstDateTime, parseIstDateTime } from '@/lib/format';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -167,16 +166,3 @@ export function getBucketCurrentStatusForJob(j: JobForBucket): string {
   return '';
 }
 
-export function formatDate(d: string | Date | null | undefined) {
-  if (!d) return '—';
-  /*
-   * Both halves moved to lib/format.ts, and both had to: the values are
-   * zone-less IST wall clocks, so `new Date(d)` read them as browser-local AND
-   * the getDate()/getHours() getters rendered them in the browser's zone. On an
-   * IST machine those two errors cancelled exactly, which is why this looked
-   * correct forever. Output format is unchanged: "DD-MM-YYYY HH:MM".
-   */
-  const date = parseIstDateTime(d);
-  if (isNaN(date.getTime())) return '—';
-  return formatIstDateTime(date);
-}

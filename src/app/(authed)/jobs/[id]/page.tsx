@@ -36,6 +36,7 @@ import { api, ApiError } from '@/lib/api';
 import { useFetchOnce } from '@/lib/hooks';
 import { STATUS_LABELS } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { formatIst } from '@/lib/format';
 
 type Job = {
   job_id: number;
@@ -171,13 +172,13 @@ function jobsheetPdfUrl(jobId: number): string {
 }
 
 function formatDateTime(iso: string | null) {
+  // Null rather than an em dash: callers here branch on the absence.
   if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return null;
-  return d.toLocaleString('en-IN', {
+  const out = formatIst(iso, {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true,
-  });
+  }, { fallback: '' });
+  return out || null;
 }
 
 function num(v: number | string | null | undefined): number {

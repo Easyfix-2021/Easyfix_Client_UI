@@ -55,6 +55,7 @@ import {
   DataTable, Row, Cell, Pill, Panel, Banner, DetailPane, MetaRow,
   ActionButton, EmptyState, type Accent,
 } from '@/components/ui/console';
+import { formatIst } from '@/lib/format';
 
 /* ─── contracts ───────────────────────────────────────────────────────────
  * Written against the handlers, not the mock: GET /jobs projects
@@ -265,16 +266,10 @@ const cityOf = (j: JobRow) => j.city_name || 'Unknown';
 
 const rupees = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
-const fmtDay = (s?: string | null) => {
-  const d = parse(s);
-  return d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
-};
-const fmtStamp = (s?: string | null) => {
-  const d = parse(s);
-  return d
-    ? d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-    : null;
-};
+const fmtDay = (s?: string | null) =>
+  formatIst(s, { day: 'numeric', month: 'short', year: 'numeric' }, { fallback: '' }) || null;
+const fmtStamp = (s?: string | null) =>
+  formatIst(s, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }, { fallback: '' }) || null;
 
 /* ─── the written record ──────────────────────────────────────────────────
  * SUBSTITUTED: the mock's right-hand pane ends in a live comment thread. The

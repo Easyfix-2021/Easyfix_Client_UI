@@ -46,6 +46,7 @@ import {
   DataTable, Row, Cell, StatusPill, Pill, ActionButton, EmptyState,
 } from '@/components/ui/console';
 import type { Status, Accent } from '@/components/ui/console';
+import { formatIst } from '@/lib/format';
 
 /* ─── contracts ─────────────────────────────────────────────────────────────
  * Mirrors the mapper at the bottom of GET /invoices in
@@ -101,10 +102,8 @@ function parseDate(s: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-const fmtDate = (s: string | null) => {
-  const d = parseDate(s);
-  return d ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-};
+const fmtDate = (s: string | null) =>
+  formatIst(s, { day: '2-digit', month: 'short', year: '2-digit' });
 const ymd = (s: string | null) => {
   const d = parseDate(s);
   if (!d) return '';
