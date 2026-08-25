@@ -39,6 +39,7 @@ import { api, ApiError } from '@/lib/api';
 import { useSpoc } from '@/lib/spoc-context';
 import { cn } from '@/lib/utils';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
+import { formatIstDayDate } from '@/lib/format';
 
 type Job = {
   job_id: number;
@@ -77,15 +78,6 @@ const TABS: Array<{ key: TabKey; label: string; subtitle: string }> = [
 ];
 
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20];
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const day = d.toLocaleDateString('en-IN', { weekday: 'short' });
-  const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  return `${day}, ${date}`;
-}
 
 // Authorization status badge — mirrors the legacy template's nested
 // *ngIf ladder (Authorize button → Pending → Authorized + name →
@@ -473,8 +465,8 @@ export default function MyNewTicketsPage() {
                   </button>
                 </td>
                 <td className="text-xs font-mono">{j.client_ref_id || '—'}</td>
-                <td className="text-xs">{formatDate(j.ticket_created_date_time)}</td>
-                <td className="text-xs">{formatDate(j.requested_date_time)}</td>
+                <td className="text-xs">{formatIstDayDate(j.ticket_created_date_time)}</td>
+                <td className="text-xs">{formatIstDayDate(j.requested_date_time)}</td>
                 <td>{j.city_name || '—'}</td>
                 <td>
                   <div className="text-ink-900">{j.customer_name || '—'}</div>

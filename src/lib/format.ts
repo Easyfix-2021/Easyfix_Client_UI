@@ -83,3 +83,49 @@ export function formatIstDateTime(date: Date): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}`;
 }
+
+/*
+ * ─── The two shapes the portal actually renders ─────────────────────────────
+ *
+ * These replace three hand-rolled copies of formatDate that lived in
+ * tickets/new, history and estimate/[token]. Two were byte-identical and the
+ * third differed only in its options and its fallback, which is exactly how
+ * duplication looks right before it starts to drift.
+ *
+ * Each keeps the ORIGINAL toLocale* call and options verbatim and only adds
+ * `timeZone` — the surest way to guarantee the rendered string is unchanged
+ * for the zone-less IST values these pages receive, while becoming correct for
+ * a zoned string or a Date (which used to render in the browser's timezone).
+ *
+ * `fallback` exists because the estimate page is PUBLIC: on a bad value it
+ * showed the raw string rather than an em dash, on the reasoning that a
+ * customer seeing something is better than seeing nothing. Preserved rather
+ * than normalised away.
+ */
+
+/** "Mon, 25 Aug" — weekday and date, no year, no time. */
+export function formatIstDayDate(
+  value: string | Date | null | undefined,
+  fallback = '—',
+): string {
+  if (!value) return fallback;
+  const d = parseIstDateTime(value);
+  if (Number.isNaN(d.getTime())) return fallback;
+  const day = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: IST });
+  const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: IST });
+  return `${day}, ${date}`;
+}
+
+/** "25 Aug 2026, 04:56 pm" — the long form, with year and time. */
+export function formatIstDateTimeLong(
+  value: string | Date | null | undefined,
+  fallback = '—',
+): string {
+  if (!value) return fallback;
+  const d = parseIstDateTime(value);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return d.toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: IST,
+  });
+}

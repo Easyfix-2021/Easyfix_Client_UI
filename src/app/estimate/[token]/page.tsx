@@ -33,6 +33,7 @@ import {
   Loader2, CheckCircle2, XCircle, AlertCircle, FileText, X,
   ThumbsUp, ThumbsDown, Send, ChevronDown,
 } from 'lucide-react';
+import { formatIstDateTimeLong } from '@/lib/format';
 
 /*
  * Frontend mirror of the backend's `/easydoc/...` Nginx convention,
@@ -200,7 +201,7 @@ export default function EstimateApprovalPage() {
       <Shell>
         <ErrorCard
           title="Estimate Approved"
-          subtitle={`Approved${info.actioned_by_name ? ` by ${info.actioned_by_name}` : ''}${info.actioned_on ? ` on ${formatDate(info.actioned_on)}` : ''}.`}
+          subtitle={`Approved${info.actioned_by_name ? ` by ${info.actioned_by_name}` : ''}${info.actioned_on ? ` on ${formatIstDateTimeLong(info.actioned_on, info.actioned_on)}` : ''}.`}
           tone="success"
         />
       </Shell>
@@ -214,7 +215,7 @@ export default function EstimateApprovalPage() {
           title="Estimate Rejected"
           subtitle={
             `Rejected${info.actioned_by_name ? ` by ${info.actioned_by_name}` : ''}` +
-            `${info.actioned_on ? ` on ${formatDate(info.actioned_on)}` : ''}.` +
+            `${info.actioned_on ? ` on ${formatIstDateTimeLong(info.actioned_on, info.actioned_on)}` : ''}.` +
             (info.reject_reason ? `\nReason: ${info.reject_reason}` : '')
           }
           tone="error"
@@ -368,17 +369,6 @@ export default function EstimateApprovalPage() {
 }
 
 /* ─── Helpers ───────────────────────────────────────────────────── */
-
-function formatDate(iso: string) {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return iso; }
-}
 
 /*
  * Shell — page chrome shared by every state. Brand band on top,

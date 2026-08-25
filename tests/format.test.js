@@ -90,3 +90,39 @@ test('a zone-less DB string round-trips to its own IST wall clock', () => {
   assert.equal(F.formatIstDateTime(F.parseIstDateTime(s)), '25-08-2026 16:56',
     'what the database holds is what the operator sees, in any timezone');
 });
+
+// ─── the two rendered shapes ──────────────────────────────────────────────
+/*
+ * These replaced three hand-rolled copies. The assertions that matter are not
+ * "does it format" but "is it the SAME STRING the copies produced", because a
+ * consolidation that quietly changes what operators read is a worse outcome
+ * than the duplication it removed.
+ */
+
+test('formatIstDayDate renders "Mon, DD Mmm" in IST', () => {
+  // 11:26 UTC = 16:56 IST on the 25th, a Tuesday in IST.
+  assert.equal(F.formatIstDayDate('2026-08-25 16:56:17'), 'Tue, 25 Aug');
+});
+
+test('formatIstDayDate keeps the IST day across the UTC midnight boundary', () => {
+  // 18:45 UTC on the 24th is 00:15 IST on the 25th. A browser-local renderer
+  // west of Greenwich showed the 24th — the wrong DAY.
+  assert.equal(F.formatIstDayDate('2026-08-24T18:45:00Z'), 'Tue, 25 Aug');
+});
+
+test('formatIstDateTimeLong renders "DD Mmm YYYY, hh:mm am/pm" in IST', () => {
+  const out = F.formatIstDateTimeLong('2026-08-25 16:56:17');
+  assert.match(out, /^25 Aug 2026, 04:56\s*pm$/i, `got ${JSON.stringify(out)}`);
+});
+
+test('both fall back for empty and invalid input', () => {
+  assert.equal(F.formatIstDayDate(null), '—');
+  assert.equal(F.formatIstDayDate('not a date'), '—');
+  assert.equal(F.formatIstDateTimeLong(''), '—');
+});
+
+test('the estimate page can keep showing the RAW value on a bad date', () => {
+  // That page is PUBLIC; it preferred showing something over an em dash, and
+  // the fallback parameter preserves that rather than normalising it away.
+  assert.equal(F.formatIstDateTimeLong('garbage', 'garbage'), 'garbage');
+});
