@@ -9,3 +9,7 @@ node_modules
 # Already ignored in the other EasyFix repos; it was surfacing as untracked
 # noise here on every `git status`.
 .DS_Store
+
+# Compiled output of `npm run test:build` — the dependency-free lib modules
+# built standalone so node:test can require them.
+.test-build/

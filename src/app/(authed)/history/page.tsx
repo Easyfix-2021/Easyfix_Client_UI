@@ -36,6 +36,7 @@ import { useSpoc } from '@/lib/spoc-context';
 import { getBucketStatusForJob, getBucketCurrentStatusForJob } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { MultiSelect, type MultiSelectOption } from '@/components/multi-select';
+import { formatIstDayDate } from '@/lib/format';
 
 type Job = {
   job_id: number;
@@ -184,15 +185,6 @@ function ageInDays(iso: string | null): number | null {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86_400_000));
-}
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const day = d.toLocaleDateString('en-IN', { weekday: 'short' });
-  const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  return `${day}, ${date}`;
 }
 
 // Legacy "OTA" — Same-day attempt: was the original appointment date
@@ -746,7 +738,7 @@ export default function OrderHistoryPage() {
                   <td className="truncate" title={j.customer_name || ''}>
                     <div className="text-ink-900 truncate">{j.customer_name || '—'}</div>
                   </td>
-                  <td className="text-xs">{formatDate(j.requested_date_time)}</td>
+                  <td className="text-xs">{formatIstDayDate(j.requested_date_time)}</td>
                   <td>
                     {/* Status Of Order — legacy parity: this column holds
                         the static status→category label
@@ -800,10 +792,10 @@ export default function OrderHistoryPage() {
                 <td className="text-xs">{computeOTA(j)}</td>
                 <td className="text-xs">{computeTAT(j)}</td>
                 <td className="text-xs">
-                  <div>{formatDate(j.requested_date_time)}</div>
+                  <div>{formatIstDayDate(j.requested_date_time)}</div>
                   {j.time_slot && <div className="text-ink-500">{j.time_slot}</div>}
                 </td>
-                <td className="text-xs">{formatDate(j.checkin_date_time)}</td>
+                <td className="text-xs">{formatIstDayDate(j.checkin_date_time)}</td>
                 {/* Billing Value — total comes from SUM(job_services); not
                     yet computed in the new backend. Showing "—" keeps the
                     column shape for legacy parity. */}
