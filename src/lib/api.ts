@@ -47,9 +47,70 @@ export const api = {
   put:    <T>(p: string, body: any, init?: RequestInit) => request<T>(p, { ...init, method: 'PUT',    body: JSON.stringify(body) }),
   patch:  <T>(p: string, body: any, init?: RequestInit) => request<T>(p, { ...init, method: 'PATCH',  body: JSON.stringify(body) }),
   delete: <T>(p: string,            init?: RequestInit) => request<T>(p, { ...init, method: 'DELETE' }),
+
+  /*
+   * Multipart POST. Separate from `post` because `request()` unconditionally
+   * JSON.stringify's the body and sets Content-Type: application/json — both
+   * of which are wrong for a file: the body becomes "[object FormData]" and
+   * the missing multipart boundary makes the server reject it. Letting fetch
+   * set Content-Type itself is what generates that boundary, so this path
+   * must never set the header.
+   */
+  upload: async <T>(p: string, form: FormData): Promise<T> => {
+    const token = getToken();
+    const res = await fetch(`/api/client${p}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.success === false) {
+      throw new ApiError(body?.error || `HTTP ${res.status}`, res.status, body?.details);
+    }
+    return body?.data as T;
+  },
+
+  /*
+   * Authenticated file download. Sits here as the sibling of `upload` so the
+   * two transfer directions read the same at a call site; the implementation
+   * is downloadBlob(), declared below — one function, two names, never two
+   * copies. Existing `downloadBlob(...)` imports keep working.
+   */
+  download: (p: string, filename: string) => downloadBlob(p, filename),
 };
 
-// Download blob (used by /export/jobs to trigger Excel download).
+/*
+ * Hand a blob to the browser as a file.
+ *
+ * Two details here are load-bearing, and every hand-rolled copy in this app
+ * got at least one of them wrong before they were folded in here:
+ *
+ *   1. THE ANCHOR MUST BE IN THE DOCUMENT. Firefox ignores .click() on a
+ *      detached <a>, so the download silently does nothing. downloadBlob()
+ *      omitted the appendChild, which meant /export and Order History were
+ *      broken on Firefox while the two copies that had it worked.
+ *   2. REVOKE ON A LATER TICK. Revoking the object URL synchronously after
+ *      .click() can cancel the save before the browser has finished reading
+ *      the blob. The Contacts template download revoked immediately.
+ *
+ * Exported because a caller that BUILDS a blob locally (the invoices CSV) needs
+ * the save half without the fetch half.
+ */
+export function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Fetch an authenticated endpoint and save the response as a file.
+// Also reachable as `api.download` — same function, named there for symmetry
+// with the other verbs.
 //
 // Handles three response shapes:
 //   1. Binary OK   → save as a file (the happy path)
@@ -75,11 +136,5 @@ export async function downloadBlob(path: string, filename: string) {
     try { body = await res.json(); } catch { /* non-JSON error body */ }
     throw new ApiError(body.error || `download failed (${res.status})`, res.status, body.details);
   }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveBlob(await res.blob(), filename);
 }
