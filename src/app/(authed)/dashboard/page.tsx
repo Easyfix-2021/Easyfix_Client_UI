@@ -36,6 +36,7 @@ import {
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
 import { cn } from '@/lib/utils';
+import { performanceKpis, type KpiSource } from '@/lib/kpi';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
@@ -66,6 +67,17 @@ type QueueItem = {
   estimateValue: number | null;
   action: { label: string; method: string; path: string };
 };
+
+/*
+ * GET /performance, narrowed to what this card renders. KpiSource is the shape
+ * @/lib/kpi needs; `tat.jobsAnalysed` is the cohort size the footer states.
+ *
+ * The SAME endpoint the "Full Performance Book →" link opens, so the four
+ * figures here and the four on that page are the same response — not the same
+ * formula reimplemented, which is what the old comment on this card warned
+ * against.
+ */
+type PerfSlice = KpiSource & { tat: KpiSource['tat'] & { jobsAnalysed: number } };
 
 /** Only the columns this page actually reads off the 60-day job window. */
 type DashJob = {
@@ -229,6 +241,27 @@ export default function HomePage() {
     return [{ value: '', label: 'All cities' }, ...items.map((c) => ({ value: c, label: c }))];
   }, [cityList, city]);
   const spoc = !team || spocOptions.some((m) => String(m.id) === spocParam) ? spocParam : '';
+
+  /*
+   * The KPI fetch. Gated on the grant so an ungranted SPOC issues NO request —
+   * /performance is requireGrant('performance') and would 403, which on an
+   * ungated Home page would render an error card to every Store SPOC. Same
+   * `canSee ? url : null` shape the Client Profile already uses.
+   *
+   * ⚠ NO ?city=. /performance takes { clientId, from, to, reportingContactIds }
+   * and has no city dimension at all, so passing one would be silently ignored.
+   * The card SAYS SO below rather than pretending the chip applies. ?spoc= IS
+   * passed — it narrows the reporting-contact scope the same way — though a
+   * top-of-tree SPOC's own scope is client-wide either way.
+   *
+   * dim=jobType&months=1 are the cheapest honest parameters: the scorer builds
+   * every rollup regardless, but jobType is ~0.3KB of payload against ~50KB for
+   * technician, and months=1 is the floor for a series this card never draws.
+   */
+  const kpiPath = canSeePerformance
+    ? `/performance?from=${range.from}&to=${range.to}&dim=jobType&months=1${spoc ? `&spoc=${spoc}` : ''}`
+    : null;
+  const { data: kpis, loading: kpisLoading } = useFetchOnce<PerfSlice>(kpiPath);
 
   function pushScope(patch: { range?: RangeKey; city?: string; spoc?: string }) {
     const next = { range: rangeKey, city, spoc, ...patch };
@@ -498,60 +531,73 @@ export default function HomePage() {
         {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
-          <Panel
-            className="flex-1"
-            title={rangeLabel}
-            /*
-              COMPLETION RATE, not volume — this card is about how the work
-              went, and its neighbour already reports how much of it there was.
-              Two adjacent cards showing the identical volume delta would read
-              as a duplicated widget rather than two findings.
+          <Panel className="flex-1" title={rangeLabel}>
+            {/*
+              THE FOUR CONTRACTED KPIs, from the very endpoint the link at the
+              bottom opens. This card used to show Completed / In progress /
+              Running late / Escalated — counts off /dashboard-range — under a
+              comment explaining that SLA, first-time-fix and revisit "still
+              live behind /performance … duplicating that maths here is the
+              surest way to have two numbers disagree". They are here now
+              WITHOUT that duplication: the figures are the same response the
+              /performance page renders, derived by the same builder in
+              @/lib/kpi. Nothing is recomputed.
 
-              `pp` because a move from 61% to 64% is three percentage POINTS,
-              not three percent. /performance uses the same unit for the same
-              reason, so the two pages agree on what a delta means.
-            */
-            action={rangeData ? (
-              <DeltaPill
-                now={pct(rangeData.performance.completed, rangeData.performance.total)}
-                prev={pct(rangeData.previous.completed, rangeData.previous.total)}
-                good="up"
-                unit="pp"
-              />
-            ) : undefined}
-          >
-            {(
-              <RangeBody loading={rangeLoading} data={rangeData}>
-                {(r) => (
-                  <>
-                    {/*
-                      One cohort: the jobs RAISED in the window. Completed,
-                      still open, now overdue and escalated are all slices of
-                      that same set, so the bars share a denominator and the
-                      card reads as "of the work raised here, this is where it
-                      stands". Each metric on its own most natural date would
-                      make the shares stop reconciling.
-
-                      SLA / first-time-fix / revisit still live behind
-                      /performance, which runs the TAT engine — duplicating that
-                      maths here is the surest way to have two numbers disagree,
-                      so the link stays.
-                    */}
-                    <MetricRow label="Completed"    value={r.performance.completed.toLocaleString('en-IN')}   bar={r.performance.completed / Math.max(1, r.performance.total)}   barAccent="success" />
-                    <MetricRow label="In progress"  value={r.performance.inProgress.toLocaleString('en-IN')}  bar={r.performance.inProgress / Math.max(1, r.performance.total)}  barAccent="info" />
-                    <MetricRow label="Running late" value={r.performance.runningLate.toLocaleString('en-IN')} bar={r.performance.runningLate / Math.max(1, r.performance.total)} barAccent="warning" />
-                    <MetricRow label="Escalated"    value={r.performance.escalated.toLocaleString('en-IN')}   bar={r.performance.escalated / Math.max(1, r.performance.total)}   barAccent="brand" />
-                    <div className="pt-2 flex items-center justify-between gap-2">
-                      <span className="text-xs text-ink-500">
-                        {r.performance.total.toLocaleString('en-IN')} raised in this window
+              The displaced status counts are not lost — Today's Pulse carries
+              the open total and Open breakdown carries the ageing.
+            */}
+            {kpisLoading && !kpis ? (
+              <div className="py-6 text-center">
+                <Loader2 className="w-6 h-6 mx-auto animate-spin text-ink-300" aria-hidden />
+              </div>
+            ) : !kpis ? (
+              <EmptyState title="Could not load performance" sub="The performance service did not respond." />
+            ) : (
+              <>
+                {performanceKpis(kpis).map((k) => (
+                  <MetricRow
+                    key={k.key}
+                    label={
+                      <span className="inline-flex items-center gap-1.5">
+                        <k.icon className="w-3.5 h-3.5 text-ink-500 shrink-0" aria-hidden /> {k.label}
                       </span>
-                      <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
-                        Full Performance Book →
-                      </button>
-                    </div>
-                  </>
+                    }
+                    value={k.value}
+                    delta={k.target}
+                    deltaAccent="info"
+                    bar={k.progress}
+                    barAccent={k.accent}
+                  />
+                ))}
+                <div className="pt-2 flex items-center justify-between gap-2">
+                  {/*
+                    JOBS SCORED, not "raised in this window". The four figures
+                    above are computed over COMPLETED jobs only — the TAT engine
+                    loads no other status — while the cards beside this one count
+                    everything raised. Restating the raised total here would
+                    invite the reader to divide one by the other.
+                  */}
+                  <span className="text-xs text-ink-500">
+                    {kpis.tat.jobsAnalysed.toLocaleString('en-IN')} job
+                    {kpis.tat.jobsAnalysed === 1 ? '' : 's'} scored
+                  </span>
+                  <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
+                    Full Performance Book →
+                  </button>
+                </div>
+                {/*
+                  ⚠ The city chip does NOT reach these four. /performance scopes
+                  by { clientId, from, to, reportingContactIds } and has no city
+                  dimension, so a city-scoped card here would be a filter that
+                  silently did nothing. Said out loud, and only when a city is
+                  actually selected.
+                */}
+                {city && (
+                  <p className="pt-1 text-xs text-ink-500">
+                    Covers every city — these four are not narrowed by the city filter.
+                  </p>
                 )}
-              </RangeBody>
+              </>
             )}
           </Panel>
         </div>
