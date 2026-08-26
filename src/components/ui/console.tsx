@@ -139,7 +139,7 @@ export function Panel({
          * or let SplitLayout do it. A blanket `h-full` looks correct until a
          * Panel is used standalone: <main> is a flex item with flex-1, so it has
          * a DEFINITE height, and `height: 100%` on a direct child of it resolves
-         * to the whole main area. Analytics' "By city" card ballooned to
+         * to the whole main area. A standalone "by city" card ballooned to
          * full-page height and collided with the section under it.
          *
          * `min-w-0` is the width half of the same problem: without it a wide

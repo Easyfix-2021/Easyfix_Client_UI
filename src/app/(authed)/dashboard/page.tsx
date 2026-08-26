@@ -28,17 +28,18 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FolderOpen, CheckCircle2, CalendarDays, CalendarRange,
-  AlertTriangle, MapPin, Building2, User, Loader2,
+  AlertTriangle, MapPin, User, Loader2, type LucideIcon,
 } from 'lucide-react';
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
+import { cn } from '@/lib/utils';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
-  FilterChip, RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
+  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
 } from '@/components/ui/console';
 
 /* ─── contracts ─────────────────────────────────────────────────────────── */
@@ -70,8 +71,6 @@ type QueueItem = {
 type DashJob = {
   job_id?: number;
   job_status?: number | null;
-  city_name?: string | null;
-  service_catg_name?: string | null;
   requested_date_time?: string | null;
   checkout_date_time?: string | null;
 };
@@ -93,18 +92,160 @@ function weekBounds(now: Date) {
   return { from: mon, to: addDays(mon, 7) };
 }
 
+/* ─── the range control ─────────────────────────────────────────────────────
+ *
+ * Presets only, no custom picker: these are the cuts the rest of the console
+ * reports on, and a free date pair invites windows wide enough to make the
+ * three cards below slow for no analytical gain.
+ *
+ * The bounds are LOCAL calendar dates on purpose. They are constructed here,
+ * not read off the wire, so they must NOT go through the IST helpers in
+ * lib/format — see the calendar-date warning there. `to` is inclusive; the
+ * server turns it into `< to + 1 day`.
+ */
+type RangeKey = 'd7' | 'd30' | 'd60' | 'd90' | 'month' | 'lastMonth';
+
+const RANGE_PRESETS: Array<{ key: RangeKey; label: string }> = [
+  { key: 'd7',        label: 'Last 7 days' },
+  { key: 'd30',       label: 'Last 30 days' },
+  { key: 'd60',       label: 'Last 60 days' },
+  { key: 'd90',       label: 'Last 90 days' },
+  { key: 'month',     label: 'This month' },
+  { key: 'lastMonth', label: 'Last month' },
+];
+
+const DEFAULT_RANGE: RangeKey = 'd60';
+
+/* The URL is user input. An unrecognised key would leave the chip showing one
+   window while the cards showed another — a control that lies about what you
+   are looking at — so it resolves to the default instead. */
+const resolveRange = (raw: string | null): RangeKey =>
+  RANGE_PRESETS.find((r) => r.key === raw)?.key ?? DEFAULT_RANGE;
+
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function rangeFor(key: RangeKey, now: Date): { from: string; to: string } {
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  if (key === 'month')     return { from: ymd(new Date(y, m, 1)), to: ymd(now) };
+  if (key === 'lastMonth') return { from: ymd(new Date(y, m - 1, 1)), to: ymd(new Date(y, m, 0)) };
+  const days = key === 'd7' ? 7 : key === 'd30' ? 30 : key === 'd90' ? 90 : 60;
+  return { from: ymd(addDays(now, -(days - 1))), to: ymd(now) };
+}
+
+/** GET /dashboard-range — the three cards below Today's Pulse. */
+type RangeData = {
+  window: { from: string; to: string };
+  performance: {
+    total: number; completed: number; inProgress: number;
+    runningLate: number; escalated: number; cancelled: number;
+  };
+  cities: Array<{ name: string; jobs: number; completed: number }>;
+  cancellations: {
+    cancelled: number; total: number; sharePct: number;
+    topReasons: Array<{ reason: string; count: number; pct: number }>;
+    reasonCount: number;
+    categories: Array<{ label: string; count: number; pct: number }>;
+  };
+};
+
 const COMPLETED = new Set([3, 5]);
 const CANCELLED = new Set([6, 7]);
 const OPEN = new Set([0, 1, 2, 20]);
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const access = useAccess();
   const { data, loading, error, reload } = useFetchOnce<Summary>('/dashboard-summary');
   const { data: queue } = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue');
   const { jobs } = useRecentJobs<DashJob>();
 
   const now = useMemo(() => new Date(), []);
+
+  /*
+   * ─── SCOPE AND RANGE ──────────────────────────────────────────────────────
+   *
+   * These drive the THREE CARDS BELOW ONLY. Today's Pulse, the action queue and
+   * the open breakdown are live figures — "how many orders are open" has no
+   * date range — so the controls sit with the cards they govern rather than
+   * looking like they filter the whole page.
+   *
+   * All three live in the QUERY STRING, not useState, so a narrowed dashboard
+   * is a LINK: it survives a refresh, it is what you paste into chat when you
+   * want someone looking at the same numbers you are, and Back is not the only
+   * way to widen it again. Same treatment as the Client Profile's ?tab=, down
+   * to `router.replace` over push — Back should leave the page, not walk back
+   * through every chip you touched on the way here.
+   *
+   * A default is ABSENT from the URL rather than spelled out, so a plain
+   * /dashboard link keeps meaning "the default view".
+   */
+  const rangeKey = resolveRange(searchParams.get('range'));
+  const city = searchParams.get('city') ?? '';
+  const spocParam = searchParams.get('spoc') ?? '';
+  const range = useMemo(() => rangeFor(rangeKey, now), [rangeKey, now]);
+  const rangeLabel = RANGE_PRESETS.find((r) => r.key === rangeKey)?.label ?? '';
+  /* Hiding a card the SPOC cannot fill is a COURTESY, not a control — the
+     /performance route is guarded on the server independently. */
+  const canSeePerformance = !!access?.grants?.includes('performance');
+
+  /*
+   * The two scope lookups. Both are client-scoped already: /cities is DISTINCT
+   * over this client's own jobs (not the ~11k city master), and /team is the
+   * caller's contacts. The SPOC picker only appears for a manager — a SPOC with
+   * nobody reporting to them has one option, which is not a filter.
+   */
+  const { data: cityList } = useFetchOnce<{ items: string[] }>('/cities');
+  const { data: team } = useFetchOnce<{ items: Array<{ id: number; name: string | null; status: number }>; isManager: boolean }>('/team');
+  const spocOptions = useMemo(
+    () => (team?.items ?? []).filter((m) => m.status === 1),
+    [team],
+  );
+
+  /*
+   * Both scope params are checked against those lists, and they are handled
+   * DIFFERENTLY on purpose — the rule is that the chip and the cards must never
+   * disagree about what you are looking at.
+   *
+   *   ?city=   KEPT even when unknown, and given its own option. The cards
+   *            really are filtered to it, so dropping it would leave the chip
+   *            reading "All cities" over one city's numbers. An unknown city
+   *            matches nothing and the cards say so, which is the truth.
+   *   ?spoc=   DROPPED when it is not in your subtree, because the server
+   *            IGNORES such an id (the containment check on /dashboard-range)
+   *            and answers for the whole team. Keeping it would name one person
+   *            over everybody's numbers.
+   *
+   * The spoc check waits for /team to ARRIVE: before that "not yours" and "not
+   * loaded yet" are indistinguishable, and guessing costs a wasted fetch and a
+   * flash of the wrong scope.
+   */
+  const cityOptions = useMemo(() => {
+    const known = cityList?.items ?? [];
+    const items = city && !known.includes(city) ? [city, ...known] : known;
+    return [{ value: '', label: 'All cities' }, ...items.map((c) => ({ value: c, label: c }))];
+  }, [cityList, city]);
+  const spoc = !team || spocOptions.some((m) => String(m.id) === spocParam) ? spocParam : '';
+
+  function pushScope(patch: { range?: RangeKey; city?: string; spoc?: string }) {
+    const next = { range: rangeKey, city, spoc, ...patch };
+    const qs = new URLSearchParams(searchParams.toString());
+    const put = (k: string, v: string, omit: string) => (v === omit ? qs.delete(k) : qs.set(k, v));
+    put('range', next.range, DEFAULT_RANGE);
+    put('city', next.city, '');
+    put('spoc', next.spoc, '');
+    const q = qs.toString();
+    router.replace(q ? `/dashboard?${q}` : '/dashboard', { scroll: false });
+  }
+
+  // The path carries from/to and the scope, so changing any chip refetches —
+  // useFetchOnce re-issues on a PATH change (its lastPathRef guard), which is
+  // exactly what makes this work without a manual reload.
+  const scopeQs = `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`;
+  const { data: rangeData, loading: rangeLoading } =
+    useFetchOnce<RangeData>(`/dashboard-range?from=${range.from}&to=${range.to}${scopeQs}`);
 
   /*
    * The appointment-derived cuts. Memoised on `jobs` because this walks up to
@@ -118,7 +259,6 @@ export default function HomePage() {
 
     let dueToday = 0, ahead = 0, plannedToday = 0, weekPlanned = 0, weekDone = 0;
     let closedYesterday = 0, closedDayBefore = 0;
-    const cityToday = new Map<string, { n: number; cats: Set<string> }>();
 
     for (const j of jobs) {
       const appt = parse(j.requested_date_time);
@@ -136,25 +276,14 @@ export default function HomePage() {
         if (k === todayKey) dueToday += 1;
         else if (appt > now) ahead += 1;
       }
-      if (k === todayKey) {
-        plannedToday += 1;
-        const city = j.city_name || 'Unknown';
-        const e = cityToday.get(city) || { n: 0, cats: new Set<string>() };
-        e.n += 1;
-        if (j.service_catg_name) e.cats.add(j.service_catg_name);
-        cityToday.set(city, e);
-      }
+      if (k === todayKey) plannedToday += 1;
       if (appt >= from && appt < to) {
         weekPlanned += 1;
         if (COMPLETED.has(status)) weekDone += 1;
       }
     }
 
-    const cities = [...cityToday.entries()]
-      .map(([city, v]) => ({ city, n: v.n, cats: [...v.cats] }))
-      .sort((a, b) => b.n - a.n);
-
-    return { dueToday, ahead, plannedToday, weekPlanned, weekDone, closedYesterday, closedDayBefore, cities };
+    return { dueToday, ahead, plannedToday, weekPlanned, weekDone, closedYesterday, closedDayBefore };
   }, [jobs, now]);
 
   if (loading) {
@@ -188,9 +317,6 @@ export default function HomePage() {
   const { counts, slaAging, attention, boxes } = data;
   const totalOpen = counts.newTickets + counts.inProgress;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
-  /* Every job the summary counts, so a share is a share of something real. */
-  const totalWork = counts.newTickets + counts.inProgress + counts.completed + counts.cancelled;
-
   /* Pending on YOU vs pending with EasyFix — the split the mock's bar shows. */
   const onYou = attention.estimatePending + attention.noResponse;
   const withUs = Math.max(0, totalOpen - onYou);
@@ -206,14 +332,43 @@ export default function HomePage() {
         sub={`Across ${data.teamSize} SPOC${data.teamSize === 1 ? '' : 's'} · live`}
         filters={
           <>
-            {/* The mock's four scope chips. They are readouts of the CURRENT
-                scope until the corresponding filters ship — a chip that looks
-                interactive but changes nothing is worse than one that says
-                what it is, so each carries its real state as its label. */}
-            <FilterChip icon={MapPin}>All cities</FilterChip>
-            <FilterChip icon={Building2}>All zones</FilterChip>
-            <FilterChip icon={User}>All SPOCs</FilterChip>
-            <FilterChip icon={CalendarDays}>Last 60 days</FilterChip>
+            {/*
+              * Scope for the three cards BELOW Today's Pulse — the same three
+              * the date range governs. The pulse is a live figure and is
+              * deliberately not scoped; see the range note above.
+              *
+              * "All zones" is GONE rather than left as a decorative chip. Zones
+              * are tbl_zone_master / tbl_zone_city_mapping — an EasyFix
+              * technician-routing construct that the client API has never
+              * exposed and that means nothing from a client's side of the
+              * wire. There is no honest list to put in it, and by the same rule
+              * we just applied to Performance health: if it cannot be filled,
+              * it should not be on the page.
+              */}
+            <ChipSelect
+              icon={MapPin}
+              label="City"
+              value={city}
+              onChange={(v) => pushScope({ city: v })}
+              options={cityOptions}
+            />
+            {team?.isManager && spocOptions.length > 1 && (
+              <ChipSelect
+                icon={User}
+                label="SPOC"
+                value={spoc}
+                onChange={(v) => pushScope({ spoc: v })}
+                options={[{ value: '', label: 'All SPOCs' },
+                          ...spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))]}
+              />
+            )}
+            <ChipSelect
+              icon={CalendarDays}
+              label="Date range"
+              value={rangeKey}
+              onChange={(v) => pushScope({ range: v as RangeKey })}
+              options={RANGE_PRESETS.map((r) => ({ value: r.key, label: r.label }))}
+            />
           </>
         }
       />
@@ -327,65 +482,109 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-x-6 gap-y-2 grid-cols-1 lg:grid-cols-3 items-stretch">
+      <div className={cn(
+        'grid gap-x-6 gap-y-2 grid-cols-1 items-stretch',
+        // Two columns, not three-with-a-hole, when Performance health is
+        // withheld — a gap where a card used to be reads as a failed load.
+        canSeePerformance ? 'lg:grid-cols-3' : 'lg:grid-cols-2',
+      )}>
+        {/*
+          * WITHHELD ENTIRELY, not rendered empty. This card used to show an
+          * "Performance is not enabled for you" placeholder to a SPOC without
+          * the grant — a card that occupies a column, draws a border and says
+          * nothing. Either it carries data or it should not be on the page.
+          */}
+        {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
-          <Panel className="flex-1" title="This month">
-            {access?.grants?.includes('performance') ? (
-              <>
-                {/* SUBSTITUTED: SLA / first-time-fix / revisit live behind
-                    /performance, which is separately grant-gated and windowed.
-                    Rather than duplicate that engine here with different maths —
-                    the surest way to have two numbers disagree — this shows the
-                    book this endpoint DOES carry and links to the real page. */}
-                <MetricRow label="Completed" value={counts.completed.toLocaleString('en-IN')} bar={counts.completed / Math.max(1, totalOpen + counts.completed)} barAccent="success" />
-                <MetricRow label="In progress" value={counts.inProgress.toLocaleString('en-IN')} bar={counts.inProgress / Math.max(1, totalOpen)} barAccent="info" />
-                <MetricRow label="Running late" value={boxes.runningLate.toLocaleString('en-IN')} bar={boxes.runningLate / Math.max(1, totalOpen)} barAccent="warning" />
-                <MetricRow label="Escalated" value={counts.escalated.toLocaleString('en-IN')} bar={counts.escalated / Math.max(1, totalOpen)} barAccent="brand" />
-                <div className="pt-2">
-                  <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
-                    Full Performance Book →
-                  </button>
-                </div>
-              </>
-            ) : (
-              <EmptyState
-                title="Performance is not enabled for you"
-                sub="An administrator can grant it against your SPOC record."
-              />
+          <Panel className="flex-1" title={rangeLabel}>
+            {(
+              <RangeBody loading={rangeLoading} data={rangeData}>
+                {(r) => (
+                  <>
+                    {/*
+                      One cohort: the jobs RAISED in the window. Completed,
+                      still open, now overdue and escalated are all slices of
+                      that same set, so the bars share a denominator and the
+                      card reads as "of the work raised here, this is where it
+                      stands". Each metric on its own most natural date would
+                      make the shares stop reconciling.
+
+                      SLA / first-time-fix / revisit still live behind
+                      /performance, which runs the TAT engine — duplicating that
+                      maths here is the surest way to have two numbers disagree,
+                      so the link stays.
+                    */}
+                    <MetricRow label="Completed"    value={r.performance.completed.toLocaleString('en-IN')}   bar={r.performance.completed / Math.max(1, r.performance.total)}   barAccent="success" />
+                    <MetricRow label="In progress"  value={r.performance.inProgress.toLocaleString('en-IN')}  bar={r.performance.inProgress / Math.max(1, r.performance.total)}  barAccent="info" />
+                    <MetricRow label="Running late" value={r.performance.runningLate.toLocaleString('en-IN')} bar={r.performance.runningLate / Math.max(1, r.performance.total)} barAccent="warning" />
+                    <MetricRow label="Escalated"    value={r.performance.escalated.toLocaleString('en-IN')}   bar={r.performance.escalated / Math.max(1, r.performance.total)}   barAccent="brand" />
+                    <div className="pt-2 flex items-center justify-between gap-2">
+                      <span className="text-xs text-ink-500">
+                        {r.performance.total.toLocaleString('en-IN')} raised in this window
+                      </span>
+                      <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
+                        Full Performance Book →
+                      </button>
+                    </div>
+                  </>
+                )}
+              </RangeBody>
             )}
           </Panel>
         </div>
+        )}
 
         <div className="flex flex-col min-w-0">
-          <SectionLabel>Planned today — by city</SectionLabel>
-          <Panel className="flex-1" title={`${derived.plannedToday} job${derived.plannedToday === 1 ? '' : 's'} across ${derived.cities.length} cit${derived.cities.length === 1 ? 'y' : 'ies'}`}>
-            {derived.cities.length ? (
-              <>
-                <RankedList
-                  rows={derived.cities.slice(0, 4).map((c) => ({
-                    label: (
-                      <span className="block">
-                        <span className="block text-ink-900">{c.city}</span>
-                        <span className="block text-xs text-ink-500 truncate">
-                          {c.cats.length ? c.cats.slice(0, 2).join(', ') : 'All categories'}
+          <SectionLabel>Work done — by city</SectionLabel>
+          <Panel
+            className="flex-1"
+            title={rangeData
+              ? `${rangeData.performance.total.toLocaleString('en-IN')} job${rangeData.performance.total === 1 ? '' : 's'} across ${rangeData.cities.length} cit${rangeData.cities.length === 1 ? 'y' : 'ies'}`
+              : rangeLabel}
+          >
+            <RangeBody loading={rangeLoading} data={rangeData} empty={(r) => r.cities.length === 0} emptyTitle="No work in this window">
+              {(r) => (
+                <>
+                  {/* Server-ordered by job count desc; the slice is presentation
+                      only, and the remainder line below accounts for the rest so
+                      the visible four never read as the whole picture. */}
+                  <RankedList
+                    rows={r.cities.slice(0, 4).map((c) => ({
+                      label: (
+                        <span className="block">
+                          <span className="block text-ink-900">{c.name}</span>
+                          <span className="block text-xs text-ink-500 truncate">
+                            {c.completed.toLocaleString('en-IN')} completed
+                          </span>
                         </span>
+                      ),
+                      value: c.jobs,
+                      accent: 'info' as const,
+                      onClick: () => router.push(`/jobs?city=${encodeURIComponent(c.name)}`),
+                    }))}
+                  />
+                  {r.cities.length > 4 && (
+                    <div className="flex items-center justify-between pt-2 text-xs text-ink-500">
+                      <span>+ {r.cities.length - 4} more cities</span>
+                      <span className="tabular-nums">
+                        {r.cities.slice(4).reduce((a, c) => a + c.jobs, 0).toLocaleString('en-IN')}
                       </span>
-                    ),
-                    value: c.n,
-                    accent: 'info',
-                  }))}
-                />
-                {derived.cities.length > 4 && (
-                  <div className="flex items-center justify-between pt-2 text-xs text-ink-500">
-                    <span>+ {derived.cities.length - 4} more cities</span>
-                    <span className="tabular-nums">{derived.cities.slice(4).reduce((a, c) => a + c.n, 0)}</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <EmptyState title="Nothing scheduled for today" />
-            )}
+                    </div>
+                  )}
+                  {/*
+                    The drill-down lands on Open orders, which is a DIFFERENT
+                    cohort to the count beside it: this card counts every order
+                    RAISED in the window whatever became of it, and that page
+                    holds only what is still open. Saying so is a line of copy;
+                    letting someone click 40 and land on 3 is a bug report.
+                  */}
+                  <p className="pt-2 text-xs text-ink-500">
+                    Select a city to see what is still open there.
+                  </p>
+                </>
+              )}
+            </RangeBody>
           </Panel>
         </div>
 
@@ -393,55 +592,154 @@ export default function HomePage() {
           <SectionLabel>Cancellations</SectionLabel>
           <Panel
             className="flex-1"
-            title={`${counts.cancelled.toLocaleString('en-IN')} cancelled`}
-            action={<Pill accent="warning">last 60 days</Pill>}
+            title={rangeData ? `${rangeData.cancellations.cancelled.toLocaleString('en-IN')} cancelled` : 'Cancellations'}
+            action={<Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>}
           >
-            {/*
-              SUBSTITUTED — and the substitution has to be VISIBLE, not silent.
-              The mock breaks cancellations down BY REASON. /dashboard-summary
-              carries no reason dimension at all, only a category mix of ALL
-              work. An earlier cut rendered that mix under this card's
-              "N cancelled" title in a warning tint, which read as "89 carpentry
-              CANCELLATIONS" — a number that was both false and larger than the
-              total it appeared to be a share of.
-              So the cancellation figure and the category mix are now separated
-              and each says what it is. Wiring the real reasons needs
-              action_taken_reason on the summary query.
-            */}
-            <MetricRow
-              label="Cancelled"
-              value={counts.cancelled.toLocaleString('en-IN')}
-              bar={counts.cancelled / Math.max(1, totalWork)}
-              barAccent="warning"
-            />
-            <MetricRow
-              label="Share of all work"
-              value={`${Math.round((counts.cancelled / Math.max(1, totalWork)) * 100)}%`}
-            />
+            <RangeBody loading={rangeLoading} data={rangeData}>
+              {(r) => (
+                <>
+                  {/*
+                    The reason breakdown the design asked for is finally real.
+                    It used to be impossible: /dashboard-summary carried no
+                    reason dimension, and an earlier cut filled the gap with the
+                    category mix of ALL work under a "N cancelled" title — which
+                    read as "89 carpentry CANCELLATIONS", a number both false and
+                    larger than the total it appeared to be a share of.
+                    /dashboard-range joins action_taken_reason, so the reasons
+                    below are the recorded ones.
+                  */}
+                  <MetricRow
+                    label="Cancelled"
+                    value={r.cancellations.cancelled.toLocaleString('en-IN')}
+                    bar={r.cancellations.cancelled / Math.max(1, r.cancellations.total)}
+                    barAccent="warning"
+                  />
+                  <MetricRow label="Share of all work" value={`${r.cancellations.sharePct}%`} />
 
-            <div className="mt-3 pt-3 border-t border-ink-100">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
-                All work by category
-              </div>
-              {/* Neutral, not warning — these are not cancellations. */}
-              {data.categoryBreakdown?.length ? (
-                <RankedList
-                  rows={data.categoryBreakdown.slice(0, 3).map((c) => {
-                    const total = data.categoryBreakdown!.reduce((a, x) => a + x.count, 0) || 1;
-                    return {
-                      label: <span className="truncate">{c.label}</span>,
-                      value: `${c.count} · ${Math.round((c.count / total) * 100)}%`,
-                      accent: 'info' as const,
-                    };
-                  })}
-                />
-              ) : (
-                <EmptyState title="No work in this window" />
+                  <div className="mt-3 pt-3 border-t border-ink-100">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
+                      Top reasons
+                    </div>
+                    {r.cancellations.topReasons.length ? (
+                      <>
+                        {/* % is of CANCELLED jobs, not of all work — the card is
+                            answering "of these cancellations, why". */}
+                        <RankedList
+                          rows={r.cancellations.topReasons.map((x) => ({
+                            label: <span className="truncate">{x.reason}</span>,
+                            value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
+                            accent: 'warning' as const,
+                          }))}
+                        />
+                        {r.cancellations.reasonCount > r.cancellations.topReasons.length && (
+                          <div className="pt-2 text-xs text-ink-500">
+                            + {r.cancellations.reasonCount - r.cancellations.topReasons.length} other reason
+                            {r.cancellations.reasonCount - r.cancellations.topReasons.length === 1 ? '' : 's'}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-ink-500 italic">No cancellations in this window.</div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-ink-100">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
+                      All work by category
+                    </div>
+                    {/* Neutral, not warning — these are NOT cancellations, and
+                        the tint is what made the earlier version misread. */}
+                    {r.cancellations.categories.length ? (
+                      <RankedList
+                        rows={r.cancellations.categories.slice(0, 3).map((c) => ({
+                          label: <span className="truncate">{c.label}</span>,
+                          value: `${c.count.toLocaleString('en-IN')} · ${c.pct}%`,
+                          accent: 'info' as const,
+                        }))}
+                      />
+                    ) : (
+                      <EmptyState title="No work in this window" />
+                    )}
+                  </div>
+                </>
               )}
-            </div>
+            </RangeBody>
           </Panel>
         </div>
       </div>
     </>
+  );
+}
+
+/*
+ * Loading / empty frame shared by the three range-scoped cards.
+ *
+ * A render prop rather than three copies of the same two guards: without it
+ * each card repeats "spinner while loading, EmptyState when the window is
+ * empty, otherwise render", and they drift — which is how one card ends up
+ * showing a confident 0 while its neighbour shows a dash for the same window.
+ */
+function RangeBody<T>({
+  loading, data, empty, emptyTitle = 'No data for this window', children,
+}: {
+  loading: boolean;
+  data: T | null;
+  empty?: (d: T) => boolean;
+  emptyTitle?: string;
+  children: (d: T) => React.ReactNode;
+}) {
+  if (loading && !data) {
+    return (
+      <div className="py-6 text-center">
+        <Loader2 className="w-5 h-5 mx-auto animate-spin text-ink-300" aria-hidden />
+      </div>
+    );
+  }
+  if (!data) return <EmptyState title={emptyTitle} />;
+  if (empty?.(data)) return <EmptyState title={emptyTitle} />;
+  return <>{children(data)}</>;
+}
+
+/*
+ * A <select> dressed as a FilterChip.
+ *
+ * Native, not a popover: one control, the current value always on screen, no
+ * outside-click or keyboard handling to get wrong, and it is the platform's own
+ * picker on mobile. Chip STYLING is duplicated from FilterChip rather than
+ * shared because FilterChip renders a <button> — wrapping a select in a button
+ * is invalid HTML, and widening that component to sometimes-not-be-a-button
+ * would be a worse trade than these two class strings.
+ *
+ * `active` (brand-tinted) whenever the value is not the default, so a narrowed
+ * scope is visible at a glance rather than something you discover by reading
+ * the dropdown.
+ */
+function ChipSelect({
+  icon: Icon, label, value, onChange, options,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  const active = value !== '' && value !== DEFAULT_RANGE;
+  return (
+    <label
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1.5 text-xs font-medium transition focus-within:border-primary',
+        active ? 'border-primary bg-primary-50 text-primary' : 'border-ink-100 bg-surface text-ink-700',
+      )}
+    >
+      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent pr-1 text-xs font-medium focus:outline-none cursor-pointer max-w-[10rem] truncate"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
   );
 }

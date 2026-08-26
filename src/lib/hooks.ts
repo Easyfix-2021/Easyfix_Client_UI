@@ -129,7 +129,7 @@ export function useDebouncedValue<T>(value: T, delay = 300): T {
  *
  * Ported from the mobile client app (Easyfix_Client_App → src/lib/hooks.ts).
  * The dashboard's Orders-trend / Performance-by-city cards aggregate the last
- * 7–30 days CLIENT-SIDE (see src/lib/analytics.ts), exactly like the app, so
+ * 7–30 days CLIENT-SIDE, exactly like the app, so
  * we load a recent window of orders once and slice it in the browser.
  */
 

@@ -401,6 +401,24 @@ export default function OpenJobsPage() {
   const [escReason, setEscReason] = useState('');
   const [escComment, setEscComment] = useState('');
 
+  /*
+   * DEEP LINK. Home's "work by city" card links here with ?city=. Seeded once
+   * on mount and read off `window` rather than useSearchParams — the same
+   * choice /history makes for the same reason: one optional parameter is not
+   * worth pulling this page into a Suspense boundary.
+   *
+   * Cheap because city filters the LOADED BOOK in the browser, so seeding it
+   * costs no fetch. ?spoc= is deliberately NOT carried across even though Home
+   * can be scoped by it: that one IS a server filter, and setting it after
+   * mount would fire a second seven-status sweep purely to narrow what the
+   * first sweep already returned. The page has its own visible SPOC control.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const seeded = new URLSearchParams(window.location.search).get('city');
+    if (seeded) setCity(seeded);
+  }, []);
+
   const book = useOpenBook(spocId);
   const queue = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue?limit=100');
   const team = useFetchOnce<{ items: TeamMember[]; isManager: boolean }>('/team');
@@ -432,10 +450,17 @@ export default function OpenJobsPage() {
    * this screen is about what is open right now, so an option that would select
    * zero rows should not be offered.
    */
-  const cityOptions = useMemo(
-    () => [...new Set(jobs.map(cityOf))].sort((a, b) => a.localeCompare(b)),
-    [jobs],
-  );
+  const cityOptions = useMemo(() => {
+    const open = [...new Set(jobs.map(cityOf))].sort((a, b) => a.localeCompare(b));
+    /*
+     * ...with ONE exception: a city deep-linked from Home that has no open work
+     * is not in the book, and dropping it would leave the chip reading "All
+     * cities" over a list filtered to nothing. Keep it, and let the empty state
+     * say what happened — a filter that hides its own value is worse than one
+     * that selects zero rows.
+     */
+    return city && !open.includes(city) ? [city, ...open] : open;
+  }, [jobs, city]);
   const workOptions = useMemo(
     () => [...new Set(jobs.map(workOf))].sort((a, b) => a.localeCompare(b)),
     [jobs],

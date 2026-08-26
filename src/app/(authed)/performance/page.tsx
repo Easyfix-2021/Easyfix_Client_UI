@@ -482,7 +482,7 @@ export default function PerformancePage() {
               </div>
             </>
           ) : (
-            <EmptyState title="No jobs closed in the last six months" />
+            <EmptyState title={`No jobs closed in the last ${MONTHS} months`} />
           )}
         </Panel>
 
@@ -514,7 +514,7 @@ export default function PerformancePage() {
               </div>
             </>
           ) : (
-            <EmptyState title="No closures to rate" sub="Nothing completed or cancelled in the last six months." />
+            <EmptyState title="No closures to rate" sub={`Nothing completed or cancelled in the last ${MONTHS} months.`} />
           )}
         </Panel>
       </div>
@@ -699,7 +699,7 @@ function VolumeBars({ rows }: { rows: Array<{ month: string; completed: number; 
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto min-w-[320px]"
         role="img"
-        aria-label="Completed and cancelled jobs by month, last six months"
+        aria-label={`Completed and cancelled jobs by month, last ${rows.length} months`}
       >
         {[0, 0.5, 1].map((f) => (
           <line key={f} x1={0} x2={W} y1={y(max * f)} y2={y(max * f)} stroke="var(--ef-ink-100)" strokeWidth={1} />
@@ -785,7 +785,7 @@ function RateLine({ rows }: { rows: Array<{ month: string; completed: number; ca
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto min-w-[320px]"
         role="img"
-        aria-label="Share of monthly closures that completed, last six months"
+        aria-label={`Share of monthly closures that completed, last ${rows.length} months`}
       >
         {[0, 50, 100].map((g) => (
           <g key={g}>

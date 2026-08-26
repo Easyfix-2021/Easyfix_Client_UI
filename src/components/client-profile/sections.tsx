@@ -12,7 +12,7 @@
  * ─── THE SUMMARISE-AND-LINK RULE ────────────────────────────────────────────
  * Four of these cover ground the portal already has a full page for —
  * Branches (/stores), Billing (/invoices), Rate Cards (/ratecard) and Reports
- * (/performance, /analytics, /export). Those sections show a COMPACT summary
+ * (/performance, /history, /export). Those sections show a COMPACT summary
  * and link out instead of re-rendering the page inside a panel. Two
  * implementations of one table is two places for a fix to land, and the fuller
  * page is always the better place to actually work.
@@ -21,7 +21,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, BarChart3, Building2, Download, FileText, Globe,
+  AlertTriangle, Building2, Download, FileText, Globe,
   Mail, MapPin, Phone, ReceiptText, Settings2, ShieldCheck, Smartphone, Upload, Users,
 } from 'lucide-react';
 import { useFetchOnce } from '@/lib/hooks';
@@ -615,7 +615,6 @@ export function ReportsSection() {
   const hasPerformance = useHasGrant('performance');
   const links: Array<{ href: string; label: string; note: string; icon: React.ComponentType<{ className?: string }>; gated?: boolean }> = [
     { href: '/performance', label: 'Performance', note: 'SLA, first-time fix and turnaround against your targets.', icon: ShieldCheck, gated: !hasPerformance },
-    { href: '/analytics',   label: 'Analytics',   note: 'Order volume and mix over time.', icon: BarChart3 },
     { href: '/history',     label: 'Order History', note: 'Every order raised on your account.', icon: FileText },
     { href: '/export',      label: 'Export',      note: 'Download your orders as a spreadsheet.', icon: Download },
   ];
