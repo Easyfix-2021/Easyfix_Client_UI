@@ -22,8 +22,6 @@ import {
   FileText,
   FolderOpen,
   CheckCircle2,
-  AlertTriangle,
-  Users,
   HardHat,
   TrendingUp,
   Wallet,
@@ -33,7 +31,6 @@ import {
   Smartphone,
   ChevronDown,
   MoreHorizontal,
-  BarChart3,
   Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -60,7 +57,7 @@ type NavItem = {
    * the shell already polls these, and a tab that fetches its own badge is a
    * request per tab on every navigation.
    */
-  badge?: 'open' | 'actions';
+  badge?: 'open';
 };
 
 /*
@@ -87,10 +84,7 @@ const PRIMARY: NavItem[] = [
   // Gated on can_view_performance. Absent for every existing SPOC until an
   // administrator turns it on — see EasyFix_Backend/migrations/2026-08-20-client-spoc-access.sql.
   { href: '/performance', label: 'Performance',     icon: TrendingUp, grant: 'performance' },
-  { href: '/action-queue', label: 'My action queue', icon: AlertTriangle, badge: 'actions' },
   { href: '/invoices',    label: 'Invoicing',       icon: FileText, grant: 'invoicing' },
-  { href: '/analytics',   label: 'Analytics',       icon: BarChart3 },
-  { href: '/stores',      label: 'Store SPOC view', icon: Users },
 ];
 
 /*
@@ -102,7 +96,10 @@ const PRIMARY: NavItem[] = [
  * `grant: undefined` means the area needs no grant — every SPOC has operations.
  */
 const AREAS: Array<{ label: string; href: string; match: string[]; grant?: string }> = [
-  { label: 'Operations',  href: '/dashboard',   match: ['/dashboard', '/jobs', '/completed', '/action-queue', '/history', '/tickets'] },
+  // /action-queue and /stores no longer have their own tabs but the ROUTES are
+  // alive (deep links, and the Client Profile links to /stores), so they still
+  // light this chip when visited rather than leaving the header with nothing active.
+  { label: 'Operations',  href: '/dashboard',   match: ['/dashboard', '/jobs', '/completed', '/action-queue', '/stores', '/history', '/tickets'] },
   { label: 'Performance', href: '/performance', match: ['/performance'], grant: 'performance' },
   { label: 'Invoicing',   href: '/invoices',    match: ['/invoices', '/wallet'], grant: 'invoicing' },
 ];
@@ -216,7 +213,12 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 
   /*
    * ─── Tab badges ────────────────────────────────────────────────────
-   * The counts on "Open jobs" and "My action queue".
+   * The count on "Open jobs".
+   *
+   * The action-queue badge went with its tab (removed 2026-08-25). Its fetch
+   * went too rather than being left running — the shell renders on EVERY
+   * route, so an orphaned badge fetch is one wasted request per navigation for
+   * a number nothing displays. /action-queue itself is still a live route.
    *
    * Fetched HERE, once, rather than by each tab: the shell renders on every
    * route, so a tab that fetched its own badge would fire a request per tab on
@@ -229,19 +231,14 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
    * instead of on the next full page load.
    */
   const [openCount, setOpenCount] = useState<number | undefined>(undefined);
-  const [actionCount, setActionCount] = useState<number | undefined>(undefined);
   useEffect(() => {
     if (!spoc) return;
     let cancelled = false;
     async function refreshCounts() {
       try {
-        const [orders, queue] = await Promise.allSettled([
-          api.get<{ otherOrders: number }>('/orders/counts'),
-          api.get<{ total: number }>('/action-queue'),
-        ]);
+        const orders = await api.get<{ otherOrders: number }>('/orders/counts').catch(() => null);
         if (cancelled) return;
-        if (orders.status === 'fulfilled') setOpenCount(Number(orders.value?.otherOrders) || 0);
-        if (queue.status === 'fulfilled') setActionCount(Number(queue.value?.total) || 0);
+        if (orders) setOpenCount(Number(orders.otherOrders) || 0);
       } catch { /* advisory only */ }
     }
     refreshCounts();
@@ -560,7 +557,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
                 key={item.label}
                 item={item}
                 active={isActive(item)}
-                count={item.badge === 'actions' ? actionCount : item.badge === 'open' ? openCount : undefined}
+                count={item.badge === 'open' ? openCount : undefined}
               />
             ))}
           </nav>
