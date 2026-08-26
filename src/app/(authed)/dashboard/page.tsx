@@ -31,14 +31,15 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FolderOpen, CheckCircle2, CalendarDays, CalendarRange,
-  AlertTriangle, MapPin, Building2, User, Loader2,
+  AlertTriangle, MapPin, User, Loader2, type LucideIcon,
 } from 'lucide-react';
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
+import { cn } from '@/lib/utils';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
-  FilterChip, RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
+  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
 } from '@/components/ui/console';
 
 /* ─── contracts ─────────────────────────────────────────────────────────── */
@@ -161,13 +162,32 @@ export default function HomePage() {
    * than looking like it filters the whole page.
    */
   const [rangeKey, setRangeKey] = useState<RangeKey>('d60');
+  const [city, setCity] = useState('');       // '' = every city
+  const [spoc, setSpoc] = useState('');       // '' = your whole team
   const range = useMemo(() => rangeFor(rangeKey, now), [rangeKey, now]);
   const rangeLabel = RANGE_PRESETS.find((r) => r.key === rangeKey)?.label ?? '';
+  /* Hiding a card the SPOC cannot fill is a COURTESY, not a control — the
+     /performance route is guarded on the server independently. */
+  const canSeePerformance = !!access?.grants?.includes('performance');
   // The path carries from/to, so changing the preset refetches — useFetchOnce
   // re-issues on a PATH change (its lastPathRef guard), which is exactly what
   // makes this work without a manual reload.
+  const scopeQs = `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`;
   const { data: rangeData, loading: rangeLoading } =
-    useFetchOnce<RangeData>(`/dashboard-range?from=${range.from}&to=${range.to}`);
+    useFetchOnce<RangeData>(`/dashboard-range?from=${range.from}&to=${range.to}${scopeQs}`);
+
+  /*
+   * The two scope lookups. Both are client-scoped already: /cities is DISTINCT
+   * over this client's own jobs (not the ~11k city master), and /team is the
+   * caller's contacts. The SPOC picker only appears for a manager — a SPOC with
+   * nobody reporting to them has one option, which is not a filter.
+   */
+  const { data: cityList } = useFetchOnce<{ items: string[] }>('/cities');
+  const { data: team } = useFetchOnce<{ items: Array<{ id: number; name: string | null; status: number }>; isManager: boolean }>('/team');
+  const spocOptions = useMemo(
+    () => (team?.items ?? []).filter((m) => m.status === 1),
+    [team],
+  );
 
   /*
    * The appointment-derived cuts. Memoised on `jobs` because this walks up to
@@ -254,27 +274,44 @@ export default function HomePage() {
         sub={`Across ${data.teamSize} SPOC${data.teamSize === 1 ? '' : 's'} · live`}
         filters={
           <>
-            {/* The first three remain READOUTS of the current scope until those
-                filters ship — a chip that looks interactive but changes nothing
-                is worse than one that says what it is. The fourth is now real,
-                and is a native <select> rather than a popover: one control, the
-                current value always visible, and no dropdown to build. */}
-            <FilterChip icon={MapPin}>All cities</FilterChip>
-            <FilterChip icon={Building2}>All zones</FilterChip>
-            <FilterChip icon={User}>All SPOCs</FilterChip>
-            <label className="inline-flex items-center gap-1.5 rounded-full border border-ink-100 bg-surface pl-3 pr-2 py-1.5 text-xs font-medium text-ink-700 focus-within:border-primary">
-              <CalendarDays className="w-3.5 h-3.5 shrink-0" aria-hidden />
-              <span className="sr-only">Date range for the performance, city and cancellation cards</span>
-              <select
-                value={rangeKey}
-                onChange={(e) => setRangeKey(e.target.value as RangeKey)}
-                className="bg-transparent pr-1 text-xs font-medium text-ink-700 focus:outline-none cursor-pointer"
-              >
-                {RANGE_PRESETS.map((r) => (
-                  <option key={r.key} value={r.key}>{r.label}</option>
-                ))}
-              </select>
-            </label>
+            {/*
+              * Scope for the three cards BELOW Today's Pulse — the same three
+              * the date range governs. The pulse is a live figure and is
+              * deliberately not scoped; see the range note above.
+              *
+              * "All zones" is GONE rather than left as a decorative chip. Zones
+              * are tbl_zone_master / tbl_zone_city_mapping — an EasyFix
+              * technician-routing construct that the client API has never
+              * exposed and that means nothing from a client's side of the
+              * wire. There is no honest list to put in it, and by the same rule
+              * we just applied to Performance health: if it cannot be filled,
+              * it should not be on the page.
+              */}
+            <ChipSelect
+              icon={MapPin}
+              label="City"
+              value={city}
+              onChange={setCity}
+              options={[{ value: '', label: 'All cities' },
+                        ...(cityList?.items ?? []).map((c) => ({ value: c, label: c }))]}
+            />
+            {team?.isManager && spocOptions.length > 1 && (
+              <ChipSelect
+                icon={User}
+                label="SPOC"
+                value={spoc}
+                onChange={setSpoc}
+                options={[{ value: '', label: 'All SPOCs' },
+                          ...spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))]}
+              />
+            )}
+            <ChipSelect
+              icon={CalendarDays}
+              label="Date range"
+              value={rangeKey}
+              onChange={(v) => setRangeKey(v as RangeKey)}
+              options={RANGE_PRESETS.map((r) => ({ value: r.key, label: r.label }))}
+            />
           </>
         }
       />
@@ -388,11 +425,23 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-x-6 gap-y-2 grid-cols-1 lg:grid-cols-3 items-stretch">
+      <div className={cn(
+        'grid gap-x-6 gap-y-2 grid-cols-1 items-stretch',
+        // Two columns, not three-with-a-hole, when Performance health is
+        // withheld — a gap where a card used to be reads as a failed load.
+        canSeePerformance ? 'lg:grid-cols-3' : 'lg:grid-cols-2',
+      )}>
+        {/*
+          * WITHHELD ENTIRELY, not rendered empty. This card used to show an
+          * "Performance is not enabled for you" placeholder to a SPOC without
+          * the grant — a card that occupies a column, draws a border and says
+          * nothing. Either it carries data or it should not be on the page.
+          */}
+        {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
           <Panel className="flex-1" title={rangeLabel}>
-            {access?.grants?.includes('performance') ? (
+            {(
               <RangeBody loading={rangeLoading} data={rangeData}>
                 {(r) => (
                   <>
@@ -424,14 +473,10 @@ export default function HomePage() {
                   </>
                 )}
               </RangeBody>
-            ) : (
-              <EmptyState
-                title="Performance is not enabled for you"
-                sub="An administrator can grant it against your SPOC record."
-              />
             )}
           </Panel>
         </div>
+        )}
 
         <div className="flex flex-col min-w-0">
           <SectionLabel>Work done — by city</SectionLabel>
@@ -585,4 +630,48 @@ function RangeBody<T>({
   if (!data) return <EmptyState title={emptyTitle} />;
   if (empty?.(data)) return <EmptyState title={emptyTitle} />;
   return <>{children(data)}</>;
+}
+
+/*
+ * A <select> dressed as a FilterChip.
+ *
+ * Native, not a popover: one control, the current value always on screen, no
+ * outside-click or keyboard handling to get wrong, and it is the platform's own
+ * picker on mobile. Chip STYLING is duplicated from FilterChip rather than
+ * shared because FilterChip renders a <button> — wrapping a select in a button
+ * is invalid HTML, and widening that component to sometimes-not-be-a-button
+ * would be a worse trade than these two class strings.
+ *
+ * `active` (brand-tinted) whenever the value is not the default, so a narrowed
+ * scope is visible at a glance rather than something you discover by reading
+ * the dropdown.
+ */
+function ChipSelect({
+  icon: Icon, label, value, onChange, options,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  const active = value !== '' && value !== 'd60';
+  return (
+    <label
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1.5 text-xs font-medium transition focus-within:border-primary',
+        active ? 'border-primary bg-primary-50 text-primary' : 'border-ink-100 bg-surface text-ink-700',
+      )}
+    >
+      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent pr-1 text-xs font-medium focus:outline-none cursor-pointer max-w-[10rem] truncate"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
 }
