@@ -513,8 +513,8 @@ export default function HomePage() {
             */
             action={rangeData ? (
               <DeltaPill
-                now={donePct(rangeData.performance.completed, rangeData.performance.total)}
-                prev={donePct(rangeData.previous.completed, rangeData.previous.total)}
+                now={pct(rangeData.performance.completed, rangeData.performance.total)}
+                prev={pct(rangeData.previous.completed, rangeData.previous.total)}
                 good="up"
                 unit="pp"
               />
@@ -591,8 +591,26 @@ export default function HomePage() {
                           </span>
                         </span>
                       ),
-                      value: c.jobs,
+                      /*
+                       * The SHARE ships with the bar, deliberately. A bar whose
+                       * denominator is not written down is a picture the reader
+                       * cannot name — and this card had no percentage anywhere,
+                       * so the bar alone could have meant "of all work", "of the
+                       * biggest city", or "of the four shown". It means the
+                       * first, and now says so, in the same "count · pct" shape
+                       * the Cancellations card beside it uses.
+                       */
+                      value: `${c.jobs.toLocaleString('en-IN')} · ${pct(c.jobs, r.performance.total)}%`,
                       accent: 'info' as const,
+                      /*
+                       * Against the WINDOW'S TOTAL, not against the largest city.
+                       * Scaling to the leader would paint the top row full-width
+                       * whether it held 90% of the work or 12%, which is the one
+                       * reading this card must not invite. Against the total, the
+                       * four bars and the "+ N more cities" remainder below them
+                       * describe one whole.
+                       */
+                      bar: c.jobs / Math.max(1, r.performance.total),
                       /*
                        * The SPOC scope travels with the city. /jobs reads both
                        * off the URL during render, so arriving pre-scoped costs
@@ -713,7 +731,7 @@ export default function HomePage() {
                                 </span>
                               ),
                               value: `${r.cancellations.otherReasons.count.toLocaleString('en-IN')} · `
-                                + `${Math.round((1000 * r.cancellations.otherReasons.count) / Math.max(1, r.cancellations.cancelled)) / 10}%`,
+                                + `${pct(r.cancellations.otherReasons.count, r.cancellations.cancelled)}%`,
                               // WARNING, same as the named rows. All four are
                               // cancellation counts that sum to the title, and
                               // a different tint would say "this is a different
@@ -783,9 +801,17 @@ function DeltaPill({
   );
 }
 
-/** Completion rate as a percentage of the work raised in a window. */
-const donePct = (completed: number, total: number) =>
-  total > 0 ? Math.round((1000 * completed) / total) / 10 : 0;
+/*
+ * One percentage, to one decimal — the same rounding the SERVER uses for the
+ * reason shares it sends. Three copies of this had accumulated (completion
+ * rate, city share, the Other bucket) and identical arithmetic under three
+ * names is how one of them ends up rounding to a different place and two
+ * figures on the same card stop adding up.
+ *
+ * A zero denominator is 0%, never NaN: an empty window still renders.
+ */
+const pct = (part: number, whole: number) =>
+  whole > 0 ? Math.round((1000 * part) / whole) / 10 : 0;
 
 /*
  * Loading / empty frame shared by the three range-scoped cards.
