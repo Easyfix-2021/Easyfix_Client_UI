@@ -27,8 +27,8 @@
  */
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FolderOpen, CheckCircle2, CalendarDays, CalendarRange,
   AlertTriangle, MapPin, User, Loader2, type LucideIcon,
@@ -114,6 +114,14 @@ const RANGE_PRESETS: Array<{ key: RangeKey; label: string }> = [
   { key: 'lastMonth', label: 'Last month' },
 ];
 
+const DEFAULT_RANGE: RangeKey = 'd60';
+
+/* The URL is user input. An unrecognised key would leave the chip showing one
+   window while the cards showed another — a control that lies about what you
+   are looking at — so it resolves to the default instead. */
+const resolveRange = (raw: string | null): RangeKey =>
+  RANGE_PRESETS.find((r) => r.key === raw)?.key ?? DEFAULT_RANGE;
+
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -148,6 +156,7 @@ const OPEN = new Set([0, 1, 2, 20]);
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const access = useAccess();
   const { data, loading, error, reload } = useFetchOnce<Summary>('/dashboard-summary');
   const { data: queue } = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue');
@@ -156,25 +165,31 @@ export default function HomePage() {
   const now = useMemo(() => new Date(), []);
 
   /*
-   * The range drives the THREE CARDS BELOW ONLY. Today's Pulse, the action
-   * queue and the open breakdown are live figures — "how many orders are open"
-   * has no date range, so the control sits with the cards it governs rather
-   * than looking like it filters the whole page.
+   * ─── SCOPE AND RANGE ──────────────────────────────────────────────────────
+   *
+   * These drive the THREE CARDS BELOW ONLY. Today's Pulse, the action queue and
+   * the open breakdown are live figures — "how many orders are open" has no
+   * date range — so the controls sit with the cards they govern rather than
+   * looking like they filter the whole page.
+   *
+   * All three live in the QUERY STRING, not useState, so a narrowed dashboard
+   * is a LINK: it survives a refresh, it is what you paste into chat when you
+   * want someone looking at the same numbers you are, and Back is not the only
+   * way to widen it again. Same treatment as the Client Profile's ?tab=, down
+   * to `router.replace` over push — Back should leave the page, not walk back
+   * through every chip you touched on the way here.
+   *
+   * A default is ABSENT from the URL rather than spelled out, so a plain
+   * /dashboard link keeps meaning "the default view".
    */
-  const [rangeKey, setRangeKey] = useState<RangeKey>('d60');
-  const [city, setCity] = useState('');       // '' = every city
-  const [spoc, setSpoc] = useState('');       // '' = your whole team
+  const rangeKey = resolveRange(searchParams.get('range'));
+  const city = searchParams.get('city') ?? '';
+  const spocParam = searchParams.get('spoc') ?? '';
   const range = useMemo(() => rangeFor(rangeKey, now), [rangeKey, now]);
   const rangeLabel = RANGE_PRESETS.find((r) => r.key === rangeKey)?.label ?? '';
   /* Hiding a card the SPOC cannot fill is a COURTESY, not a control — the
      /performance route is guarded on the server independently. */
   const canSeePerformance = !!access?.grants?.includes('performance');
-  // The path carries from/to, so changing the preset refetches — useFetchOnce
-  // re-issues on a PATH change (its lastPathRef guard), which is exactly what
-  // makes this work without a manual reload.
-  const scopeQs = `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`;
-  const { data: rangeData, loading: rangeLoading } =
-    useFetchOnce<RangeData>(`/dashboard-range?from=${range.from}&to=${range.to}${scopeQs}`);
 
   /*
    * The two scope lookups. Both are client-scoped already: /cities is DISTINCT
@@ -188,6 +203,49 @@ export default function HomePage() {
     () => (team?.items ?? []).filter((m) => m.status === 1),
     [team],
   );
+
+  /*
+   * Both scope params are checked against those lists, and they are handled
+   * DIFFERENTLY on purpose — the rule is that the chip and the cards must never
+   * disagree about what you are looking at.
+   *
+   *   ?city=   KEPT even when unknown, and given its own option. The cards
+   *            really are filtered to it, so dropping it would leave the chip
+   *            reading "All cities" over one city's numbers. An unknown city
+   *            matches nothing and the cards say so, which is the truth.
+   *   ?spoc=   DROPPED when it is not in your subtree, because the server
+   *            IGNORES such an id (the containment check on /dashboard-range)
+   *            and answers for the whole team. Keeping it would name one person
+   *            over everybody's numbers.
+   *
+   * The spoc check waits for /team to ARRIVE: before that "not yours" and "not
+   * loaded yet" are indistinguishable, and guessing costs a wasted fetch and a
+   * flash of the wrong scope.
+   */
+  const cityOptions = useMemo(() => {
+    const known = cityList?.items ?? [];
+    const items = city && !known.includes(city) ? [city, ...known] : known;
+    return [{ value: '', label: 'All cities' }, ...items.map((c) => ({ value: c, label: c }))];
+  }, [cityList, city]);
+  const spoc = !team || spocOptions.some((m) => String(m.id) === spocParam) ? spocParam : '';
+
+  function pushScope(patch: { range?: RangeKey; city?: string; spoc?: string }) {
+    const next = { range: rangeKey, city, spoc, ...patch };
+    const qs = new URLSearchParams(searchParams.toString());
+    const put = (k: string, v: string, omit: string) => (v === omit ? qs.delete(k) : qs.set(k, v));
+    put('range', next.range, DEFAULT_RANGE);
+    put('city', next.city, '');
+    put('spoc', next.spoc, '');
+    const q = qs.toString();
+    router.replace(q ? `/dashboard?${q}` : '/dashboard', { scroll: false });
+  }
+
+  // The path carries from/to and the scope, so changing any chip refetches —
+  // useFetchOnce re-issues on a PATH change (its lastPathRef guard), which is
+  // exactly what makes this work without a manual reload.
+  const scopeQs = `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`;
+  const { data: rangeData, loading: rangeLoading } =
+    useFetchOnce<RangeData>(`/dashboard-range?from=${range.from}&to=${range.to}${scopeQs}`);
 
   /*
    * The appointment-derived cuts. Memoised on `jobs` because this walks up to
@@ -291,16 +349,15 @@ export default function HomePage() {
               icon={MapPin}
               label="City"
               value={city}
-              onChange={setCity}
-              options={[{ value: '', label: 'All cities' },
-                        ...(cityList?.items ?? []).map((c) => ({ value: c, label: c }))]}
+              onChange={(v) => pushScope({ city: v })}
+              options={cityOptions}
             />
             {team?.isManager && spocOptions.length > 1 && (
               <ChipSelect
                 icon={User}
                 label="SPOC"
                 value={spoc}
-                onChange={setSpoc}
+                onChange={(v) => pushScope({ spoc: v })}
                 options={[{ value: '', label: 'All SPOCs' },
                           ...spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))]}
               />
@@ -309,7 +366,7 @@ export default function HomePage() {
               icon={CalendarDays}
               label="Date range"
               value={rangeKey}
-              onChange={(v) => setRangeKey(v as RangeKey)}
+              onChange={(v) => pushScope({ range: v as RangeKey })}
               options={RANGE_PRESETS.map((r) => ({ value: r.key, label: r.label }))}
             />
           </>
@@ -655,7 +712,7 @@ function ChipSelect({
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
 }) {
-  const active = value !== '' && value !== 'd60';
+  const active = value !== '' && value !== DEFAULT_RANGE;
   return (
     <label
       className={cn(
