@@ -561,6 +561,7 @@ export default function HomePage() {
                       ),
                       value: c.jobs,
                       accent: 'info' as const,
+                      onClick: () => router.push(`/jobs?city=${encodeURIComponent(c.name)}`),
                     }))}
                   />
                   {r.cities.length > 4 && (
@@ -571,6 +572,16 @@ export default function HomePage() {
                       </span>
                     </div>
                   )}
+                  {/*
+                    The drill-down lands on Open orders, which is a DIFFERENT
+                    cohort to the count beside it: this card counts every order
+                    RAISED in the window whatever became of it, and that page
+                    holds only what is still open. Saying so is a line of copy;
+                    letting someone click 40 and land on 3 is a bug report.
+                  */}
+                  <p className="pt-2 text-xs text-ink-500">
+                    Select a city to see what is still open there.
+                  </p>
                 </>
               )}
             </RangeBody>
