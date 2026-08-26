@@ -27,7 +27,7 @@ import { openJobDrawer } from '@/components/job-drawer';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, Upload, Download, AlertTriangle, Search,
+  Plus, Upload, Download, AlertTriangle, Info, Search,
   ChevronLeft, ChevronRight, Star, Filter, X, RotateCcw,
 } from 'lucide-react';
 import { useFetch, useFetchOnce, useDebouncedValue } from '@/lib/hooks';
@@ -393,28 +393,45 @@ export default function OrderHistoryPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const exportGate = useMemo(() => {
     if (!staged.startDate || !staged.endDate) {
-      return { ok: false, reason: 'Pick a date range (both From and To) to enable export.' };
+      return {
+        ok: false,
+        title: 'Export needs a date range',
+        reason: 'Pick a date range (both From and To) to enable export.',
+      };
     }
     const ms = new Date(staged.endDate).getTime() - new Date(staged.startDate).getTime();
     const days = Math.floor(ms / 86_400_000);
     if (days > 60) {
-      return { ok: false, reason: `Date range is ${days} days. Maximum allowed is 60 days — narrow the range to export.` };
+      return {
+        ok: false,
+        title: 'Date range too wide',
+        reason: `Date range is ${days} days. Maximum allowed is 60 days — narrow the range to export.`,
+      };
     }
-    return { ok: true, reason: '' };
+    return { ok: true, title: '', reason: '' };
   }, [staged.startDate, staged.endDate]);
 
-  // Popup-style notice. Replaces the silent "disabled button does
-  // nothing" behaviour — when the export gate rejects (no date range,
-  // > 60 days, etc.), we surface the reason in a modal the user
-  // actually sees instead of a tooltip they have to hover to discover.
-  const [gateNotice, setGateNotice] = useState<string | null>(null);
+  /*
+   * Popup-style notice. Replaces the silent "disabled button does nothing"
+   * behaviour — the reason appears in a modal rather than a tooltip nobody
+   * hovers.
+   *
+   * ⚠ IT CARRIES ITS OWN TITLE because the popup used to hardcode "Nothing to
+   * export", and not one of the cases that reach it means that. Two are GATE
+   * REJECTIONS where no query ever ran, and the third is a SUCCESSFUL export
+   * that was capped — the file downloaded, so "nothing" is the opposite of
+   * what happened. The heading was written for a zero-rows 404 that
+   * /export/jobs does not and never did return.
+   */
+  type Notice = { title: string; message: string; tone: 'warning' | 'info' };
+  const [gateNotice, setGateNotice] = useState<Notice | null>(null);
 
   async function handleExport() {
     if (!exportGate.ok) {
       // Show the gate reason in a centred popup AND keep the legacy
       // setExportError banner — covers both at-glance and scroll-up
       // surfaces. Returning early stops the download from firing.
-      setGateNotice(exportGate.reason);
+      setGateNotice({ title: exportGate.title, message: exportGate.reason, tone: 'warning' });
       setExportError(exportGate.reason);
       return;
     }
@@ -450,22 +467,33 @@ export default function OrderHistoryPage() {
        */
       const out = await downloadBlob(`/export/jobs?${qs}`, `OrderHistory_${ts}.xlsx`);
       if (out.truncated) {
-        setGateNotice(
-          `Your filters match ${out.total.toLocaleString('en-IN')} orders and the file holds the first `
-          + `${out.rowCap.toLocaleString('en-IN')}. Narrow the date range or add a City or Client Team `
-          + `filter to export the rest.`
-        );
+        setGateNotice({
+          // INFO, not warning: the workbook is on disk. This is a caveat about
+          // a file the reader has, and dressing it as a failure would send
+          // them looking for a download that already succeeded.
+          tone: 'info',
+          title: 'Your export is partial',
+          message:
+            `Your filters match ${out.total.toLocaleString('en-IN')} orders and the file holds the first `
+            + `${out.rowCap.toLocaleString('en-IN')}. Narrow the date range or add a City or Client Team `
+            + `filter to export the rest.`,
+        });
       }
     } catch (err) {
-      // The backend returns a structured 404 when the filter set
-      // matches zero jobs (see /export/jobs route). We surface that
-      // case in the SAME amber popup the date-range gate uses, so
-      // the user has one consistent "why didn't I get a file?"
-      // surface. Everything else (network failure, 5xx) falls
-      // through to the existing inline error banner.
+      /*
+       * A 404 gets the popup rather than only the inline banner, so there is
+       * one consistent "why didn't I get a file?" surface. Everything else
+       * (network failure, 5xx) falls through to the banner.
+       *
+       * ⚠ The comment here used to say the backend returns a structured 404
+       * "when the filter set matches zero jobs". IT DOES NOT — /export/jobs
+       * has no 404 path at all and streams a header-only workbook for an empty
+       * result. A 404 reaching this branch means the ROUTE was not found, so
+       * the copy no longer claims to know the filters matched nothing.
+       */
       const msg = err instanceof ApiError ? err.message : 'Export failed';
       if (err instanceof ApiError && err.status === 404) {
-        setGateNotice(msg);
+        setGateNotice({ title: 'Export could not run', message: msg, tone: 'warning' });
       }
       setExportError(msg);
     } finally {
@@ -743,7 +771,18 @@ export default function OrderHistoryPage() {
               <tr><td colSpan={colCount} className="text-center text-ink-500 py-8">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={colCount} className="text-center text-ink-500 py-8">No orders found.</td></tr>
+              <tr><td colSpan={colCount} className="text-center text-ink-500 py-8">
+                {/*
+                  "You have no orders" and "your filter matched none" are
+                  different answers and the page already knows which it is —
+                  hasAnyApplied drives the "Filters active" chip a few rows up.
+                  A reader who deep-links in with ?statuses= and lands on an
+                  empty table cannot otherwise tell the two apart.
+                */}
+                {hasAnyApplied || q
+                  ? 'No orders match these filters — clear them to see all your orders.'
+                  : 'No orders yet.'}
+              </td></tr>
             )}
             {!loading && tab === 'otherOrders' && items.map((j) => {
               const age = ageInDays(j.requested_date_time);
@@ -906,7 +945,9 @@ export default function OrderHistoryPage() {
           easy-to-miss tooltip with an explicit centred dialog. */}
       {gateNotice && (
         <ExportGatePopup
-          message={gateNotice}
+          title={gateNotice.title}
+          tone={gateNotice.tone}
+          message={gateNotice.message}
           onClose={() => setGateNotice(null)}
         />
       )}
@@ -915,16 +956,22 @@ export default function OrderHistoryPage() {
 }
 
 /*
- * ExportGatePopup — small centred modal that explains why an export
- * was blocked. Portaled to <body> so it escapes any local stacking
- * context (the dashboard table has its own z-index). Escape key +
- * backdrop click close the dialog.
+ * ExportGatePopup — small centred modal that explains what happened to an
+ * export. Portaled to <body> so it escapes any local stacking context (the
+ * dashboard table has its own z-index). Escape key + backdrop click close it.
+ *
+ * ⚠ TITLE AND TONE ARE THE CALLER'S. This used to hardcode "Nothing to export"
+ * over an amber warning, and no case that reaches it means that: two are gate
+ * rejections where no query ran, and one is a SUCCESSFUL export that was
+ * capped. `tone: 'info'` exists for that last one — the file is on disk, and a
+ * warning triangle would send the reader hunting for a download that worked.
  */
 function ExportGatePopup({
-  message, onClose,
+  title, message, tone = 'warning', onClose,
 }: {
-  message: string; onClose: () => void;
+  title: string; message: string; tone?: 'warning' | 'info'; onClose: () => void;
 }) {
+  const isInfo = tone === 'info';
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -952,7 +999,10 @@ function ExportGatePopup({
             family as the rest of our modals so the dashboard feels
             consistent. Token, not decoration: this header IS the warning
             state, so it must move if the brand's warning colour moves. */}
-        <div className="bg-gradient-to-br from-warning/80 via-warning to-warning px-5 pt-5 pb-6 text-center relative">
+        <div className={cn(
+          'bg-gradient-to-br px-5 pt-5 pb-6 text-center relative',
+          isInfo ? 'from-info/80 via-info to-info' : 'from-warning/80 via-warning to-warning',
+        )}>
           <button
             type="button"
             onClick={onClose}
@@ -962,9 +1012,11 @@ function ExportGatePopup({
             <X className="w-4 h-4" />
           </button>
           <div className="w-14 h-14 mx-auto rounded-2xl bg-white/20 backdrop-blur grid place-items-center shadow-lg">
-            <AlertTriangle className="w-7 h-7 text-white" />
+            {isInfo
+              ? <Info className="w-7 h-7 text-white" />
+              : <AlertTriangle className="w-7 h-7 text-white" />}
           </div>
-          <h2 className="mt-3 text-lg font-semibold text-white">Nothing to export</h2>
+          <h2 className="mt-3 text-lg font-semibold text-white">{title}</h2>
         </div>
 
         <div className="px-5 py-5">
@@ -975,7 +1027,10 @@ function ExportGatePopup({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-warning/80 to-warning text-white shadow hover:shadow-md transition"
+              className={cn(
+                'px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r text-white shadow hover:shadow-md transition',
+                isInfo ? 'from-info/80 to-info' : 'from-warning/80 to-warning',
+              )}
             >
               Got it
             </button>
