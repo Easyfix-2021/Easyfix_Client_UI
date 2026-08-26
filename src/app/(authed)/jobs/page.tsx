@@ -42,12 +42,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Building2, Loader2, MapPin, MessageSquare, Search, User,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { fetchAllJobs, useFetchOnce } from '@/lib/hooks';
+import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
@@ -207,6 +208,12 @@ const BUCKETS: ReadonlyArray<{ key: BucketKey; label: string; accent: Accent }> 
   { key: 'd45', label: '4–5 days', accent: 'warning' },
   { key: 'd5plus', label: '> 5 days', accent: 'brand' },
 ];
+
+/* The URL is user input. An unrecognised band would highlight nothing while
+   filtering the list to nothing — the age band is a READOUT and a FILTER at
+   once, so a value it cannot show is a value it must not apply. */
+const resolveBucket = (raw: string | null): BucketKey | null =>
+  BUCKETS.find((b) => b.key === raw)?.key ?? null;
 
 const BUCKET_ACCENT: Record<BucketKey, Accent> = {
   future: 'success', d01: 'success', d23: 'info', d45: 'warning', d5plus: 'brand',
@@ -379,18 +386,83 @@ const FIELD =
 const PAGE_STEP = 50;
 
 export default function OpenJobsPage() {
-  /* filters */
-  const [spocId, setSpocId] = useState<number | null>(null);
-  const [city, setCity] = useState('');
-  const [work, setWork] = useState('');
-  const [term, setTerm] = useState('');
-  const [actionOnly, setActionOnly] = useState(false);
-  const [bucket, setBucket] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /*
+   * ─── FILTERS LIVE IN THE URL ───────────────────────────────────────────────
+   *
+   * Every filter on this screen is query state, so a narrowed book is a LINK:
+   * it survives a refresh, it is what you paste to a colleague, and Home's city
+   * card can hand this page a starting scope instead of dropping you in the
+   * whole book. Same treatment as Home and the Client Profile, `router.replace`
+   * included — Back should leave the page, not walk back through every chip.
+   *
+   * READ STRAIGHT FROM `searchParams`, never mirrored into state. A useState
+   * copy would be a second source of truth that has to be kept in step with the
+   * first, and the Back button is exactly where that goes wrong.
+   *
+   * ⚠ THE ONE THAT MATTERS MOST IS `spoc`. It is the only SERVER filter here —
+   * useOpenBook refetches on it — and reading it from the URL DURING RENDER is
+   * what makes carrying it from Home free. Seeded in an effect instead, the
+   * first render would fetch the whole team's book and the effect would
+   * immediately fetch it again, narrowed: seven parallel status sweeps, twice.
+   */
+  const spocParam = Number(searchParams.get('spoc')) || null;
+  const city = searchParams.get('city') ?? '';
+  const work = searchParams.get('work') ?? '';
+  const actionOnly = searchParams.get('action') === '1';
+  const bucket = resolveBucket(searchParams.get('bucket'));
   const [visible, setVisible] = useState(PAGE_STEP);
 
   /* selection */
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [autoPick, setAutoPick] = useState(true);
+
+  /*
+   * One writer for all of them. Preserves any parameter this page does not own,
+   * and omits a filter at its default rather than spelling it out, so a plain
+   * /jobs link keeps meaning "the whole open book".
+   */
+  const setFilters = useCallback((patch: Record<string, string>) => {
+    const qs = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) qs.set(k, v);
+      else qs.delete(k);
+    }
+    const q = qs.toString();
+    router.replace(q ? `/jobs?${q}` : '/jobs', { scroll: false });
+  }, [router, searchParams]);
+
+  /*
+   * SEARCH IS THE ONE EXCEPTION, and only for typing latency. The box is local
+   * state so every keystroke lands instantly (it filters the loaded book in the
+   * browser, so there is nothing to wait for), and the DEBOUNCED value is
+   * mirrored into the URL — a router.replace per character is a router update
+   * per character. Seeded from the URL once, which is what makes a pasted ?q=
+   * arrive in the box.
+   *
+   * ⚠ `searchParams` is deliberately NOT a dependency of the write effect. It
+   * changes as a RESULT of the write, so depending on it is a render loop. The
+   * effect still reads the current value through setFilters' closure.
+   *
+   * There is no read-back effect to put the URL's q into the box, and that is
+   * safe ONLY BECAUSE EVERY WRITE HERE IS `replace`: no filter change adds a
+   * history entry, so Back leaves the page rather than stepping the URL out
+   * from under the input, and Forward remounts and re-seeds. Switch any of
+   * these to `push` and the box and the URL can disagree — at which point the
+   * copied link no longer shows what you are looking at.
+   *
+   * Seeding useState from searchParams cannot mismatch on hydration either:
+   * the toolbar is behind the `book.loading` gate below, so neither the server
+   * nor the first client render emits this input at all.
+   */
+  const [term, setTerm] = useState(searchParams.get('q') ?? '');
+  const debouncedTerm = useDebouncedValue(term, 300);
+  useEffect(() => {
+    if (debouncedTerm !== (searchParams.get('q') ?? '')) setFilters({ q: debouncedTerm });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedTerm]);
 
   /* pane action state */
   const [busy, setBusy] = useState<'approve' | 'reject' | 'escalate' | null>(null);
@@ -401,27 +473,29 @@ export default function OpenJobsPage() {
   const [escReason, setEscReason] = useState('');
   const [escComment, setEscComment] = useState('');
 
-  /*
-   * DEEP LINK. Home's "work by city" card links here with ?city=. Seeded once
-   * on mount and read off `window` rather than useSearchParams — the same
-   * choice /history makes for the same reason: one optional parameter is not
-   * worth pulling this page into a Suspense boundary.
-   *
-   * Cheap because city filters the LOADED BOOK in the browser, so seeding it
-   * costs no fetch. ?spoc= is deliberately NOT carried across even though Home
-   * can be scoped by it: that one IS a server filter, and setting it after
-   * mount would fire a second seven-status sweep purely to narrow what the
-   * first sweep already returned. The page has its own visible SPOC control.
-   */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const seeded = new URLSearchParams(window.location.search).get('city');
-    if (seeded) setCity(seeded);
-  }, []);
-
-  const book = useOpenBook(spocId);
   const queue = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue?limit=100');
   const team = useFetchOnce<{ items: TeamMember[]; isManager: boolean }>('/team');
+
+  /*
+   * ?spoc= is checked against the team before it is used, for the same reason
+   * Home checks it: the API IGNORES an id outside the caller's subtree
+   * (hierarchyFilter in routes/client/index.js falls back to the caller's own
+   * scope) and answers for everyone. Left in, the chip would name one person
+   * over the whole team's book.
+   *
+   * Only once /team has ARRIVED — before that, "not yours" and "not loaded yet"
+   * are the same thing, and guessing costs the double sweep this whole design
+   * exists to avoid. Both requests return the SAME rows in that case (the
+   * server was already ignoring the bad id), so the second sweep buys no data —
+   * it exists purely so the chip stops naming someone the list is not scoped
+   * to. That only happens on a hand-edited URL; a link from Home always carries
+   * an id /team will confirm.
+   */
+  const spocId = !team.data || (team.data.items ?? []).some((m) => m.id === spocParam)
+    ? spocParam
+    : null;
+
+  const book = useOpenBook(spocId);
   // The endpoint the spec names for the page total. It counts the client's WHOLE
   // book, not the open part — see the header line where it is used.
   const orders = useFetchOnce<{ otherOrders: number; completedOrders: number }>('/orders/counts');
@@ -461,10 +535,13 @@ export default function OpenJobsPage() {
      */
     return city && !open.includes(city) ? [city, ...open] : open;
   }, [jobs, city]);
-  const workOptions = useMemo(
-    () => [...new Set(jobs.map(workOf))].sort((a, b) => a.localeCompare(b)),
-    [jobs],
-  );
+  const workOptions = useMemo(() => {
+    const open = [...new Set(jobs.map(workOf))].sort((a, b) => a.localeCompare(b));
+    /* Same exception as cities: a ?work= that selects nothing must still be
+       visible in its own chip, or the control reads "All work types" over an
+       empty filtered list. */
+    return work && !open.includes(work) ? [work, ...open] : open;
+  }, [jobs, work]);
 
   /* Everything except the age selection — this is what the band describes. */
   const scoped = useMemo(() => {
@@ -494,9 +571,8 @@ export default function OpenJobsPage() {
 
   /* Oldest first — a console's list should open on the thing that is worst. */
   const rows = useMemo(() => {
-    const sel = bucket as BucketKey | null;
     return scoped
-      .filter((j) => !sel || bucketOf(j, now) === sel)
+      .filter((j) => !bucket || bucketOf(j, now) === bucket)
       .sort((a, b) => {
         const fa = bucketOf(a, now) === 'future' ? 1 : 0;
         const fb = bucketOf(b, now) === 'future' ? 1 : 0;
@@ -681,7 +757,7 @@ export default function OpenJobsPage() {
           icon={MapPin}
           label={city || 'All cities'}
           value={city}
-          onChange={setCity}
+          onChange={(v) => setFilters({ city: v })}
           allLabel="All cities"
           options={cityOptions}
         />
@@ -689,7 +765,7 @@ export default function OpenJobsPage() {
           icon={Building2}
           label={work || 'All work types'}
           value={work}
-          onChange={setWork}
+          onChange={(v) => setFilters({ work: v })}
           allLabel="All work types"
           options={workOptions}
         />
@@ -698,7 +774,7 @@ export default function OpenJobsPage() {
             icon={User}
             label={scopeName || 'All SPOCs'}
             value={spocId ? String(spocId) : ''}
-            onChange={(v) => setSpocId(v ? Number(v) : null)}
+            onChange={(v) => setFilters({ spoc: v })}
             allLabel="All SPOCs"
             options={(team.data.items ?? []).map((m) => ({
               value: String(m.id),
@@ -714,7 +790,7 @@ export default function OpenJobsPage() {
         <FilterChip
           icon={AlertTriangle}
           active={actionOnly}
-          onClick={() => setActionOnly((v) => !v)}
+          onClick={() => setFilters({ action: actionOnly ? '' : '1' })}
           className={actionOnly ? undefined : 'border-primary/40 text-primary'}
         >
           {queueLabel}
@@ -733,7 +809,7 @@ export default function OpenJobsPage() {
       <AgeBand
         buckets={bands}
         selected={bucket}
-        onSelect={setBucket}
+        onSelect={(k) => setFilters({ bucket: k ?? '' })}
         className="mb-6"
       />
 
@@ -752,7 +828,11 @@ export default function OpenJobsPage() {
                 action={
                   <ActionButton
                     onClick={() => {
-                      setBucket(null); setCity(''); setWork(''); setTerm(''); setActionOnly(false);
+                      /* setTerm too: the box is the one filter with a local
+                         copy, and clearing only the URL would leave the text
+                         sitting in a field that no longer filters anything. */
+                      setTerm('');
+                      setFilters({ bucket: '', city: '', work: '', q: '', action: '' });
                     }}
                   >
                     Clear Filters

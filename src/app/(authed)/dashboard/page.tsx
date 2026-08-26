@@ -561,7 +561,17 @@ export default function HomePage() {
                       ),
                       value: c.jobs,
                       accent: 'info' as const,
-                      onClick: () => router.push(`/jobs?city=${encodeURIComponent(c.name)}`),
+                      /*
+                       * The SPOC scope travels with the city. /jobs reads both
+                       * off the URL during render, so arriving pre-scoped costs
+                       * it nothing — and landing on the whole team's book after
+                       * narrowing to one person's would silently widen what you
+                       * are looking at, which is the failure this card's own
+                       * scope chips exist to prevent.
+                       */
+                      onClick: () => router.push(
+                        `/jobs?city=${encodeURIComponent(c.name)}${spoc ? `&spoc=${spoc}` : ''}`,
+                      ),
                     }))}
                   />
                   {r.cities.length > 4 && (
