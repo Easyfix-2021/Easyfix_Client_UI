@@ -173,7 +173,7 @@ export default function HomePage() {
   const access = useAccess();
   const { data, loading, error, reload } = useFetchOnce<Summary>('/dashboard-summary');
   const { data: queue } = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue');
-  const { jobs } = useRecentJobs<DashJob>();
+  const { jobs, loading: jobsLoading } = useRecentJobs<DashJob>();
 
   const now = useMemo(() => new Date(), []);
 
@@ -248,18 +248,18 @@ export default function HomePage() {
    * ungated Home page would render an error card to every Store SPOC. Same
    * `canSee ? url : null` shape the Client Profile already uses.
    *
-   * ⚠ NO ?city=. /performance takes { clientId, from, to, reportingContactIds }
-   * and has no city dimension at all, so passing one would be silently ignored.
-   * The card SAYS SO below rather than pretending the chip applies. ?spoc= IS
-   * passed — it narrows the reporting-contact scope the same way — though a
-   * top-of-tree SPOC's own scope is client-wide either way.
+   * ?city= and ?spoc= both apply. /performance grew a city dimension on
+   * 2026-08-26 for exactly this card — before that it scoped only by
+   * { clientId, from, to, reportingContactIds }, so the card had to print a
+   * note admitting the chip above it did not reach these four figures.
    *
    * dim=jobType&months=1 are the cheapest honest parameters: the scorer builds
    * every rollup regardless, but jobType is ~0.3KB of payload against ~50KB for
    * technician, and months=1 is the floor for a series this card never draws.
    */
   const kpiPath = canSeePerformance
-    ? `/performance?from=${range.from}&to=${range.to}&dim=jobType&months=1${spoc ? `&spoc=${spoc}` : ''}`
+    ? `/performance?from=${range.from}&to=${range.to}&dim=jobType&months=1`
+      + `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`
     : null;
   const { data: kpis, loading: kpisLoading } = useFetchOnce<PerfSlice>(kpiPath);
 
@@ -320,15 +320,21 @@ export default function HomePage() {
     return { dueToday, ahead, plannedToday, weekPlanned, weekDone, closedYesterday, closedDayBefore };
   }, [jobs, now]);
 
-  if (loading) {
-    return (
-      <div className="bg-surface rounded-xl border border-ink-100 p-10 text-center">
-        <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
-        <div className="mt-2 text-sm text-ink-500">Loading your dashboard…</div>
-      </div>
-    );
-  }
-  if (error || !data) {
+  /*
+   * ─── NO PAGE-WIDE SPINNER ──────────────────────────────────────────────────
+   *
+   * This used to return one spinner for the whole screen until
+   * /dashboard-summary answered, so the SLOWEST of five independent requests
+   * decided when anything at all appeared. The frame is cheap and its shape is
+   * known before any data arrives, so it renders immediately and each section
+   * fills in as its own request returns — nobody waits on a card they are not
+   * reading.
+   *
+   * The error gate stays, but only when there is nothing to show: a refetch
+   * that fails while data is already on screen must not replace a working
+   * dashboard with an error card.
+   */
+  if (error && !data) {
     return (
       <Panel accent="brand">
         <EmptyState
@@ -348,7 +354,28 @@ export default function HomePage() {
     );
   }
 
-  const { counts, slaAging, attention, boxes } = data;
+  /*
+   * Zeroes stand in ONLY for layout while the summary is in flight; every
+   * figure derived from them renders as an em dash until it is real (see
+   * `stat` below). A dashboard that shows a confident 0 before its data
+   * arrives is worse than one that shows nothing — 0 open jobs is a claim.
+   */
+  const summary: Summary = data ?? {
+    boxes: { newTickets: 0, waitingForAllocation: 0, runningLate: 0, estimateApproved: 0, estimateRejected: 0 },
+    slaAging: { d01: 0, d23: 0, d47: 0, d7plus: 0 },
+    attention: {
+      invoicesDue: { count: 0, amount: 0 },
+      estimatePending: 0, noResponse: 0, onHold: 0, revisit: 0, qcDone: 0,
+    },
+    counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0 },
+    teamSize: 0,
+  };
+  /** Em dash until the number is real — never a placeholder zero. */
+  const stat = (v: number) => (data ? v.toLocaleString('en-IN') : '—');
+  /** Same, for the sub-lines fed by the 60-day job window. */
+  const jstat = (v: number) => (jobsLoading ? '—' : v.toLocaleString('en-IN'));
+
+  const { counts, slaAging, attention, boxes } = summary;
   const totalOpen = counts.newTickets + counts.inProgress;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
   /* Pending on YOU vs pending with EasyFix — the split the mock's bar shows. */
@@ -363,7 +390,9 @@ export default function HomePage() {
     <>
       <PageHeader
         title={longDate}
-        sub={`Across ${data.teamSize} SPOC${data.teamSize === 1 ? '' : 's'} · live`}
+        sub={data
+          ? `Across ${summary.teamSize} SPOC${summary.teamSize === 1 ? '' : 's'} · live`
+          : 'Loading your book…'}
         filters={
           <>
             {/*
@@ -413,34 +442,36 @@ export default function HomePage() {
           icon={FolderOpen}
           accent="info"
           label="Total open"
-          value={totalOpen.toLocaleString('en-IN')}
-          sub={`${derived.dueToday} due today · ${derived.ahead} scheduled ahead`}
+          value={stat(totalOpen)}
+          sub={jobsLoading ? 'Counting today\u2019s book\u2026' : `${derived.dueToday} due today · ${derived.ahead} scheduled ahead`}
           onClick={() => router.push('/jobs')}
         />
         <StatCard
           icon={CheckCircle2}
           accent="success"
           label="Closed yesterday"
-          value={derived.closedYesterday.toLocaleString('en-IN')}
-          sub={closedDelta === 0 ? 'Level with the prior day' : `${closedDelta > 0 ? '↑' : '↓'} ${Math.abs(closedDelta)} vs prior day`}
+          value={jstat(derived.closedYesterday)}
+          sub={jobsLoading ? '\u2026'
+            : closedDelta === 0 ? 'Level with the prior day'
+            : `${closedDelta > 0 ? '↑' : '↓'} ${Math.abs(closedDelta)} vs prior day`}
           onClick={() => router.push('/completed')}
         />
         <StatCard
           icon={CalendarDays}
           accent="info"
           label="Planned today"
-          value={derived.plannedToday.toLocaleString('en-IN')}
+          value={jstat(derived.plannedToday)}
           // SUBSTITUTED: the mock splits this "allocated · unallocated". The
           // summary exposes waiting-for-allocation for the whole book, not for
           // today, so the sub-line says which figure it actually is.
-          sub={`${boxes.waitingForAllocation} awaiting allocation overall`}
+          sub={data ? `${boxes.waitingForAllocation} awaiting allocation overall` : '\u2026'}
         />
         <StatCard
           icon={CalendarRange}
           accent="warning"
           label="Plan this week"
-          value={derived.weekPlanned.toLocaleString('en-IN')}
-          sub={`Mon–Sun · ${derived.weekDone} already done`}
+          value={jstat(derived.weekPlanned)}
+          sub={jobsLoading ? 'Mon–Sun' : `Mon–Sun · ${derived.weekDone} already done`}
         />
       </StatRow>
 
@@ -585,18 +616,6 @@ export default function HomePage() {
                     Full Performance Book →
                   </button>
                 </div>
-                {/*
-                  ⚠ The city chip does NOT reach these four. /performance scopes
-                  by { clientId, from, to, reportingContactIds } and has no city
-                  dimension, so a city-scoped card here would be a filter that
-                  silently did nothing. Said out loud, and only when a city is
-                  actually selected.
-                */}
-                {city && (
-                  <p className="pt-1 text-xs text-ink-500">
-                    Covers every city — these four are not narrowed by the city filter.
-                  </p>
-                )}
               </>
             )}
           </Panel>

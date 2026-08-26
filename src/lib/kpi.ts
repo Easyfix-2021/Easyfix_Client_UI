@@ -21,6 +21,22 @@ export const JUDGE_ACCENT: Record<Judgement, Accent> = {
   ok: 'success', watch: 'warning', risk: 'brand',
 };
 
+/*
+ * ⚠ A NULL JUDGEMENT IS NOT A PASS.
+ *
+ * The server sends null for a metric it cannot judge — no value measured, or
+ * no target to measure against. It used to send 'ok', which painted a window
+ * with zero completed jobs as four em dashes behind a GREEN on-track rule:
+ * green is a claim about performance, and nothing had been measured to
+ * support it.
+ *
+ * Neutral is `info`, the same accent this module already gives "Not recorded"
+ * when the linked_job table is missing. Both mean "we cannot tell you", and
+ * they should not look different from each other.
+ */
+const accentFor = (j: Judgement | null | undefined): Accent =>
+  (j == null ? 'info' : JUDGE_ACCENT[j]);
+
 export const kpiPct = (v: number | null | undefined) => (v == null ? '—' : `${v}%`);
 export const kpiDays = (v: number | null | undefined) => (v == null ? '—' : `${v}d`);
 
@@ -52,12 +68,12 @@ function deltaOf(current: number | null | undefined, previous: number | null | u
  */
 export type KpiSource = {
   targets: { sla_pct: number; ftfr_pct: number; revisit_pct: number; avg_age_days: number };
-  tat: { efScorePct: number | null; efStatus: Judgement };
+  tat: { efScorePct: number | null; efStatus: Judgement | null };
   firstTimeFix: {
     ftfrPct: number | null; revisitPct: number | null; available: boolean;
-    ftfrStatus: Judgement; revisitStatus: Judgement;
+    ftfrStatus: Judgement | null; revisitStatus: Judgement | null;
   };
-  closure: { avgAgeDays: number | null; avgAgeStatus: Judgement };
+  closure: { avgAgeDays: number | null; avgAgeStatus: Judgement | null };
 };
 
 export type Kpi = {
@@ -93,7 +109,7 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       good: 'up',
       target: `Target ${d.targets.sla_pct}%`,
       progress: towardHigher(d.tat.efScorePct, d.targets.sla_pct),
-      accent: JUDGE_ACCENT[d.tat.efStatus],
+      accent: accentFor(d.tat.efStatus),
       ...deltaOf(d.tat.efScorePct, prior?.tat.efScorePct, 'pp', priorLabel),
     },
     {
@@ -104,7 +120,7 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       good: 'up',
       target: ftfAvailable ? `Target ${d.targets.ftfr_pct}%` : 'Not recorded',
       progress: towardHigher(d.firstTimeFix.ftfrPct, d.targets.ftfr_pct),
-      accent: ftfAvailable ? JUDGE_ACCENT[d.firstTimeFix.ftfrStatus] : 'info',
+      accent: ftfAvailable ? accentFor(d.firstTimeFix.ftfrStatus) : 'info',
       ...deltaOf(d.firstTimeFix.ftfrPct, prior?.firstTimeFix.ftfrPct, 'pp', priorLabel),
     },
     {
@@ -116,7 +132,7 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       good: 'down',
       target: ftfAvailable ? `Target under ${d.targets.revisit_pct}%` : 'Not recorded',
       progress: towardLower(d.firstTimeFix.revisitPct, d.targets.revisit_pct),
-      accent: ftfAvailable ? JUDGE_ACCENT[d.firstTimeFix.revisitStatus] : 'info',
+      accent: ftfAvailable ? accentFor(d.firstTimeFix.revisitStatus) : 'info',
       ...deltaOf(d.firstTimeFix.revisitPct, prior?.firstTimeFix.revisitPct, 'pp', priorLabel),
     },
     {
@@ -128,7 +144,7 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       good: 'down',
       target: `Target under ${d.targets.avg_age_days}d`,
       progress: towardLower(d.closure.avgAgeDays, d.targets.avg_age_days),
-      accent: JUDGE_ACCENT[d.closure.avgAgeStatus],
+      accent: accentFor(d.closure.avgAgeStatus),
       ...deltaOf(d.closure.avgAgeDays, prior?.closure.avgAgeDays, 'd', priorLabel),
     },
   ];
