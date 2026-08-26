@@ -284,15 +284,29 @@ export default function CompletedPage() {
   // useFetch keys on the PATH, so a retry has to change it or nothing refires.
   // The nonce is only appended once someone has actually pressed Try Again, so
   // the ordinary request URL stays clean.
+  /*
+   * ⚠ sortBy IS LOAD-BEARING, not a preference. Each call is capped at 500, and
+   * the banner below tells the reader those 500 are "the most recent closures".
+   * Without a sort the route falls back to `ORDER BY j.job_id DESC` — most
+   * recently CREATED, which is a different set: a job raised in January and
+   * closed in August carries a low job_id, so it was the RECENT closures being
+   * dropped, under a banner promising the opposite.
+   *
+   * checkout_date_time is on the backend's SORTABLE_COLUMNS whitelist, and it
+   * is the same column dateType=completed windows on — so the cap now bites the
+   * oldest closures in the window, which is what "narrow the window" fixes.
+   */
   const qs =
-    `dateType=completed&startDate=${win.startDate}&endDate=${win.endDate}&limit=500`
+    `dateType=completed&startDate=${win.startDate}&endDate=${win.endDate}`
+    + `&sortBy=checkout_date_time&sortDir=desc&limit=500`
     + (retry ? `&_retry=${retry}` : '');
   const closed = useFetch<Paged<CompletedJob>>(`/jobs?status=3&${qs}`);
   const audited = useFetch<Paged<CompletedJob>>(`/jobs?status=5&${qs}`);
   const { data: counts } = useFetchOnce<OrderCounts>('/orders/counts');
 
-  /* The list is ordered by job_id DESC server-side, so re-sort on the date the
-     screen is actually about — when the job closed. */
+  /* Each call is already sorted by checkout_date_time DESC, but this screen
+     MERGES two of them (status 3 and status 5). Two sorted lists concatenated
+     are not one sorted list, so the merge sort stays. */
   const rows = useMemo(() => {
     const all = [...(closed.data?.items ?? []), ...(audited.data?.items ?? [])];
     return all.sort(
@@ -557,8 +571,8 @@ export default function CompletedPage() {
           right={`${rows.length.toLocaleString('en-IN')} of ${windowTotal.toLocaleString('en-IN')}`}
         >
           This window holds more completed jobs than one page can carry, so the figures below
-          describe the most recent {rows.length.toLocaleString('en-IN')} closures. Narrow the window
-          to cover the rest.
+          describe the most recent {rows.length.toLocaleString('en-IN')} closures — the oldest in
+          the window are the ones left out. Narrow the window to cover the rest.
         </Banner>
       ) : null}
 

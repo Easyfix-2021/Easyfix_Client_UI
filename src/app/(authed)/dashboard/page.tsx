@@ -143,10 +143,9 @@ type RangeData = {
   };
   cities: Array<{ name: string; jobs: number; completed: number }>;
   cancellations: {
-    cancelled: number; total: number; sharePct: number;
+    cancelled: number; total: number;
     topReasons: Array<{ reason: string; count: number; pct: number }>;
     reasonCount: number;
-    categories: Array<{ label: string; count: number; pct: number }>;
   };
 };
 
@@ -609,14 +608,17 @@ export default function HomePage() {
               {(r) => (
                 <>
                   {/*
-                    The reason breakdown the design asked for is finally real.
-                    It used to be impossible: /dashboard-summary carried no
-                    reason dimension, and an earlier cut filled the gap with the
-                    category mix of ALL work under a "N cancelled" title — which
-                    read as "89 carpentry CANCELLATIONS", a number both false and
-                    larger than the total it appeared to be a share of.
-                    /dashboard-range joins action_taken_reason, so the reasons
-                    below are the recorded ones.
+                    This card answers TWO questions and no more: how many
+                    were cancelled, and why. /dashboard-range joins
+                    action_taken_reason, so the reasons are the recorded ones.
+
+                    A category mix of ALL work used to sit below the reasons,
+                    and a "Share of all work" row above them. Both are gone as
+                    of 2026-08-26 — the design comp carries neither, and the
+                    category block in particular kept inviting the misreading it
+                    was built to fix ("89 carpentry CANCELLATIONS"), because a
+                    breakdown of every job in the window cannot help but read as
+                    a breakdown of the number in the title.
                   */}
                   <MetricRow
                     label="Cancelled"
@@ -624,8 +626,6 @@ export default function HomePage() {
                     bar={r.cancellations.cancelled / Math.max(1, r.cancellations.total)}
                     barAccent="warning"
                   />
-                  <MetricRow label="Share of all work" value={`${r.cancellations.sharePct}%`} />
-
                   <div className="mt-3 pt-3 border-t border-ink-100">
                     <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
                       Top reasons
@@ -650,25 +650,6 @@ export default function HomePage() {
                       </>
                     ) : (
                       <div className="text-xs text-ink-500 italic">No cancellations in this window.</div>
-                    )}
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-ink-100">
-                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
-                      All work by category
-                    </div>
-                    {/* Neutral, not warning — these are NOT cancellations, and
-                        the tint is what made the earlier version misread. */}
-                    {r.cancellations.categories.length ? (
-                      <RankedList
-                        rows={r.cancellations.categories.slice(0, 3).map((c) => ({
-                          label: <span className="truncate">{c.label}</span>,
-                          value: `${c.count.toLocaleString('en-IN')} · ${c.pct}%`,
-                          accent: 'info' as const,
-                        }))}
-                      />
-                    ) : (
-                      <EmptyState title="No work in this window" />
                     )}
                   </div>
                 </>
