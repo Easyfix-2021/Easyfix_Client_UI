@@ -6,7 +6,7 @@
  *
  * WHY A LINK INSTEAD OF A SECOND IMPLEMENTATION. Four sections cover ground the
  * portal already has a full page for — Branches (/stores), Billing (/invoices),
- * Rate Cards (/ratecard), Reports (/analytics, /export). Those sections show a
+ * Rate Cards (/ratecard), Reports (/performance, /export). Those sections show a
  * COMPACT summary and link out rather than re-rendering the page inside a
  * panel. Two implementations of one table is two places for a fix to land, and
  * the fuller page is always the better place to actually work.
