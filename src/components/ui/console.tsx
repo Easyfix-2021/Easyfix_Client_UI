@@ -282,7 +282,7 @@ const BAR_FILL: Record<Accent, string> = {
   warning: 'bg-warning', money: 'bg-money',
 };
 
-function Bar({ value, accent = 'success' }: { value: number; accent?: Accent }) {
+export function Bar({ value, accent = 'success' }: { value: number; accent?: Accent }) {
   return (
     <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
       <div
@@ -482,17 +482,7 @@ export function KpiCard({
         ) : <span />}
         {target ? <span className="text-xs text-ink-500">{target}</span> : null}
       </div>
-      {typeof progress === 'number' ? (
-        <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
-          <div
-            className={cn('h-full rounded-full', {
-              brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
-              warning: 'bg-warning', money: 'bg-money',
-            }[accent])}
-            style={{ width: `${Math.max(0, Math.min(1, progress)) * 100}%` }}
-          />
-        </div>
-      ) : null}
+      {typeof progress === 'number' ? <Bar value={progress} accent={accent} /> : null}
     </div>
   );
 }
@@ -532,10 +522,10 @@ export function ProportionBar({
   className?: string;
 }) {
   const total = segments.reduce((a, s) => a + s.value, 0) || 1;
-  const fill: Record<Accent, string> = {
-    brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
-    warning: 'bg-warning', money: 'bg-money',
-  };
+  // BAR_FILL, not a local copy — this map had drifted into three places, and
+  // two of them painting the same accent a different colour is the kind of bug
+  // nobody reports because each screen looks fine on its own.
+  const fill = BAR_FILL;
   return (
     <div className={className}>
       <div className="flex h-2 rounded-full overflow-hidden bg-ink-100">

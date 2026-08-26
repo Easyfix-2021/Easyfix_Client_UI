@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
-  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
+  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState, Bar,
 } from '@/components/ui/console';
 
 /* ─── contracts ─────────────────────────────────────────────────────────── */
@@ -624,14 +624,57 @@ export default function HomePage() {
                       ),
                     }))}
                   />
-                  {r.cities.length > 4 && (
-                    <div className="flex items-center justify-between pt-2 text-xs text-ink-500">
-                      <span>+ {r.cities.length - 4} more cities</span>
-                      <span className="tabular-nums">
-                        {r.cities.slice(4).reduce((a, c) => a + c.jobs, 0).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  )}
+                  {(() => {
+                    const rest = r.cities.slice(4).reduce((a, c) => a + c.jobs, 0);
+                    const mapped = r.cities.reduce((a, c) => a + c.jobs, 0);
+                    /*
+                     * ⚠ THE BARS DO NOT SUM TO 100%, and that is not a rounding
+                     * artefact. The cities query excludes jobs whose address has
+                     * no city (`ci.city_name IS NOT NULL AND <> ''`), while the
+                     * denominator here is the window's TOTAL — because that is
+                     * what the "N · X%" beside every row claims to be a share OF,
+                     * and it is the same total the Performance card reports.
+                     *
+                     * Denominating against the cities' own sum instead would make
+                     * the bars fill the track, at the cost of every percentage
+                     * quietly meaning "of the work we could place on a map". So
+                     * the shortfall is NAMED below rather than hidden by a
+                     * flattering denominator — adding bars is what made this gap
+                     * visible, so the bars should be what explains it.
+                     */
+                    const unplaced = Math.max(0, r.performance.total - mapped);
+                    if (rest === 0 && unplaced === 0) return null;
+                    return (
+                      <div className="pt-2 space-y-2">
+                        {rest > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between text-xs text-ink-500">
+                              <span>+ {r.cities.length - 4} more cities</span>
+                              <span className="tabular-nums">
+                                {rest.toLocaleString('en-IN')} · {pct(rest, r.performance.total)}%
+                              </span>
+                            </div>
+                            {/* Same scale and accent as the four rows above: this
+                                IS those cities, just not named individually, so
+                                the set reads as top-four AGAINST everything else
+                                rather than only against each other. The text
+                                stays grey because it is a rollup you cannot
+                                click; the bar matches because it measures the
+                                same quantity. */}
+                            <Bar value={rest / Math.max(1, r.performance.total)} accent="info" />
+                          </div>
+                        )}
+                        {unplaced > 0 && (
+                          <div className="flex items-center justify-between text-xs text-ink-500">
+                            <span>No city recorded</span>
+                            <span className="tabular-nums">
+                              {unplaced.toLocaleString('en-IN')} · {pct(unplaced, r.performance.total)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/*
                     The drill-down lands on Open orders, which is a DIFFERENT
                     cohort to the count beside it: this card counts every order
