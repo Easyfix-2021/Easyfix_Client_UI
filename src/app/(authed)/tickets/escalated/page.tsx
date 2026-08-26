@@ -110,7 +110,7 @@ export default function EscalatedOrdersPage() {
     if (applied.endDate)          params.set('endDate',   applied.endDate);
     if (applied.cityIds.length)   params.set('cityIds',   applied.cityIds.join(','));
     if (applied.ownerIds.length)  params.set('ownerIds',  applied.ownerIds.join(','));
-    params.set('dateType', 'created');
+    params.set('dateType', 'booked');
     params.set('limit',  String(pageSize));
     params.set('offset', String((page - 1) * pageSize));
     return `/jobs?${params.toString().replace(/%2C/g, ',')}`;
@@ -179,7 +179,7 @@ export default function EscalatedOrdersPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — From</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — From</label>
             <input
               type="date" className="input"
               value={staged.startDate}
@@ -188,7 +188,7 @@ export default function EscalatedOrdersPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — To</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — To</label>
             <input
               type="date" className="input"
               value={staged.endDate}
