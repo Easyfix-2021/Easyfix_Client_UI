@@ -167,8 +167,28 @@ function useOpenBook(spocId: number | null) {
     setError(null);
     try {
       const scope = spocId ? `&spoc=${spocId}` : '';
+      /*
+       * ⚠ sortBy=age IS THE CAP'S CORRECTNESS, not an ordering preference.
+       *
+       * Each status is capped at PER_STATUS_CAP. Unsorted, the route falls back
+       * to `ORDER BY j.job_id DESC` — highest ids, i.e. most recently CREATED —
+       * so the rows dropped by the cap were the OLDEST open jobs. This screen
+       * exists to open on the worst thing in the book and sorts oldest-first to
+       * do it, so the cap was discarding precisely what the page is for, and
+       * the age band above it was counting a set with its tail cut off.
+       *
+       * `age` is on the backend's SORTABLE_COLUMNS whitelist and resolves to
+       * GREATEST(TIMESTAMPDIFF(SECOND, j.ticket_created_date_time, <end>), 0) —
+       * the SAME measure this page's ageDays and every bucket is computed from,
+       * and anchored on ticket_created_date_time, which is immutable (unlike
+       * created_date_time, which is re-stamped on edits). One definition, so
+       * the server's choice of which rows survive and the client's ordering of
+       * them can never disagree.
+       */
       const pages = await Promise.all(
-        OPEN_STATUSES.map((s) => fetchAllJobs<JobRow>(`status=${s}${scope}`, PER_STATUS_CAP)),
+        OPEN_STATUSES.map((s) => fetchAllJobs<JobRow>(
+          `status=${s}${scope}&sortBy=age&sortDir=desc`, PER_STATUS_CAP,
+        )),
       );
       setTruncated(pages.some((p) => p.length >= PER_STATUS_CAP));
       setJobs(pages.flat());
@@ -800,8 +820,8 @@ export default function OpenJobsPage() {
       {book.truncated ? (
         <Banner accent="warning" className="mb-4">
           More than {PER_STATUS_CAP.toLocaleString('en-IN')} jobs in one open state — the list and the
-          bucket counts below cover the first {PER_STATUS_CAP.toLocaleString('en-IN')} of each. Narrow by
-          city or SPOC for an exact picture.
+          bucket counts below cover the OLDEST {PER_STATUS_CAP.toLocaleString('en-IN')} of each, so the
+          newest are the ones left out. Narrow by city or SPOC for an exact picture.
         </Banner>
       ) : null}
 

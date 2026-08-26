@@ -146,6 +146,8 @@ type RangeData = {
     cancelled: number; total: number;
     topReasons: Array<{ reason: string; count: number; pct: number }>;
     reasonCount: number;
+    otherReasons: { count: number; reasons: number };
+    previousCancelled: number;
   };
 };
 
@@ -602,7 +604,12 @@ export default function HomePage() {
           <Panel
             className="flex-1"
             title={rangeData ? `${rangeData.cancellations.cancelled.toLocaleString('en-IN')} cancelled` : 'Cancellations'}
-            action={<Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>}
+            action={
+              <span className="inline-flex items-center gap-1.5">
+                {rangeData && <CancelDelta data={rangeData.cancellations} />}
+                <Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>
+              </span>
+            }
           >
             <RangeBody loading={rangeLoading} data={rangeData}>
               {(r) => (
@@ -634,19 +641,47 @@ export default function HomePage() {
                       <>
                         {/* % is of CANCELLED jobs, not of all work — the card is
                             answering "of these cancellations, why". */}
+                        {/*
+                          "Other" is a ROW, not the muted "+ N other reasons"
+                          footnote it replaces. The three named reasons sum to
+                          less than the total above them, and a footnote in
+                          smaller, greyer type does not read as the thing that
+                          closes that gap — so the percentages looked like they
+                          did not add up. As a row it carries its own count and
+                          share, and the four values reconcile on the page.
+                          Its count is EXACT: the reasons cohort is the same
+                          job_status = 6 the title counts, and an unrecorded
+                          reason is labelled rather than dropped.
+                        */}
                         <RankedList
-                          rows={r.cancellations.topReasons.map((x) => ({
-                            label: <span className="truncate">{x.reason}</span>,
-                            value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
-                            accent: 'warning' as const,
-                          }))}
+                          rows={[
+                            ...r.cancellations.topReasons.map((x) => ({
+                              label: <span className="truncate">{x.reason}</span>,
+                              value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
+                              accent: 'warning' as const,
+                            })),
+                            ...(r.cancellations.otherReasons.count > 0 ? [{
+                              label: (
+                                <span className="block">
+                                  <span className="block text-ink-900">Other</span>
+                                  <span className="block text-xs text-ink-500">
+                                    {r.cancellations.otherReasons.reasons} reason
+                                    {r.cancellations.otherReasons.reasons === 1 ? '' : 's'}
+                                  </span>
+                                </span>
+                              ),
+                              value: `${r.cancellations.otherReasons.count.toLocaleString('en-IN')} · `
+                                + `${Math.round((1000 * r.cancellations.otherReasons.count) / Math.max(1, r.cancellations.cancelled)) / 10}%`,
+                              // WARNING, same as the named rows. All four are
+                              // cancellation counts that sum to the title, and
+                              // a different tint would say "this is a different
+                              // kind of number" — precisely the misreading the
+                              // category block used to cause. The muted second
+                              // line is what marks it as a bucket.
+                              accent: 'warning' as const,
+                            }] : []),
+                          ]}
                         />
-                        {r.cancellations.reasonCount > r.cancellations.topReasons.length && (
-                          <div className="pt-2 text-xs text-ink-500">
-                            + {r.cancellations.reasonCount - r.cancellations.topReasons.length} other reason
-                            {r.cancellations.reasonCount - r.cancellations.topReasons.length === 1 ? '' : 's'}
-                          </div>
-                        )}
                       </>
                     ) : (
                       <div className="text-xs text-ink-500 italic">No cancellations in this window.</div>
@@ -659,6 +694,35 @@ export default function HomePage() {
         </div>
       </div>
     </>
+  );
+}
+
+/*
+ * The movement pill beside "N cancelled".
+ *
+ * ⚠ UP IS BAD HERE. More cancellations is a worse month, so a rise is
+ * `warning` and a fall is `success` — the inverse of a revenue tile, and the
+ * one thing that would quietly invert the card's meaning if it were wired the
+ * usual way round.
+ *
+ * "vs previous period", not "vs last month". The comparison window is always
+ * the same LENGTH immediately before the selected one, so with a range picker
+ * only the generic phrasing stays true: for "This month" (month-to-date) the
+ * comparison is the equally many days before the 1st, which is a fair
+ * like-for-like but is not last month.
+ *
+ * Silent when there is nothing to compare against — a first-ever window would
+ * otherwise read as a 100% improvement.
+ */
+function CancelDelta({ data }: { data: RangeData['cancellations'] }) {
+  const prev = data.previousCancelled;
+  const delta = data.cancelled - prev;
+  if (prev === 0 && data.cancelled === 0) return null;
+  if (delta === 0) return <Pill accent="info">level vs previous period</Pill>;
+  return (
+    <Pill accent={delta > 0 ? 'warning' : 'success'}>
+      {delta > 0 ? '↑' : '↓'} {Math.abs(delta).toLocaleString('en-IN')} vs previous period
+    </Pill>
   );
 }
 
