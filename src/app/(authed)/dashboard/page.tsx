@@ -147,8 +147,8 @@ type RangeData = {
     topReasons: Array<{ reason: string; count: number; pct: number }>;
     reasonCount: number;
     otherReasons: { count: number; reasons: number };
-    previousCancelled: number;
   };
+  previous: { total: number; completed: number; cancelled: number };
 };
 
 const COMPLETED = new Set([3, 5]);
@@ -498,7 +498,28 @@ export default function HomePage() {
         {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
-          <Panel className="flex-1" title={rangeLabel}>
+          <Panel
+            className="flex-1"
+            title={rangeLabel}
+            /*
+              COMPLETION RATE, not volume — this card is about how the work
+              went, and its neighbour already reports how much of it there was.
+              Two adjacent cards showing the identical volume delta would read
+              as a duplicated widget rather than two findings.
+
+              `pp` because a move from 61% to 64% is three percentage POINTS,
+              not three percent. /performance uses the same unit for the same
+              reason, so the two pages agree on what a delta means.
+            */
+            action={rangeData ? (
+              <DeltaPill
+                now={donePct(rangeData.performance.completed, rangeData.performance.total)}
+                prev={donePct(rangeData.previous.completed, rangeData.previous.total)}
+                good="up"
+                unit="pp"
+              />
+            ) : undefined}
+          >
             {(
               <RangeBody loading={rangeLoading} data={rangeData}>
                 {(r) => (
@@ -543,6 +564,16 @@ export default function HomePage() {
             title={rangeData
               ? `${rangeData.performance.total.toLocaleString('en-IN')} job${rangeData.performance.total === 1 ? '' : 's'} across ${rangeData.cities.length} cit${rangeData.cities.length === 1 ? 'y' : 'ies'}`
               : rangeLabel}
+            /* good="neither": more orders is not good or bad news, it is how
+               much work there was. The pill reports the move and declines to
+               grade it. */
+            action={rangeData ? (
+              <DeltaPill
+                now={rangeData.performance.total}
+                prev={rangeData.previous.total}
+                good="neither"
+              />
+            ) : undefined}
           >
             <RangeBody loading={rangeLoading} data={rangeData} empty={(r) => r.cities.length === 0} emptyTitle="No work in this window">
               {(r) => (
@@ -606,7 +637,13 @@ export default function HomePage() {
             title={rangeData ? `${rangeData.cancellations.cancelled.toLocaleString('en-IN')} cancelled` : 'Cancellations'}
             action={
               <span className="inline-flex items-center gap-1.5">
-                {rangeData && <CancelDelta data={rangeData.cancellations} />}
+                {rangeData && (
+                  <DeltaPill
+                    now={rangeData.cancellations.cancelled}
+                    prev={rangeData.previous.cancelled}
+                    good="down"
+                  />
+                )}
                 <Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>
               </span>
             }
@@ -659,6 +696,11 @@ export default function HomePage() {
                               label: <span className="truncate">{x.reason}</span>,
                               value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
                               accent: 'warning' as const,
+                              // Share of CANCELLATIONS, the same denominator the
+                              // pct beside it uses — a bar drawn against the
+                              // window's total work would contradict its own
+                              // label on every row.
+                              bar: x.count / Math.max(1, r.cancellations.cancelled),
                             })),
                             ...(r.cancellations.otherReasons.count > 0 ? [{
                               label: (
@@ -679,6 +721,7 @@ export default function HomePage() {
                               // category block used to cause. The muted second
                               // line is what marks it as a bucket.
                               accent: 'warning' as const,
+                              bar: r.cancellations.otherReasons.count / Math.max(1, r.cancellations.cancelled),
                             }] : []),
                           ]}
                         />
@@ -698,33 +741,51 @@ export default function HomePage() {
 }
 
 /*
- * The movement pill beside "N cancelled".
+ * The movement pill the three range-scoped cards share.
  *
- * ⚠ UP IS BAD HERE. More cancellations is a worse month, so a rise is
- * `warning` and a fall is `success` — the inverse of a revenue tile, and the
- * one thing that would quietly invert the card's meaning if it were wired the
- * usual way round.
+ * ⚠ `good` IS PER CARD, AND THE THREE DISAGREE. A rise means something
+ * different on each one, and getting this wrong inverts a card's meaning
+ * without changing a number:
  *
- * "vs previous period", not "vs last month". The comparison window is always
- * the same LENGTH immediately before the selected one, so with a range picker
- * only the generic phrasing stays true: for "This month" (month-to-date) the
- * comparison is the equally many days before the 1st, which is a fair
- * like-for-like but is not last month.
+ *   'up'      completion rate — more finished work is better.
+ *   'down'    cancellations   — more cancelled work is worse.
+ *   'neither' volume raised   — more orders is not good or bad news for the
+ *             client, it is just how much work there was. Colouring it green
+ *             or amber would be the dashboard inventing an opinion about
+ *             someone else's business, so it stays neutral.
  *
- * Silent when there is nothing to compare against — a first-ever window would
- * otherwise read as a 100% improvement.
+ * "vs previous period", not "vs last month". The comparison is always the same
+ * LENGTH immediately before the selected range, so with a range picker only the
+ * generic phrasing stays true: for "This month" (month-to-date) it is the
+ * equally many days before the 1st — a fair like-for-like, but not last month.
+ *
+ * Silent when BOTH windows are empty: a first-ever window would otherwise read
+ * as a dramatic change from nothing.
  */
-function CancelDelta({ data }: { data: RangeData['cancellations'] }) {
-  const prev = data.previousCancelled;
-  const delta = data.cancelled - prev;
-  if (prev === 0 && data.cancelled === 0) return null;
+function DeltaPill({
+  now, prev, good, unit = '',
+}: {
+  now: number;
+  prev: number;
+  good: 'up' | 'down' | 'neither';
+  /** 'pp' for a rate — a 3-point move in a percentage is not 3 percent. */
+  unit?: string;
+}) {
+  if (now === 0 && prev === 0) return null;
+  const delta = Math.round((now - prev) * 10) / 10;
   if (delta === 0) return <Pill accent="info">level vs previous period</Pill>;
+  const rising = delta > 0;
+  const accent = good === 'neither' ? 'info' : (rising === (good === 'up') ? 'success' : 'warning');
   return (
-    <Pill accent={delta > 0 ? 'warning' : 'success'}>
-      {delta > 0 ? '↑' : '↓'} {Math.abs(delta).toLocaleString('en-IN')} vs previous period
+    <Pill accent={accent}>
+      {rising ? '↑' : '↓'} {Math.abs(delta).toLocaleString('en-IN')}{unit} vs previous period
     </Pill>
   );
 }
+
+/** Completion rate as a percentage of the work raised in a window. */
+const donePct = (completed: number, total: number) =>
+  total > 0 ? Math.round((1000 * completed) / total) / 10 : 0;
 
 /*
  * Loading / empty frame shared by the three range-scoped cards.
