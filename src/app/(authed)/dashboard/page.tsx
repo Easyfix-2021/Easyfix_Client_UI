@@ -143,11 +143,12 @@ type RangeData = {
   };
   cities: Array<{ name: string; jobs: number; completed: number }>;
   cancellations: {
-    cancelled: number; total: number; sharePct: number;
+    cancelled: number; total: number;
     topReasons: Array<{ reason: string; count: number; pct: number }>;
     reasonCount: number;
-    categories: Array<{ label: string; count: number; pct: number }>;
+    otherReasons: { count: number; reasons: number };
   };
+  previous: { total: number; completed: number; cancelled: number };
 };
 
 const COMPLETED = new Set([3, 5]);
@@ -497,7 +498,28 @@ export default function HomePage() {
         {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
-          <Panel className="flex-1" title={rangeLabel}>
+          <Panel
+            className="flex-1"
+            title={rangeLabel}
+            /*
+              COMPLETION RATE, not volume — this card is about how the work
+              went, and its neighbour already reports how much of it there was.
+              Two adjacent cards showing the identical volume delta would read
+              as a duplicated widget rather than two findings.
+
+              `pp` because a move from 61% to 64% is three percentage POINTS,
+              not three percent. /performance uses the same unit for the same
+              reason, so the two pages agree on what a delta means.
+            */
+            action={rangeData ? (
+              <DeltaPill
+                now={pct(rangeData.performance.completed, rangeData.performance.total)}
+                prev={pct(rangeData.previous.completed, rangeData.previous.total)}
+                good="up"
+                unit="pp"
+              />
+            ) : undefined}
+          >
             {(
               <RangeBody loading={rangeLoading} data={rangeData}>
                 {(r) => (
@@ -542,6 +564,16 @@ export default function HomePage() {
             title={rangeData
               ? `${rangeData.performance.total.toLocaleString('en-IN')} job${rangeData.performance.total === 1 ? '' : 's'} across ${rangeData.cities.length} cit${rangeData.cities.length === 1 ? 'y' : 'ies'}`
               : rangeLabel}
+            /* good="neither": more orders is not good or bad news, it is how
+               much work there was. The pill reports the move and declines to
+               grade it. */
+            action={rangeData ? (
+              <DeltaPill
+                now={rangeData.performance.total}
+                prev={rangeData.previous.total}
+                good="neither"
+              />
+            ) : undefined}
           >
             <RangeBody loading={rangeLoading} data={rangeData} empty={(r) => r.cities.length === 0} emptyTitle="No work in this window">
               {(r) => (
@@ -559,8 +591,26 @@ export default function HomePage() {
                           </span>
                         </span>
                       ),
-                      value: c.jobs,
+                      /*
+                       * The SHARE ships with the bar, deliberately. A bar whose
+                       * denominator is not written down is a picture the reader
+                       * cannot name — and this card had no percentage anywhere,
+                       * so the bar alone could have meant "of all work", "of the
+                       * biggest city", or "of the four shown". It means the
+                       * first, and now says so, in the same "count · pct" shape
+                       * the Cancellations card beside it uses.
+                       */
+                      value: `${c.jobs.toLocaleString('en-IN')} · ${pct(c.jobs, r.performance.total)}%`,
                       accent: 'info' as const,
+                      /*
+                       * Against the WINDOW'S TOTAL, not against the largest city.
+                       * Scaling to the leader would paint the top row full-width
+                       * whether it held 90% of the work or 12%, which is the one
+                       * reading this card must not invite. Against the total, the
+                       * four bars and the "+ N more cities" remainder below them
+                       * describe one whole.
+                       */
+                      bar: c.jobs / Math.max(1, r.performance.total),
                       /*
                        * The SPOC scope travels with the city. /jobs reads both
                        * off the URL during render, so arriving pre-scoped costs
@@ -603,20 +653,34 @@ export default function HomePage() {
           <Panel
             className="flex-1"
             title={rangeData ? `${rangeData.cancellations.cancelled.toLocaleString('en-IN')} cancelled` : 'Cancellations'}
-            action={<Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>}
+            action={
+              <span className="inline-flex items-center gap-1.5">
+                {rangeData && (
+                  <DeltaPill
+                    now={rangeData.cancellations.cancelled}
+                    prev={rangeData.previous.cancelled}
+                    good="down"
+                  />
+                )}
+                <Pill accent="warning">{rangeLabel.toLowerCase()}</Pill>
+              </span>
+            }
           >
             <RangeBody loading={rangeLoading} data={rangeData}>
               {(r) => (
                 <>
                   {/*
-                    The reason breakdown the design asked for is finally real.
-                    It used to be impossible: /dashboard-summary carried no
-                    reason dimension, and an earlier cut filled the gap with the
-                    category mix of ALL work under a "N cancelled" title — which
-                    read as "89 carpentry CANCELLATIONS", a number both false and
-                    larger than the total it appeared to be a share of.
-                    /dashboard-range joins action_taken_reason, so the reasons
-                    below are the recorded ones.
+                    This card answers TWO questions and no more: how many
+                    were cancelled, and why. /dashboard-range joins
+                    action_taken_reason, so the reasons are the recorded ones.
+
+                    A category mix of ALL work used to sit below the reasons,
+                    and a "Share of all work" row above them. Both are gone as
+                    of 2026-08-26 — the design comp carries neither, and the
+                    category block in particular kept inviting the misreading it
+                    was built to fix ("89 carpentry CANCELLATIONS"), because a
+                    breakdown of every job in the window cannot help but read as
+                    a breakdown of the number in the title.
                   */}
                   <MetricRow
                     label="Cancelled"
@@ -624,8 +688,6 @@ export default function HomePage() {
                     bar={r.cancellations.cancelled / Math.max(1, r.cancellations.total)}
                     barAccent="warning"
                   />
-                  <MetricRow label="Share of all work" value={`${r.cancellations.sharePct}%`} />
-
                   <div className="mt-3 pt-3 border-t border-ink-100">
                     <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
                       Top reasons
@@ -634,41 +696,56 @@ export default function HomePage() {
                       <>
                         {/* % is of CANCELLED jobs, not of all work — the card is
                             answering "of these cancellations, why". */}
+                        {/*
+                          "Other" is a ROW, not the muted "+ N other reasons"
+                          footnote it replaces. The three named reasons sum to
+                          less than the total above them, and a footnote in
+                          smaller, greyer type does not read as the thing that
+                          closes that gap — so the percentages looked like they
+                          did not add up. As a row it carries its own count and
+                          share, and the four values reconcile on the page.
+                          Its count is EXACT: the reasons cohort is the same
+                          job_status = 6 the title counts, and an unrecorded
+                          reason is labelled rather than dropped.
+                        */}
                         <RankedList
-                          rows={r.cancellations.topReasons.map((x) => ({
-                            label: <span className="truncate">{x.reason}</span>,
-                            value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
-                            accent: 'warning' as const,
-                          }))}
+                          rows={[
+                            ...r.cancellations.topReasons.map((x) => ({
+                              label: <span className="truncate">{x.reason}</span>,
+                              value: `${x.count.toLocaleString('en-IN')} · ${x.pct}%`,
+                              accent: 'warning' as const,
+                              // Share of CANCELLATIONS, the same denominator the
+                              // pct beside it uses — a bar drawn against the
+                              // window's total work would contradict its own
+                              // label on every row.
+                              bar: x.count / Math.max(1, r.cancellations.cancelled),
+                            })),
+                            ...(r.cancellations.otherReasons.count > 0 ? [{
+                              label: (
+                                <span className="block">
+                                  <span className="block text-ink-900">Other</span>
+                                  <span className="block text-xs text-ink-500">
+                                    {r.cancellations.otherReasons.reasons} reason
+                                    {r.cancellations.otherReasons.reasons === 1 ? '' : 's'}
+                                  </span>
+                                </span>
+                              ),
+                              value: `${r.cancellations.otherReasons.count.toLocaleString('en-IN')} · `
+                                + `${pct(r.cancellations.otherReasons.count, r.cancellations.cancelled)}%`,
+                              // WARNING, same as the named rows. All four are
+                              // cancellation counts that sum to the title, and
+                              // a different tint would say "this is a different
+                              // kind of number" — precisely the misreading the
+                              // category block used to cause. The muted second
+                              // line is what marks it as a bucket.
+                              accent: 'warning' as const,
+                              bar: r.cancellations.otherReasons.count / Math.max(1, r.cancellations.cancelled),
+                            }] : []),
+                          ]}
                         />
-                        {r.cancellations.reasonCount > r.cancellations.topReasons.length && (
-                          <div className="pt-2 text-xs text-ink-500">
-                            + {r.cancellations.reasonCount - r.cancellations.topReasons.length} other reason
-                            {r.cancellations.reasonCount - r.cancellations.topReasons.length === 1 ? '' : 's'}
-                          </div>
-                        )}
                       </>
                     ) : (
                       <div className="text-xs text-ink-500 italic">No cancellations in this window.</div>
-                    )}
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-ink-100">
-                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 mb-1">
-                      All work by category
-                    </div>
-                    {/* Neutral, not warning — these are NOT cancellations, and
-                        the tint is what made the earlier version misread. */}
-                    {r.cancellations.categories.length ? (
-                      <RankedList
-                        rows={r.cancellations.categories.slice(0, 3).map((c) => ({
-                          label: <span className="truncate">{c.label}</span>,
-                          value: `${c.count.toLocaleString('en-IN')} · ${c.pct}%`,
-                          accent: 'info' as const,
-                        }))}
-                      />
-                    ) : (
-                      <EmptyState title="No work in this window" />
                     )}
                   </div>
                 </>
@@ -680,6 +757,61 @@ export default function HomePage() {
     </>
   );
 }
+
+/*
+ * The movement pill the three range-scoped cards share.
+ *
+ * ⚠ `good` IS PER CARD, AND THE THREE DISAGREE. A rise means something
+ * different on each one, and getting this wrong inverts a card's meaning
+ * without changing a number:
+ *
+ *   'up'      completion rate — more finished work is better.
+ *   'down'    cancellations   — more cancelled work is worse.
+ *   'neither' volume raised   — more orders is not good or bad news for the
+ *             client, it is just how much work there was. Colouring it green
+ *             or amber would be the dashboard inventing an opinion about
+ *             someone else's business, so it stays neutral.
+ *
+ * "vs previous period", not "vs last month". The comparison is always the same
+ * LENGTH immediately before the selected range, so with a range picker only the
+ * generic phrasing stays true: for "This month" (month-to-date) it is the
+ * equally many days before the 1st — a fair like-for-like, but not last month.
+ *
+ * Silent when BOTH windows are empty: a first-ever window would otherwise read
+ * as a dramatic change from nothing.
+ */
+function DeltaPill({
+  now, prev, good, unit = '',
+}: {
+  now: number;
+  prev: number;
+  good: 'up' | 'down' | 'neither';
+  /** 'pp' for a rate — a 3-point move in a percentage is not 3 percent. */
+  unit?: string;
+}) {
+  if (now === 0 && prev === 0) return null;
+  const delta = Math.round((now - prev) * 10) / 10;
+  if (delta === 0) return <Pill accent="info">level vs previous period</Pill>;
+  const rising = delta > 0;
+  const accent = good === 'neither' ? 'info' : (rising === (good === 'up') ? 'success' : 'warning');
+  return (
+    <Pill accent={accent}>
+      {rising ? '↑' : '↓'} {Math.abs(delta).toLocaleString('en-IN')}{unit} vs previous period
+    </Pill>
+  );
+}
+
+/*
+ * One percentage, to one decimal — the same rounding the SERVER uses for the
+ * reason shares it sends. Three copies of this had accumulated (completion
+ * rate, city share, the Other bucket) and identical arithmetic under three
+ * names is how one of them ends up rounding to a different place and two
+ * figures on the same card stop adding up.
+ *
+ * A zero denominator is 0%, never NaN: an empty window still renders.
+ */
+const pct = (part: number, whole: number) =>
+  whole > 0 ? Math.round((1000 * part) / whole) / 10 : 0;
 
 /*
  * Loading / empty frame shared by the three range-scoped cards.

@@ -268,6 +268,31 @@ export function PageHeader({
  * A labelled figure with an optional delta and a proportion bar — the
  * "SLA compliance 84% ↑3%" shape from Performance Health.
  */
+/*
+ * The proportion bar, shared by MetricRow and RankedList.
+ *
+ * Extracted when the second consumer arrived, not before: two copies of a
+ * clamp and a colour map is exactly how one of them ends up rounding
+ * differently from the other and two bars of the same value stop matching.
+ * Clamps to 0–1 so a ratio computed against a stale denominator overflows its
+ * track instead of painting past it.
+ */
+const BAR_FILL: Record<Accent, string> = {
+  brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
+  warning: 'bg-warning', money: 'bg-money',
+};
+
+function Bar({ value, accent = 'success' }: { value: number; accent?: Accent }) {
+  return (
+    <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
+      <div
+        className={cn('h-full rounded-full', BAR_FILL[accent])}
+        style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}
+      />
+    </div>
+  );
+}
+
 export function MetricRow({
   label, value, delta, deltaAccent = 'success', bar, barAccent = 'success',
 }: {
@@ -288,17 +313,7 @@ export function MetricRow({
           {delta ? <span className={cn('text-xs', ACCENT_TEXT[deltaAccent])}>{delta}</span> : null}
         </span>
       </div>
-      {typeof bar === 'number' ? (
-        <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
-          <div
-            className={cn('h-full rounded-full', {
-              brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
-              warning: 'bg-warning', money: 'bg-money',
-            }[barAccent])}
-            style={{ width: `${Math.max(0, Math.min(1, bar)) * 100}%` }}
-          />
-        </div>
-      ) : null}
+      {typeof bar === 'number' ? <Bar value={bar} accent={barAccent} /> : null}
     </div>
   );
 }
@@ -547,7 +562,14 @@ export function ProportionBar({
 export function RankedList({
   rows, className,
 }: {
-  rows: ReadonlyArray<{ label: ReactNode; value: ReactNode; accent?: Accent; onClick?: () => void }>;
+  rows: ReadonlyArray<{
+    label: ReactNode;
+    value: ReactNode;
+    accent?: Accent;
+    onClick?: () => void;
+    /** 0–1. Omit for a row whose value is not a share of anything. */
+    bar?: number;
+  }>;
   className?: string;
 }) {
   return (
@@ -560,14 +582,20 @@ export function RankedList({
             type={r.onClick ? 'button' : undefined}
             onClick={r.onClick}
             className={cn(
-              'w-full flex items-center justify-between gap-3 py-2 border-b border-ink-100 last:border-0 text-left',
+              'w-full block py-2 border-b border-ink-100 last:border-0 text-left',
               r.onClick && 'hover:bg-surface-alt -mx-2 px-2 rounded transition',
             )}
           >
-            <span className="text-sm text-ink-700 min-w-0 truncate">{r.label}</span>
-            <span className={cn('text-sm font-semibold tabular-nums shrink-0', ACCENT_TEXT[r.accent ?? 'info'])}>
-              {r.value}
+            {/* The bar sits UNDER the row, not beside it: a bar competing with
+                the label for horizontal space truncates the one piece of text
+                that identifies which row you are reading. */}
+            <span className="flex items-center justify-between gap-3">
+              <span className="text-sm text-ink-700 min-w-0 truncate">{r.label}</span>
+              <span className={cn('text-sm font-semibold tabular-nums shrink-0', ACCENT_TEXT[r.accent ?? 'info'])}>
+                {r.value}
+              </span>
             </span>
+            {typeof r.bar === 'number' ? <Bar value={r.bar} accent={r.accent ?? 'info'} /> : null}
           </Tag>
         );
       })}
