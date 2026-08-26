@@ -77,7 +77,7 @@ export const api = {
    * is downloadBlob(), declared below — one function, two names, never two
    * copies. Existing `downloadBlob(...)` imports keep working.
    */
-  download: (p: string, filename: string) => downloadBlob(p, filename),
+  download: (p: string, filename: string): Promise<DownloadResult> => downloadBlob(p, filename),
 };
 
 /*
@@ -121,7 +121,14 @@ export function saveBlob(blob: Blob, filename: string) {
 // when the filter returns zero rows, the backend responds with a 404
 // + `{success:false, error:'No data ...'}` instead of streaming an
 // empty .xlsx — caller catches the ApiError and surfaces the message.
-export async function downloadBlob(path: string, filename: string) {
+/*
+ * What a download reports back. `truncated` is the only field a caller has to
+ * act on — a workbook that stopped at the server's row cap looks exactly like
+ * a complete one once it is on disk, so the page has to say so.
+ */
+export type DownloadResult = { truncated: boolean; total: number; rowCap: number };
+
+export async function downloadBlob(path: string, filename: string): Promise<DownloadResult> {
   const token = getToken();
   const res = await fetch(`/api/client${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -137,4 +144,20 @@ export async function downloadBlob(path: string, filename: string) {
     throw new ApiError(body.error || `download failed (${res.status})`, res.status, body.details);
   }
   saveBlob(await res.blob(), filename);
+  /*
+   * Truncation arrives in headers because the body is a binary workbook with
+   * nowhere to carry a caveat. These are only READABLE cross-origin because
+   * the route lists them in Access-Control-Expose-Headers — if this ever
+   * starts reporting `truncated: false` on a capped export, check that header
+   * first, not this parser.
+   *
+   * Absent headers mean an older backend, and default to "not truncated":
+   * a caveat nobody can substantiate is worse than none.
+   */
+  const num = (h: string) => Number(res.headers.get(h) || 0) || 0;
+  return {
+    truncated: res.headers.get('X-Export-Truncated') === '1',
+    total: num('X-Export-Total'),
+    rowCap: num('X-Export-Row-Cap'),
+  };
 }

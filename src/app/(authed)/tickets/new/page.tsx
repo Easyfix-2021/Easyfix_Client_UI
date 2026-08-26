@@ -24,7 +24,7 @@
  * Backend contract (parity with ACD_APIs JobFilterServiceImpl#getPredicates):
  *   GET /api/client/jobs?ticketFlag=unauthorized|authorized|noResponse
  *                       [&cityIds=][&ownerIds=][&startDate=][&endDate=]
- *                       [&dateType=created][&q=][&limit=][&offset=]
+ *                       [&dateType=booked][&q=][&limit=][&offset=]
  *   PATCH /api/client/jobs/:id/approve   — authorizes (flips approved_by_client=1)
  */
 import Link from 'next/link';
@@ -223,7 +223,7 @@ export default function MyNewTicketsPage() {
     if (applied.endDate)          params.set('endDate',   applied.endDate);
     if (applied.cityIds.length)   params.set('cityIds',   applied.cityIds.join(','));
     if (applied.ownerIds.length)  params.set('ownerIds',  applied.ownerIds.join(','));
-    params.set('dateType', 'created');
+    params.set('dateType', 'booked');
     params.set('limit',  String(pageSize));
     params.set('offset', String((page - 1) * pageSize));
     // refresh tick — opaque to the backend but changes the URL identity
@@ -349,7 +349,7 @@ export default function MyNewTicketsPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — From</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — From</label>
             <input
               type="date"
               className="input"
@@ -359,7 +359,7 @@ export default function MyNewTicketsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — To</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — To</label>
             <input
               type="date"
               className="input"

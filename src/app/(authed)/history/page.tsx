@@ -316,7 +316,22 @@ export default function OrderHistoryPage() {
     if (applied.endDate)          params.set('endDate',   applied.endDate);
     if (applied.cityIds.length)   params.set('cityIds',   applied.cityIds.join(','));
     if (applied.ownerIds.length)  params.set('ownerIds',  applied.ownerIds.join(','));
-    params.set('dateType', 'created');
+      /*
+       * 'booked' → j.created_date_time, the column the "Order Booked" labels
+       * name. It used to send 'created', which is NOT a key in the backend's
+       * DATE_TYPE_COLUMN map and only reached the right column by falling
+       * through to the default — so the filter would have moved silently the
+       * day that default changed.
+       *
+       * ⚠ NOT 'ticket'. ticket_created_date_time is immutable, while
+       * created_date_time is RE-STAMPED on structural edits, so the two
+       * genuinely differ: a June order edited in August is inside an August
+       * "booked" window. Harshit chose to fix the LABELS rather than the
+       * column, so this is the intended behaviour, not an accident. If that is
+       * ever revisited, /orders/counts windows on the same column and must
+       * move with it.
+       */
+    params.set('dateType', 'booked');
     params.set('limit',  String(pageSize));
     params.set('offset', String((page - 1) * pageSize));
     // URLSearchParams.toString() percent-encodes commas as %2C, which
@@ -422,11 +437,25 @@ export default function OrderHistoryPage() {
       params.set('endDate',   staged.endDate);
       if (staged.cityIds.length)    params.set('cityIds',   staged.cityIds.join(','));
       if (staged.ownerIds.length)   params.set('ownerIds',  staged.ownerIds.join(','));
-      params.set('dateType', 'created');
+      params.set('dateType', 'booked');
       const ts = new Date().toISOString().slice(0, 10);
       // Same %2C → "," cleanup as the list fetch — purely cosmetic.
       const qs = params.toString().replace(/%2C/g, ',');
-      await downloadBlob(`/export/jobs?${qs}`, `OrderHistory_${ts}.xlsx`);
+      /*
+       * The file saves either way — this is a caveat ABOUT a file the reader
+       * already has, not a failure. It goes in the same amber popup the date
+       * gate uses so there is one "what happened to my export?" surface, and
+       * it names both numbers: a workbook that stopped at the cap is
+       * indistinguishable from a complete one once it is open in Excel.
+       */
+      const out = await downloadBlob(`/export/jobs?${qs}`, `OrderHistory_${ts}.xlsx`);
+      if (out.truncated) {
+        setGateNotice(
+          `Your filters match ${out.total.toLocaleString('en-IN')} orders and the file holds the first `
+          + `${out.rowCap.toLocaleString('en-IN')}. Narrow the date range or add a City or Client Team `
+          + `filter to export the rest.`
+        );
+      }
     } catch (err) {
       // The backend returns a structured 404 when the filter set
       // matches zero jobs (see /export/jobs route). We surface that
@@ -559,7 +588,7 @@ export default function OrderHistoryPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — From</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — From</label>
             <input
               type="date"
               className="input"
@@ -569,7 +598,7 @@ export default function OrderHistoryPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-500 mb-1">Ticket Created — To</label>
+            <label className="block text-xs font-medium text-ink-500 mb-1">Order Booked — To</label>
             <input
               type="date"
               className="input"
