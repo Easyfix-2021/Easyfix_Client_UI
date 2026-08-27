@@ -31,7 +31,7 @@ import { useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FolderOpen, CheckCircle2, CalendarDays, CalendarRange,
-  AlertTriangle, MapPin, User, Loader2, type LucideIcon,
+  AlertTriangle, MapPin, User, Loader2, PhoneOff, type LucideIcon,
 } from 'lucide-react';
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
@@ -51,6 +51,12 @@ type Summary = {
   attention: {
     invoicesDue: { count: number; amount: number };
     estimatePending: number; noResponse: number; onHold: number; revisit: number; qcDone: number;
+    /*
+     * Unreachable on THREE DIFFERENT DAYS inside a three-day span, on a job
+     * that is still open. Distinct from `noResponse`, which is the bare
+     * call_later flag — "unreachable at least once, ever".
+     */
+    repeatedlyUnreachable: number;
   };
   counts: {
     newTickets: number; inProgress: number; completed: number; cancelled: number; escalated: number;
@@ -374,14 +380,25 @@ export default function HomePage() {
     attention: {
       invoicesDue: { count: 0, amount: 0 },
       estimatePending: 0, noResponse: 0, onHold: 0, revisit: 0, qcDone: 0,
+      repeatedlyUnreachable: 0,
     },
     counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0, openTotal: 0, awaitingYou: 0 },
     teamSize: 0,
   };
-  /** Em dash until the number is real — never a placeholder zero. */
-  const stat = (v: number) => (data ? v.toLocaleString('en-IN') : '—');
+  /*
+   * Em dash until the number is real — never a placeholder zero.
+   *
+   * ⚠ `v == null` IS LOAD-BEARING, not defensive noise. A field the deployed
+   * backend does not send yet arrives as undefined, and calling
+   * .toLocaleString() on it throws inside render — taking the WHOLE PAGE down
+   * rather than showing one dash. That is precisely what a frontend deployed
+   * ahead of its backend looks like, and this dashboard adds summary fields
+   * often enough for it to be a real order-of-deploy hazard.
+   */
+  const stat = (v: number | undefined | null) => (data && v != null ? v.toLocaleString('en-IN') : '—');
   /** Same, for the sub-lines fed by the 60-day job window. */
-  const jstat = (v: number) => (jobsLoading ? '—' : v.toLocaleString('en-IN'));
+  const jstat = (v: number | undefined | null) =>
+    (jobsLoading || v == null ? '—' : v.toLocaleString('en-IN'));
 
   const { counts, slaAging, attention, boxes } = summary;
   const totalOpen = counts.newTickets + counts.inProgress;
@@ -392,16 +409,15 @@ export default function HomePage() {
    *   with EasyFix   job_status NOT IN (3,5,6,7)   — every non-terminal job
    *   with you       job_status = 15               — estimate sent, undecided
    *
-   * ⚠ THESE OVERLAP, AND THAT IS THE SPEC, NOT A BUG. Status 15 is
-   * non-terminal, so it is inside the EasyFix count as well as being the whole
-   * of yours. I raised it and this is the confirmed reading, so neither number
-   * is adjusted: each segment shows exactly the figure its label names. Do not
-   * "fix" this by subtracting — the previous version did, and it made the
-   * EasyFix figure something no stated definition produces.
+   * ⚠ THE TWO SEGMENTS PARTITION THE OPEN BOOK. openTotal is the universe —
+   * every non-terminal job — and awaitingYou is the slice of it that is yours,
+   * so EasyFix is the REMAINDER. With two open jobs and one awaiting approval
+   * the bar reads 1 and 1, which is what a reader expects of a bar whose two
+   * halves are captioned "EasyFix" and "you".
    *
-   * The consequence to know: ProportionBar scales by the SUM of its segments,
-   * so the widths are each count over (openTotal + awaitingYou) rather than a
-   * partition of the open book. The COUNTS printed in the labels are exact.
+   * Status 15 IS inside openTotal, which is why this subtracts rather than
+   * showing both raw: printing 2 and 1 against a book of 2 would have the same
+   * job standing on both sides of the bar.
    *
    * Both replaced worse numbers. `onYou` was estimatePending + noResponse —
    * status 15 plus every job flagged call_later, which is a CUSTOMER not
@@ -409,7 +425,7 @@ export default function HomePage() {
    * newTickets + inProgress, which omits 15, 21 and 10.
    */
   const onYou = counts.awaitingYou;
-  const withUs = counts.openTotal;
+  const withUs = Math.max(0, counts.openTotal - onYou);
 
   const longDate = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -468,7 +484,9 @@ export default function HomePage() {
       />
 
       <SectionLabel>Today&rsquo;s pulse</SectionLabel>
-      <StatRow className="mb-6">
+      {/* Five across, not the default four — the unreachable tile is a fifth
+          measure, and wrapping one card onto its own row reads as a mistake. */}
+      <StatRow className="mb-6 xl:grid-cols-5">
         <StatCard
           icon={FolderOpen}
           accent="info"
@@ -504,6 +522,23 @@ export default function HomePage() {
           value={jstat(derived.weekPlanned)}
           sub={jobsLoading ? 'Mon–Sun' : `Mon–Sun · ${derived.weekDone} already done`}
         />
+        {/*
+          REPEATEDLY UNREACHABLE — a pattern, not a single miss.
+          Three different DAYS inside a three-day span, on a job still open.
+          Three calls in one afternoon is one bad afternoon and does not
+          qualify; one call across three days is a single attempt and does not
+          either. The server does the counting, from the comment history at
+          comment_on = 16 — tbl_job.call_later is a bit(1) flag with no count
+          and no dates, so it cannot answer this and is not used.
+        */}
+        <StatCard
+          icon={PhoneOff}
+          accent="brand"
+          label="Customer Unreachable"
+          value={stat(attention.repeatedlyUnreachable)}
+          sub="3 days running · still open"
+          onClick={() => router.push('/unreachable')}
+        />
       </StatRow>
 
       <div className="grid gap-x-6 gap-y-2 grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] mb-6 items-stretch">
@@ -515,7 +550,7 @@ export default function HomePage() {
             title={
               <span className="inline-flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-primary" aria-hidden />
-                Jobs waiting on you
+                Jobs Waiting for You
               </span>
             }
             action={queue?.total ? <Pill accent="brand">{queue.total} items</Pill> : null}
@@ -561,7 +596,7 @@ export default function HomePage() {
 
         <div className="flex flex-col min-w-0">
           <SectionLabel>Open breakdown</SectionLabel>
-          <Panel className="flex-1" title="Pending with EasyFix vs with you">
+          <Panel className="flex-1" title="Pending with EasyFix vs with You">
             <ProportionBar
               segments={[
                 { label: `EasyFix (${withUs} jobs)`, value: withUs, accent: 'info' },

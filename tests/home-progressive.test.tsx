@@ -38,8 +38,8 @@ import Home from '@/app/(authed)/dashboard/page';
 const SUMMARY = {
   boxes: { newTickets: 4, waitingForAllocation: 3, runningLate: 1, estimateApproved: 0, estimateRejected: 0 },
   slaAging: { d01: 1, d23: 2, d47: 0, d7plus: 5 },
-  attention: { invoicesDue: { count: 1, amount: 10 }, estimatePending: 2, noResponse: 1, onHold: 0, revisit: 0, qcDone: 0 },
-  counts: { newTickets: 4, inProgress: 7, completed: 20, cancelled: 1, escalated: 0 },
+  attention: { invoicesDue: { count: 1, amount: 10 }, estimatePending: 2, noResponse: 1, onHold: 0, revisit: 0, qcDone: 0, repeatedlyUnreachable: 4 },
+  counts: { newTickets: 4, inProgress: 7, completed: 20, cancelled: 1, escalated: 0, openTotal: 12, awaitingYou: 2 },
   teamSize: 3,
 };
 
@@ -94,5 +94,45 @@ describe('Home progressive render', () => {
     expect(closed?.textContent).toContain('—');
     const openTile = screen.getByText('Total open').closest('div')?.parentElement;
     expect(openTile?.textContent).toContain('11');
+  });
+});
+
+describe('Home tolerates a backend that predates a field', () => {
+  it('⚠ renders a dash, not a crash, when the summary omits a new field', () => {
+    /*
+     * Exactly what a frontend deployed AHEAD of its backend sees. Before the
+     * null guard this threw inside render and took the entire dashboard down,
+     * which is a far worse failure than one missing figure.
+     */
+    const older = { ...SUMMARY, attention: { ...SUMMARY.attention } } as Record<string, unknown>;
+    delete (older.attention as Record<string, unknown>).repeatedlyUnreachable;
+    setFetches({ '/dashboard-summary': { data: older, loading: false } });
+
+    const { container } = render(<Home />);
+    expect(container.textContent).toContain('Customer Unreachable');
+    const tile = screen.getByText('Customer Unreachable').closest('div')?.parentElement;
+    expect(tile?.textContent).toContain('—');
+  });
+});
+
+describe('Open breakdown partitions the open book', () => {
+  it('EasyFix is the REMAINDER, so the two halves sum to the open total', () => {
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    const { container } = render(<Home />);
+    /*
+     * openTotal 12, awaitingYou 2 → 10 and 2. Status 15 is INSIDE openTotal,
+     * so showing both raw would stand the same job on both sides of a bar
+     * captioned "EasyFix" and "you".
+     */
+    expect(container.textContent).toContain('EasyFix (10 jobs)');
+    expect(container.textContent).toContain('Pending on you (2 jobs)');
+  });
+
+  it('the headings are Title Case', () => {
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    const { container } = render(<Home />);
+    expect(container.textContent).toContain('Jobs Waiting for You');
+    expect(container.textContent).toContain('Pending with EasyFix vs with You');
+    expect(container.textContent).toContain('Customer Unreachable');
   });
 });
