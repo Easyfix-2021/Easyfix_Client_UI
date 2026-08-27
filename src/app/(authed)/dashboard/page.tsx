@@ -52,13 +52,21 @@ type Summary = {
     invoicesDue: { count: number; amount: number };
     estimatePending: number; noResponse: number; onHold: number; revisit: number; qcDone: number;
   };
-  counts: { newTickets: number; inProgress: number; completed: number; cancelled: number; escalated: number };
+  counts: {
+    newTickets: number; inProgress: number; completed: number; cancelled: number; escalated: number;
+    /** Every non-terminal job — not completed (3,5), cancelled (6) or an enquiry (7). */
+    openTotal: number;
+    /** Status 15: an estimate sent and not yet decided. Included in openTotal. */
+    awaitingYou: number;
+  };
   categoryBreakdown?: Array<{ label: string; count: number }>;
   teamSize: number;
 };
 
 type QueueItem = {
   type: string;
+  /** Status 15 only. Anything else has an open billing line but nothing to approve. */
+  approvable: boolean;
   jobId: number;
   reference: string | null;
   city: string | null;
@@ -367,7 +375,7 @@ export default function HomePage() {
       invoicesDue: { count: 0, amount: 0 },
       estimatePending: 0, noResponse: 0, onHold: 0, revisit: 0, qcDone: 0,
     },
-    counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0 },
+    counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0, openTotal: 0, awaitingYou: 0 },
     teamSize: 0,
   };
   /** Em dash until the number is real — never a placeholder zero. */
@@ -378,9 +386,22 @@ export default function HomePage() {
   const { counts, slaAging, attention, boxes } = summary;
   const totalOpen = counts.newTickets + counts.inProgress;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
-  /* Pending on YOU vs pending with EasyFix — the split the mock's bar shows. */
-  const onYou = attention.estimatePending + attention.noResponse;
-  const withUs = Math.max(0, totalOpen - onYou);
+  /*
+   * Pending with EasyFix vs pending with YOU.
+   *
+   * ⚠ BOTH HALVES CHANGED. `onYou` was estimatePending + noResponse — status 15
+   * plus every job flagged call_later, which is a CUSTOMER not answering their
+   * phone and is not a thing the client can act on. `withUs` was derived from
+   * newTickets + inProgress, which counts statuses 9 and 0/1/2/20 and silently
+   * omits 15, 21 and 10 — open jobs by any reading.
+   *
+   * Now: with you is status 15 exactly, and the open book is every
+   * non-terminal job. The server sends both raw so the bar SUBTRACTS rather
+   * than adding two independently-derived numbers — that is what makes the two
+   * segments partition one total instead of overlapping.
+   */
+  const onYou = counts.awaitingYou;
+  const withUs = Math.max(0, counts.openTotal - onYou);
 
   const longDate = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -496,7 +517,10 @@ export default function HomePage() {
                 {queue.items.slice(0, 4).map((it) => (
                   <ListRow
                     key={it.jobId}
-                    title={`Estimate approval — ${it.reference || `Job ${it.jobId}`}${it.city ? ` ${it.city}` : ''}`}
+                    /* Only a status-15 row is an estimate awaiting approval.
+                       Calling every row that had the same title was how 6,832
+                       enquiries came to read as approvals on QA. */
+                    title={`${it.approvable ? 'Estimate approval' : 'Open order'} — ${it.reference || `Job ${it.jobId}`}${it.city ? ` ${it.city}` : ''}`}
                     sub={[it.category, it.estimateValue != null ? `Estimate ₹${it.estimateValue.toLocaleString('en-IN')}` : null]
                       .filter(Boolean).join(' · ')}
                     age={`${it.ageDays}d waiting`}
