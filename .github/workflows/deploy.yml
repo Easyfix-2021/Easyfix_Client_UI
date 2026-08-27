@@ -78,16 +78,30 @@ concurrency:
 
 jobs:
   precheck:
-    name: Typecheck
+    name: Typecheck, brand guard & tests
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # ⚠ NODE 22, NOT 20. jsdom 29 declares ^20.19.0 || ^22.13.0 || >=24, and
+      # @vitejs/plugin-react 6 declares ^20.19.0 || >=22.12.0 — so `node-version:
+      # 20` only works while setup-node happens to resolve 20.x to >= 20.19.
+      # Pinning 22 does not depend on that.
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: 'npm' }
+        with: { node-version: 22, cache: 'npm' }
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
+      # The brand system is a strict assertion, not advice: tokens only, no
+      # colour literals outside the seam, weights <= 600, type >= 12px. It ran
+      # only on developer machines until now, so a --no-verify commit could
+      # take it to Production unnoticed.
+      - name: Brand guard
+        run: npm run check:brand
+      # Both suites: node:test over the dependency-free lib modules, then
+      # vitest over the React hooks and pages. `npm test` chains them.
+      - name: Unit tests (lib + React)
+        run: npm test
 
   build-and-push:
     name: Build image & push to ECR
