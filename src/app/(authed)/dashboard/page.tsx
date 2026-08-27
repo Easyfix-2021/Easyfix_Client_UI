@@ -36,10 +36,11 @@ import {
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
 import { cn } from '@/lib/utils';
+import { performanceKpis, type KpiSource } from '@/lib/kpi';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
-  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState,
+  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState, Bar, ChipSelect,
 } from '@/components/ui/console';
 
 /* ─── contracts ─────────────────────────────────────────────────────────── */
@@ -66,6 +67,17 @@ type QueueItem = {
   estimateValue: number | null;
   action: { label: string; method: string; path: string };
 };
+
+/*
+ * GET /performance, narrowed to what this card renders. KpiSource is the shape
+ * @/lib/kpi needs; `tat.jobsAnalysed` is the cohort size the footer states.
+ *
+ * The SAME endpoint the "Full Performance Book →" link opens, so the four
+ * figures here and the four on that page are the same response — not the same
+ * formula reimplemented, which is what the old comment on this card warned
+ * against.
+ */
+type PerfSlice = KpiSource & { tat: KpiSource['tat'] & { jobsAnalysed: number } };
 
 /** Only the columns this page actually reads off the 60-day job window. */
 type DashJob = {
@@ -161,7 +173,7 @@ export default function HomePage() {
   const access = useAccess();
   const { data, loading, error, reload } = useFetchOnce<Summary>('/dashboard-summary');
   const { data: queue } = useFetchOnce<{ items: QueueItem[]; total: number }>('/action-queue');
-  const { jobs } = useRecentJobs<DashJob>();
+  const { jobs, loading: jobsLoading } = useRecentJobs<DashJob>();
 
   const now = useMemo(() => new Date(), []);
 
@@ -230,6 +242,27 @@ export default function HomePage() {
   }, [cityList, city]);
   const spoc = !team || spocOptions.some((m) => String(m.id) === spocParam) ? spocParam : '';
 
+  /*
+   * The KPI fetch. Gated on the grant so an ungranted SPOC issues NO request —
+   * /performance is requireGrant('performance') and would 403, which on an
+   * ungated Home page would render an error card to every Store SPOC. Same
+   * `canSee ? url : null` shape the Client Profile already uses.
+   *
+   * ?city= and ?spoc= both apply. /performance grew a city dimension on
+   * 2026-08-26 for exactly this card — before that it scoped only by
+   * { clientId, from, to, reportingContactIds }, so the card had to print a
+   * note admitting the chip above it did not reach these four figures.
+   *
+   * dim=jobType&months=1 are the cheapest honest parameters: the scorer builds
+   * every rollup regardless, but jobType is ~0.3KB of payload against ~50KB for
+   * technician, and months=1 is the floor for a series this card never draws.
+   */
+  const kpiPath = canSeePerformance
+    ? `/performance?from=${range.from}&to=${range.to}&dim=jobType&months=1`
+      + `${city ? `&city=${encodeURIComponent(city)}` : ''}${spoc ? `&spoc=${spoc}` : ''}`
+    : null;
+  const { data: kpis, loading: kpisLoading } = useFetchOnce<PerfSlice>(kpiPath);
+
   function pushScope(patch: { range?: RangeKey; city?: string; spoc?: string }) {
     const next = { range: rangeKey, city, spoc, ...patch };
     const qs = new URLSearchParams(searchParams.toString());
@@ -287,15 +320,21 @@ export default function HomePage() {
     return { dueToday, ahead, plannedToday, weekPlanned, weekDone, closedYesterday, closedDayBefore };
   }, [jobs, now]);
 
-  if (loading) {
-    return (
-      <div className="bg-surface rounded-xl border border-ink-100 p-10 text-center">
-        <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
-        <div className="mt-2 text-sm text-ink-500">Loading your dashboard…</div>
-      </div>
-    );
-  }
-  if (error || !data) {
+  /*
+   * ─── NO PAGE-WIDE SPINNER ──────────────────────────────────────────────────
+   *
+   * This used to return one spinner for the whole screen until
+   * /dashboard-summary answered, so the SLOWEST of five independent requests
+   * decided when anything at all appeared. The frame is cheap and its shape is
+   * known before any data arrives, so it renders immediately and each section
+   * fills in as its own request returns — nobody waits on a card they are not
+   * reading.
+   *
+   * The error gate stays, but only when there is nothing to show: a refetch
+   * that fails while data is already on screen must not replace a working
+   * dashboard with an error card.
+   */
+  if (error && !data) {
     return (
       <Panel accent="brand">
         <EmptyState
@@ -315,7 +354,28 @@ export default function HomePage() {
     );
   }
 
-  const { counts, slaAging, attention, boxes } = data;
+  /*
+   * Zeroes stand in ONLY for layout while the summary is in flight; every
+   * figure derived from them renders as an em dash until it is real (see
+   * `stat` below). A dashboard that shows a confident 0 before its data
+   * arrives is worse than one that shows nothing — 0 open jobs is a claim.
+   */
+  const summary: Summary = data ?? {
+    boxes: { newTickets: 0, waitingForAllocation: 0, runningLate: 0, estimateApproved: 0, estimateRejected: 0 },
+    slaAging: { d01: 0, d23: 0, d47: 0, d7plus: 0 },
+    attention: {
+      invoicesDue: { count: 0, amount: 0 },
+      estimatePending: 0, noResponse: 0, onHold: 0, revisit: 0, qcDone: 0,
+    },
+    counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0 },
+    teamSize: 0,
+  };
+  /** Em dash until the number is real — never a placeholder zero. */
+  const stat = (v: number) => (data ? v.toLocaleString('en-IN') : '—');
+  /** Same, for the sub-lines fed by the 60-day job window. */
+  const jstat = (v: number) => (jobsLoading ? '—' : v.toLocaleString('en-IN'));
+
+  const { counts, slaAging, attention, boxes } = summary;
   const totalOpen = counts.newTickets + counts.inProgress;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
   /* Pending on YOU vs pending with EasyFix — the split the mock's bar shows. */
@@ -330,7 +390,9 @@ export default function HomePage() {
     <>
       <PageHeader
         title={longDate}
-        sub={`Across ${data.teamSize} SPOC${data.teamSize === 1 ? '' : 's'} · live`}
+        sub={data
+          ? `Across ${summary.teamSize} SPOC${summary.teamSize === 1 ? '' : 's'} · live`
+          : 'Loading your book…'}
         filters={
           <>
             {/*
@@ -348,26 +410,28 @@ export default function HomePage() {
               */}
             <ChipSelect
               icon={MapPin}
-              label="City"
+              label={city || 'All cities'}
               value={city}
               onChange={(v) => pushScope({ city: v })}
-              options={cityOptions}
+              allLabel="All cities"
+              options={cityOptions.filter((o) => o.value !== '')}
             />
             {team?.isManager && spocOptions.length > 1 && (
               <ChipSelect
                 icon={User}
-                label="SPOC"
+                label={spocOptions.find((m) => String(m.id) === spoc)?.name || 'All SPOCs'}
                 value={spoc}
                 onChange={(v) => pushScope({ spoc: v })}
-                options={[{ value: '', label: 'All SPOCs' },
-                          ...spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))]}
+                allLabel="All SPOCs"
+                options={spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))}
               />
             )}
             <ChipSelect
               icon={CalendarDays}
-              label="Date range"
+              label={rangeLabel}
               value={rangeKey}
               onChange={(v) => pushScope({ range: v as RangeKey })}
+              neutral={DEFAULT_RANGE}
               options={RANGE_PRESETS.map((r) => ({ value: r.key, label: r.label }))}
             />
           </>
@@ -380,34 +444,36 @@ export default function HomePage() {
           icon={FolderOpen}
           accent="info"
           label="Total open"
-          value={totalOpen.toLocaleString('en-IN')}
-          sub={`${derived.dueToday} due today · ${derived.ahead} scheduled ahead`}
+          value={stat(totalOpen)}
+          sub={jobsLoading ? 'Counting today\u2019s book\u2026' : `${derived.dueToday} due today · ${derived.ahead} scheduled ahead`}
           onClick={() => router.push('/jobs')}
         />
         <StatCard
           icon={CheckCircle2}
           accent="success"
           label="Closed yesterday"
-          value={derived.closedYesterday.toLocaleString('en-IN')}
-          sub={closedDelta === 0 ? 'Level with the prior day' : `${closedDelta > 0 ? '↑' : '↓'} ${Math.abs(closedDelta)} vs prior day`}
+          value={jstat(derived.closedYesterday)}
+          sub={jobsLoading ? '\u2026'
+            : closedDelta === 0 ? 'Level with the prior day'
+            : `${closedDelta > 0 ? '↑' : '↓'} ${Math.abs(closedDelta)} vs prior day`}
           onClick={() => router.push('/completed')}
         />
         <StatCard
           icon={CalendarDays}
           accent="info"
           label="Planned today"
-          value={derived.plannedToday.toLocaleString('en-IN')}
+          value={jstat(derived.plannedToday)}
           // SUBSTITUTED: the mock splits this "allocated · unallocated". The
           // summary exposes waiting-for-allocation for the whole book, not for
           // today, so the sub-line says which figure it actually is.
-          sub={`${boxes.waitingForAllocation} awaiting allocation overall`}
+          sub={data ? `${boxes.waitingForAllocation} awaiting allocation overall` : '\u2026'}
         />
         <StatCard
           icon={CalendarRange}
           accent="warning"
           label="Plan this week"
-          value={derived.weekPlanned.toLocaleString('en-IN')}
-          sub={`Mon–Sun · ${derived.weekDone} already done`}
+          value={jstat(derived.weekPlanned)}
+          sub={jobsLoading ? 'Mon–Sun' : `Mon–Sun · ${derived.weekDone} already done`}
         />
       </StatRow>
 
@@ -498,60 +564,61 @@ export default function HomePage() {
         {canSeePerformance && (
         <div className="flex flex-col min-w-0">
           <SectionLabel>Performance health</SectionLabel>
-          <Panel
-            className="flex-1"
-            title={rangeLabel}
-            /*
-              COMPLETION RATE, not volume — this card is about how the work
-              went, and its neighbour already reports how much of it there was.
-              Two adjacent cards showing the identical volume delta would read
-              as a duplicated widget rather than two findings.
+          <Panel className="flex-1" title={rangeLabel}>
+            {/*
+              THE FOUR CONTRACTED KPIs, from the very endpoint the link at the
+              bottom opens. This card used to show Completed / In progress /
+              Running late / Escalated — counts off /dashboard-range — under a
+              comment explaining that SLA, first-time-fix and revisit "still
+              live behind /performance … duplicating that maths here is the
+              surest way to have two numbers disagree". They are here now
+              WITHOUT that duplication: the figures are the same response the
+              /performance page renders, derived by the same builder in
+              @/lib/kpi. Nothing is recomputed.
 
-              `pp` because a move from 61% to 64% is three percentage POINTS,
-              not three percent. /performance uses the same unit for the same
-              reason, so the two pages agree on what a delta means.
-            */
-            action={rangeData ? (
-              <DeltaPill
-                now={pct(rangeData.performance.completed, rangeData.performance.total)}
-                prev={pct(rangeData.previous.completed, rangeData.previous.total)}
-                good="up"
-                unit="pp"
-              />
-            ) : undefined}
-          >
-            {(
-              <RangeBody loading={rangeLoading} data={rangeData}>
-                {(r) => (
-                  <>
-                    {/*
-                      One cohort: the jobs RAISED in the window. Completed,
-                      still open, now overdue and escalated are all slices of
-                      that same set, so the bars share a denominator and the
-                      card reads as "of the work raised here, this is where it
-                      stands". Each metric on its own most natural date would
-                      make the shares stop reconciling.
-
-                      SLA / first-time-fix / revisit still live behind
-                      /performance, which runs the TAT engine — duplicating that
-                      maths here is the surest way to have two numbers disagree,
-                      so the link stays.
-                    */}
-                    <MetricRow label="Completed"    value={r.performance.completed.toLocaleString('en-IN')}   bar={r.performance.completed / Math.max(1, r.performance.total)}   barAccent="success" />
-                    <MetricRow label="In progress"  value={r.performance.inProgress.toLocaleString('en-IN')}  bar={r.performance.inProgress / Math.max(1, r.performance.total)}  barAccent="info" />
-                    <MetricRow label="Running late" value={r.performance.runningLate.toLocaleString('en-IN')} bar={r.performance.runningLate / Math.max(1, r.performance.total)} barAccent="warning" />
-                    <MetricRow label="Escalated"    value={r.performance.escalated.toLocaleString('en-IN')}   bar={r.performance.escalated / Math.max(1, r.performance.total)}   barAccent="brand" />
-                    <div className="pt-2 flex items-center justify-between gap-2">
-                      <span className="text-xs text-ink-500">
-                        {r.performance.total.toLocaleString('en-IN')} raised in this window
+              The displaced status counts are not lost — Today's Pulse carries
+              the open total and Open breakdown carries the ageing.
+            */}
+            {kpisLoading && !kpis ? (
+              <div className="py-6 text-center">
+                <Loader2 className="w-6 h-6 mx-auto animate-spin text-ink-300" aria-hidden />
+              </div>
+            ) : !kpis ? (
+              <EmptyState title="Could not load performance" sub="The performance service did not respond." />
+            ) : (
+              <>
+                {performanceKpis(kpis).map((k) => (
+                  <MetricRow
+                    key={k.key}
+                    label={
+                      <span className="inline-flex items-center gap-1.5">
+                        <k.icon className="w-3.5 h-3.5 text-ink-500 shrink-0" aria-hidden /> {k.label}
                       </span>
-                      <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
-                        Full Performance Book →
-                      </button>
-                    </div>
-                  </>
-                )}
-              </RangeBody>
+                    }
+                    value={k.value}
+                    delta={k.target}
+                    deltaAccent="info"
+                    bar={k.progress}
+                    barAccent={k.accent}
+                  />
+                ))}
+                <div className="pt-2 flex items-center justify-between gap-2">
+                  {/*
+                    JOBS SCORED, not "raised in this window". The four figures
+                    above are computed over COMPLETED jobs only — the TAT engine
+                    loads no other status — while the cards beside this one count
+                    everything raised. Restating the raised total here would
+                    invite the reader to divide one by the other.
+                  */}
+                  <span className="text-xs text-ink-500">
+                    {kpis.tat.jobsAnalysed.toLocaleString('en-IN')} job
+                    {kpis.tat.jobsAnalysed === 1 ? '' : 's'} scored
+                  </span>
+                  <button type="button" onClick={() => router.push('/performance')} className="text-xs text-info hover:text-info-text font-medium">
+                    Full Performance Book →
+                  </button>
+                </div>
+              </>
             )}
           </Panel>
         </div>
@@ -624,14 +691,57 @@ export default function HomePage() {
                       ),
                     }))}
                   />
-                  {r.cities.length > 4 && (
-                    <div className="flex items-center justify-between pt-2 text-xs text-ink-500">
-                      <span>+ {r.cities.length - 4} more cities</span>
-                      <span className="tabular-nums">
-                        {r.cities.slice(4).reduce((a, c) => a + c.jobs, 0).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  )}
+                  {(() => {
+                    const rest = r.cities.slice(4).reduce((a, c) => a + c.jobs, 0);
+                    const mapped = r.cities.reduce((a, c) => a + c.jobs, 0);
+                    /*
+                     * ⚠ THE BARS DO NOT SUM TO 100%, and that is not a rounding
+                     * artefact. The cities query excludes jobs whose address has
+                     * no city (`ci.city_name IS NOT NULL AND <> ''`), while the
+                     * denominator here is the window's TOTAL — because that is
+                     * what the "N · X%" beside every row claims to be a share OF,
+                     * and it is the same total the Performance card reports.
+                     *
+                     * Denominating against the cities' own sum instead would make
+                     * the bars fill the track, at the cost of every percentage
+                     * quietly meaning "of the work we could place on a map". So
+                     * the shortfall is NAMED below rather than hidden by a
+                     * flattering denominator — adding bars is what made this gap
+                     * visible, so the bars should be what explains it.
+                     */
+                    const unplaced = Math.max(0, r.performance.total - mapped);
+                    if (rest === 0 && unplaced === 0) return null;
+                    return (
+                      <div className="pt-2 space-y-2">
+                        {rest > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between text-xs text-ink-500">
+                              <span>+ {r.cities.length - 4} more cities</span>
+                              <span className="tabular-nums">
+                                {rest.toLocaleString('en-IN')} · {pct(rest, r.performance.total)}%
+                              </span>
+                            </div>
+                            {/* Same scale and accent as the four rows above: this
+                                IS those cities, just not named individually, so
+                                the set reads as top-four AGAINST everything else
+                                rather than only against each other. The text
+                                stays grey because it is a rollup you cannot
+                                click; the bar matches because it measures the
+                                same quantity. */}
+                            <Bar value={rest / Math.max(1, r.performance.total)} accent="info" />
+                          </div>
+                        )}
+                        {unplaced > 0 && (
+                          <div className="flex items-center justify-between text-xs text-ink-500">
+                            <span>No city recorded</span>
+                            <span className="tabular-nums">
+                              {unplaced.toLocaleString('en-IN')} · {pct(unplaced, r.performance.total)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/*
                     The drill-down lands on Open orders, which is a DIFFERENT
                     cohort to the count beside it: this card counts every order
@@ -856,32 +966,3 @@ function RangeBody<T>({
  * scope is visible at a glance rather than something you discover by reading
  * the dropdown.
  */
-function ChipSelect({
-  icon: Icon, label, value, onChange, options,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  const active = value !== '' && value !== DEFAULT_RANGE;
-  return (
-    <label
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1.5 text-xs font-medium transition focus-within:border-primary',
-        active ? 'border-primary bg-primary-50 text-primary' : 'border-ink-100 bg-surface text-ink-700',
-      )}
-    >
-      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent pr-1 text-xs font-medium focus:outline-none cursor-pointer max-w-[10rem] truncate"
-      >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
-  );
-}

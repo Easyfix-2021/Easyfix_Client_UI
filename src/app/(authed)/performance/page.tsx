@@ -43,12 +43,15 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  Gauge, Wrench, RotateCcw, Timer, Lock, AlertTriangle, Loader2, Info,
+  Gauge, Wrench, RotateCcw, Timer, Lock, AlertTriangle, Loader2, Info, MapPin,
 } from 'lucide-react';
 import { useFetch, useFetchOnce } from '@/lib/hooks';
 import { useHasGrant } from '@/lib/spoc-context';
 import {
-  PageHeader, SectionLabel, StatRow, KpiCard, Banner, Panel, Segmented,
+  performanceKpis, JUDGE_ACCENT, kpiPct as pct, kpiDays as days, type Judgement,
+} from '@/lib/kpi';
+import {
+  PageHeader, SectionLabel, StatRow, KpiCard, Banner, Panel, Segmented, ChipSelect,
   DataTable, Row, Cell, StatusPill, Pill, EmptyState, ActionButton,
   type Accent, type Status,
 } from '@/components/ui/console';
@@ -58,8 +61,9 @@ import {
  * services it composes, not off the mock.
  */
 
-/** client-target.service.js judgeAgainst(): met / within 10% / worse. */
-type Judgement = 'ok' | 'watch' | 'risk';
+/* Judgement, JUDGE_ACCENT, pct, days and the KPI builder come from
+   @/lib/kpi — Home's Performance health card shows the SAME four figures, and
+   one definition is what stops the two screens disagreeing. */
 
 type Segment = {
   no: number;
@@ -204,7 +208,6 @@ function periodWindows(key: PeriodKey, now: Date): {
  * with each. These two tables turn that verdict into console vocabulary, so
  * Performance cannot invent a different green from Invoicing.
  */
-const JUDGE_ACCENT: Record<Judgement, Accent> = { ok: 'success', watch: 'warning', risk: 'brand' };
 const JUDGE_STATUS: Record<Judgement, Status> = { ok: 'on-track', watch: 'watch', risk: 'at-risk' };
 
 /**
@@ -246,39 +249,23 @@ function densify(rows: Performance['volume'], now: Date) {
   return months.map((month) => byMonth.get(month) ?? { month, completed: 0, cancelled: 0 });
 }
 
-const pct = (v: number | null | undefined) => (v == null ? '—' : `${v}%`);
-const days = (v: number | null | undefined) => (v == null ? '—' : `${v}d`);
 const num = (v: number) => v.toLocaleString('en-IN');
 
-/**
- * Progress toward a target, for the KPI bar. Two directions, because a revisit
- * rate and an age at close are met by going DOWN — a bar that filled as those
- * rose would read as progress while the service got worse.
- */
-const towardHigher = (v: number | null, t: number) => (v == null || !t ? undefined : v / t);
-const towardLower = (v: number | null, t: number) => (v == null ? undefined : v <= 0 ? 1 : t / v);
-
-/**
- * A real delta between the selected window and the one before it, or nothing.
- * `deltaDirection` is the direction of TRAVEL; KpiCard's own `good` decides
- * whether that direction is an improvement.
- */
-function deltaOf(
-  current: number | null | undefined,
-  previous: number | null | undefined,
-  unit: string,
-  label: string,
-): { delta?: string; deltaDirection?: 'up' | 'down' } {
-  if (current == null || previous == null) return {};
-  const diff = Math.round((current - previous) * 10) / 10;
-  if (diff === 0) return {};
-  return { delta: `${Math.abs(diff)}${unit} vs ${label}`, deltaDirection: diff > 0 ? 'up' : 'down' };
-}
 
 export default function PerformancePage() {
   const allowed = useHasGrant('performance');
   const [period, setPeriod] = useState<PeriodKey>('month');
   const [dim, setDim] = useState('city');
+  /*
+   * City scope. /performance grew a ?city= dimension on 2026-08-26 so the
+   * client dashboard's KPI card could obey the chip above it; this page now
+   * drives it too, rather than owning a capability it could not reach.
+   *
+   * Options come from GET /cities — DISTINCT over the CLIENT'S OWN jobs, not
+   * the ~11k city master — so every option can actually select something, and
+   * an unknown value selects nothing rather than reaching another tenant.
+   */
+  const [city, setCity] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [showCaveats, setShowCaveats] = useState(false);
 
@@ -287,16 +274,20 @@ export default function PerformancePage() {
 
   // path = null skips the request entirely, so a SPOC without the grant never
   // fires a call the server would 403.
+  const cityQs = city ? `&city=${encodeURIComponent(city)}` : '';
   const path = allowed
-    ? `/performance?from=${current.from}&to=${current.to}&dim=${encodeURIComponent(dim)}&months=${MONTHS}`
+    ? `/performance?from=${current.from}&to=${current.to}&dim=${encodeURIComponent(dim)}&months=${MONTHS}${cityQs}`
     : null;
   const { data, error, loading, reload } = useFetchOnce<Performance>(path);
 
   // The comparison window. Pinned to dim=city and months=1: this call exists
   // only for four scalars, and re-running the scorer because someone switched
   // the table to Category would be pure waste.
-  const prevPath = allowed ? `/performance?from=${previous.from}&to=${previous.to}&dim=city&months=1` : null;
+  /* The comparison MUST carry the same city, or every delta on this page
+     compares one city against the whole client. */
+  const prevPath = allowed ? `/performance?from=${previous.from}&to=${previous.to}&dim=city&months=1${cityQs}` : null;
   const { data: prior } = useFetch<Performance>(prevPath);
+  const { data: cities } = useFetchOnce<{ items: string[] }>(allowed ? '/cities' : null);
 
   if (!allowed) {
     return (
@@ -369,68 +360,47 @@ export default function PerformancePage() {
             {loading ? ' · updating…' : ''}
           </>
         }
-        filters={<Segmented options={PERIODS} value={period} onChange={setPeriod} />}
+        filters={
+          <>
+            <ChipSelect
+              icon={MapPin}
+              label={city || 'All cities'}
+              value={city}
+              onChange={setCity}
+              allLabel="All cities"
+              options={cities?.items ?? []}
+            />
+            <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+          </>
+        }
       />
 
       <SectionLabel>Against target</SectionLabel>
       <StatRow className="mb-4">
-        <KpiCard
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <Gauge className="w-3.5 h-3.5" aria-hidden /> SLA compliance · EasyFix segments
-            </span>
-          }
-          value={pct(tat.efScorePct)}
-          good="up"
-          {...deltaOf(tat.efScorePct, prior?.tat.efScorePct, 'pp', previous.short)}
-          target={`Target ${targets.sla_pct}%`}
-          progress={towardHigher(tat.efScorePct, targets.sla_pct)}
-          accent={JUDGE_ACCENT[tat.efStatus]}
-        />
-        <KpiCard
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <Wrench className="w-3.5 h-3.5" aria-hidden /> First time fix rate
-            </span>
-          }
-          value={pct(firstTimeFix.ftfrPct)}
-          good="up"
-          {...deltaOf(firstTimeFix.ftfrPct, prior?.firstTimeFix.ftfrPct, 'pp', previous.short)}
-          // `available: false` means the linked_job table is absent, so a
-          // follow-up visit cannot be detected at all. The server sends null
-          // rather than a fabricated 100%, and the card says which it is.
-          target={firstTimeFix.available ? `Target ${targets.ftfr_pct}%` : 'Not recorded'}
-          progress={towardHigher(firstTimeFix.ftfrPct, targets.ftfr_pct)}
-          accent={firstTimeFix.available ? JUDGE_ACCENT[firstTimeFix.ftfrStatus] : 'info'}
-        />
-        <KpiCard
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <RotateCcw className="w-3.5 h-3.5" aria-hidden /> Revisit rate
-            </span>
-          }
-          value={pct(firstTimeFix.revisitPct)}
-          // A FALLING revisit rate is an improvement.
-          good="down"
-          {...deltaOf(firstTimeFix.revisitPct, prior?.firstTimeFix.revisitPct, 'pp', previous.short)}
-          target={firstTimeFix.available ? `Target under ${targets.revisit_pct}%` : 'Not recorded'}
-          progress={towardLower(firstTimeFix.revisitPct, targets.revisit_pct)}
-          accent={firstTimeFix.available ? JUDGE_ACCENT[firstTimeFix.revisitStatus] : 'info'}
-        />
-        <KpiCard
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <Timer className="w-3.5 h-3.5" aria-hidden /> Avg age at close
-            </span>
-          }
-          value={days(closure.avgAgeDays)}
-          // As is a FALLING age at close.
-          good="down"
-          {...deltaOf(closure.avgAgeDays, prior?.closure.avgAgeDays, 'd', previous.short)}
-          target={`Target under ${targets.avg_age_days}d`}
-          progress={towardLower(closure.avgAgeDays, targets.avg_age_days)}
-          accent={JUDGE_ACCENT[closure.avgAgeStatus]}
-        />
+        {/*
+          Built by @/lib/kpi, not spelled out here. Home's Performance health
+          card shows these same four, and every rule that could drift between
+          the two screens — which field, which target, which direction is an
+          improvement, how a null formats — lives in that one builder. What
+          stays local is only the SHAPE: big cards here, compact rows there.
+        */}
+        {performanceKpis(data, prior, previous.short).map((k) => (
+          <KpiCard
+            key={k.key}
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <k.icon className="w-3.5 h-3.5" aria-hidden /> {k.label}
+              </span>
+            }
+            value={k.value}
+            good={k.good}
+            delta={k.delta}
+            deltaDirection={k.deltaDirection}
+            target={k.target}
+            progress={k.progress}
+            accent={k.accent}
+          />
+        ))}
       </StatRow>
 
       {tat.truncated && (

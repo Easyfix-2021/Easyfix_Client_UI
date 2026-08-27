@@ -282,7 +282,7 @@ const BAR_FILL: Record<Accent, string> = {
   warning: 'bg-warning', money: 'bg-money',
 };
 
-function Bar({ value, accent = 'success' }: { value: number; accent?: Accent }) {
+export function Bar({ value, accent = 'success' }: { value: number; accent?: Accent }) {
   return (
     <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
       <div
@@ -482,17 +482,7 @@ export function KpiCard({
         ) : <span />}
         {target ? <span className="text-xs text-ink-500">{target}</span> : null}
       </div>
-      {typeof progress === 'number' ? (
-        <div className="mt-1.5 h-1 rounded-full bg-ink-100 overflow-hidden">
-          <div
-            className={cn('h-full rounded-full', {
-              brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
-              warning: 'bg-warning', money: 'bg-money',
-            }[accent])}
-            style={{ width: `${Math.max(0, Math.min(1, progress)) * 100}%` }}
-          />
-        </div>
-      ) : null}
+      {typeof progress === 'number' ? <Bar value={progress} accent={accent} /> : null}
     </div>
   );
 }
@@ -532,10 +522,10 @@ export function ProportionBar({
   className?: string;
 }) {
   const total = segments.reduce((a, s) => a + s.value, 0) || 1;
-  const fill: Record<Accent, string> = {
-    brand: 'bg-primary', info: 'bg-info', success: 'bg-success',
-    warning: 'bg-warning', money: 'bg-money',
-  };
+  // BAR_FILL, not a local copy — this map had drifted into three places, and
+  // two of them painting the same accent a different colour is the kind of bug
+  // nobody reports because each screen looks fine on its own.
+  const fill = BAR_FILL;
   return (
     <div className={className}>
       <div className="flex h-2 rounded-full overflow-hidden bg-ink-100">
@@ -600,6 +590,51 @@ export function RankedList({
         );
       })}
     </div>
+  );
+}
+
+/* ─── chip select ──────────────────────────────────────────────────────────
+ *
+ * A FilterChip that opens a native picker: the chip is the face, a transparent
+ * <select> sits OVER it as a sibling. That overlay is the point — an earlier
+ * copy nested the select inside the chip, which meant it could not use
+ * FilterChip at all (a <select> inside a <button> is invalid HTML) and had to
+ * restyle the chip by hand. Two chip styles that had to be kept in step.
+ *
+ * Native, not a popover: real keyboard support, a real mobile picker, and no
+ * open/closed state to own.
+ *
+ * `neutral` is the value that counts as "not filtering" and so leaves the chip
+ * untinted. It defaults to '' for an all/none picker; a control whose value is
+ * always set — a date-range preset, say — passes its default instead, or every
+ * chip would read as an active filter.
+ */
+export function ChipSelect({
+  icon, label, value, onChange, allLabel, options, neutral = '',
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  /** Adds a leading empty option. Omit when every choice is a real value. */
+  allLabel?: string;
+  options: ReadonlyArray<string | { value: string; label: string }>;
+  neutral?: string;
+}) {
+  const opts = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
+  return (
+    <span className="relative inline-flex">
+      <FilterChip icon={icon} active={value !== neutral}>{label}</FilterChip>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={allLabel || label}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      >
+        {allLabel ? <option value="">{allLabel}</option> : null}
+        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </span>
   );
 }
 
