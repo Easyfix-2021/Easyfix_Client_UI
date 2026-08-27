@@ -24,6 +24,14 @@ export default defineConfig({
     // Mirrors tsconfig's `@/*` → `src/*` so tests import exactly what the app does.
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  /*
+   * ⚠ EXPLICIT, because tsconfig says `jsx: "preserve"` — correct for Next,
+   * which does its own transform, but it leaves esbuild emitting classic
+   * React.createElement calls into a test file that never imports React. The
+   * symptom is "React is not defined" pointing at the render() call rather
+   * than at any config.
+   */
+  esbuild: { jsx: 'automatic' },
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.tsx'],
