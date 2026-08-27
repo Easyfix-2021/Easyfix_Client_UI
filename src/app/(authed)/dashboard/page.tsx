@@ -409,16 +409,15 @@ export default function HomePage() {
    *   with EasyFix   job_status NOT IN (3,5,6,7)   — every non-terminal job
    *   with you       job_status = 15               — estimate sent, undecided
    *
-   * ⚠ THESE OVERLAP, AND THAT IS THE SPEC, NOT A BUG. Status 15 is
-   * non-terminal, so it is inside the EasyFix count as well as being the whole
-   * of yours. I raised it and this is the confirmed reading, so neither number
-   * is adjusted: each segment shows exactly the figure its label names. Do not
-   * "fix" this by subtracting — the previous version did, and it made the
-   * EasyFix figure something no stated definition produces.
+   * ⚠ THE TWO SEGMENTS PARTITION THE OPEN BOOK. openTotal is the universe —
+   * every non-terminal job — and awaitingYou is the slice of it that is yours,
+   * so EasyFix is the REMAINDER. With two open jobs and one awaiting approval
+   * the bar reads 1 and 1, which is what a reader expects of a bar whose two
+   * halves are captioned "EasyFix" and "you".
    *
-   * The consequence to know: ProportionBar scales by the SUM of its segments,
-   * so the widths are each count over (openTotal + awaitingYou) rather than a
-   * partition of the open book. The COUNTS printed in the labels are exact.
+   * Status 15 IS inside openTotal, which is why this subtracts rather than
+   * showing both raw: printing 2 and 1 against a book of 2 would have the same
+   * job standing on both sides of the bar.
    *
    * Both replaced worse numbers. `onYou` was estimatePending + noResponse —
    * status 15 plus every job flagged call_later, which is a CUSTOMER not
@@ -426,7 +425,7 @@ export default function HomePage() {
    * newTickets + inProgress, which omits 15, 21 and 10.
    */
   const onYou = counts.awaitingYou;
-  const withUs = counts.openTotal;
+  const withUs = Math.max(0, counts.openTotal - onYou);
 
   const longDate = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -535,9 +534,10 @@ export default function HomePage() {
         <StatCard
           icon={PhoneOff}
           accent="brand"
-          label="Customer unreachable"
+          label="Customer Unreachable"
           value={stat(attention.repeatedlyUnreachable)}
           sub="3 days running · still open"
+          onClick={() => router.push('/unreachable')}
         />
       </StatRow>
 
@@ -550,7 +550,7 @@ export default function HomePage() {
             title={
               <span className="inline-flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-primary" aria-hidden />
-                Jobs waiting on you
+                Jobs Waiting for You
               </span>
             }
             action={queue?.total ? <Pill accent="brand">{queue.total} items</Pill> : null}
@@ -596,7 +596,7 @@ export default function HomePage() {
 
         <div className="flex flex-col min-w-0">
           <SectionLabel>Open breakdown</SectionLabel>
-          <Panel className="flex-1" title="Pending with EasyFix vs with you">
+          <Panel className="flex-1" title="Pending with EasyFix vs with You">
             <ProportionBar
               segments={[
                 { label: `EasyFix (${withUs} jobs)`, value: withUs, accent: 'info' },

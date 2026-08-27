@@ -109,8 +109,30 @@ describe('Home tolerates a backend that predates a field', () => {
     setFetches({ '/dashboard-summary': { data: older, loading: false } });
 
     const { container } = render(<Home />);
-    expect(container.textContent).toContain('Customer unreachable');
-    const tile = screen.getByText('Customer unreachable').closest('div')?.parentElement;
+    expect(container.textContent).toContain('Customer Unreachable');
+    const tile = screen.getByText('Customer Unreachable').closest('div')?.parentElement;
     expect(tile?.textContent).toContain('—');
+  });
+});
+
+describe('Open breakdown partitions the open book', () => {
+  it('EasyFix is the REMAINDER, so the two halves sum to the open total', () => {
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    const { container } = render(<Home />);
+    /*
+     * openTotal 12, awaitingYou 2 → 10 and 2. Status 15 is INSIDE openTotal,
+     * so showing both raw would stand the same job on both sides of a bar
+     * captioned "EasyFix" and "you".
+     */
+    expect(container.textContent).toContain('EasyFix (10 jobs)');
+    expect(container.textContent).toContain('Pending on you (2 jobs)');
+  });
+
+  it('the headings are Title Case', () => {
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    const { container } = render(<Home />);
+    expect(container.textContent).toContain('Jobs Waiting for You');
+    expect(container.textContent).toContain('Pending with EasyFix vs with You');
+    expect(container.textContent).toContain('Customer Unreachable');
   });
 });
