@@ -40,7 +40,7 @@ import { performanceKpis, type KpiSource } from '@/lib/kpi';
 import { openJobDrawer } from '@/components/job-drawer';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
-  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState, Bar,
+  RankedList, ProportionBar, MetricRow, ActionButton, EmptyState, Bar, ChipSelect,
 } from '@/components/ui/console';
 
 /* ─── contracts ─────────────────────────────────────────────────────────── */
@@ -410,26 +410,28 @@ export default function HomePage() {
               */}
             <ChipSelect
               icon={MapPin}
-              label="City"
+              label={city || 'All cities'}
               value={city}
               onChange={(v) => pushScope({ city: v })}
-              options={cityOptions}
+              allLabel="All cities"
+              options={cityOptions.filter((o) => o.value !== '')}
             />
             {team?.isManager && spocOptions.length > 1 && (
               <ChipSelect
                 icon={User}
-                label="SPOC"
+                label={spocOptions.find((m) => String(m.id) === spoc)?.name || 'All SPOCs'}
                 value={spoc}
                 onChange={(v) => pushScope({ spoc: v })}
-                options={[{ value: '', label: 'All SPOCs' },
-                          ...spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))]}
+                allLabel="All SPOCs"
+                options={spocOptions.map((m) => ({ value: String(m.id), label: m.name || `Contact #${m.id}` }))}
               />
             )}
             <ChipSelect
               icon={CalendarDays}
-              label="Date range"
+              label={rangeLabel}
               value={rangeKey}
               onChange={(v) => pushScope({ range: v as RangeKey })}
+              neutral={DEFAULT_RANGE}
               options={RANGE_PRESETS.map((r) => ({ value: r.key, label: r.label }))}
             />
           </>
@@ -964,32 +966,3 @@ function RangeBody<T>({
  * scope is visible at a glance rather than something you discover by reading
  * the dropdown.
  */
-function ChipSelect({
-  icon: Icon, label, value, onChange, options,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  const active = value !== '' && value !== DEFAULT_RANGE;
-  return (
-    <label
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border pl-3 pr-2 py-1.5 text-xs font-medium transition focus-within:border-primary',
-        active ? 'border-primary bg-primary-50 text-primary' : 'border-ink-100 bg-surface text-ink-700',
-      )}
-    >
-      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent pr-1 text-xs font-medium focus:outline-none cursor-pointer max-w-[10rem] truncate"
-      >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
-  );
-}

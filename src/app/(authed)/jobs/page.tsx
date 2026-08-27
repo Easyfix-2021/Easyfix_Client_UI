@@ -41,7 +41,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Building2, Loader2, MapPin, MessageSquare, Search, User,
@@ -52,7 +52,7 @@ import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
-  PageHeader, SectionLabel, Toolbar, FilterChip, AgeBand, SplitLayout,
+  PageHeader, SectionLabel, Toolbar, FilterChip, ChipSelect, AgeBand, SplitLayout,
   DataTable, Row, Cell, Pill, Panel, Banner, DetailPane, MetaRow,
   ActionButton, EmptyState, type Accent,
 } from '@/components/ui/console';
@@ -161,47 +161,95 @@ function useOpenBook(spocId: number | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  /** Statuses whose sweep failed — the list is INCOMPLETE, and the page says so. */
+  const [partial, setPartial] = useState<number[]>([]);
+  /*
+   * Supersession guard. Changing the SPOC starts a new load while the old
+   * one's seven requests are still in flight, and a late chunk from the
+   * previous scope must not append itself to the new one.
+   *
+   * ⚠ The guard is on the WRITES, never on the single setLoading(false) — a
+   * stale-guarded finally is how a screen ends up stuck on its skeleton
+   * forever when the guard trips.
+   */
+  const seqRef = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = seqRef.current + 1;
+    seqRef.current = seq;
     setLoading(true);
     setError(null);
-    try {
-      const scope = spocId ? `&spoc=${spocId}` : '';
-      /*
-       * ⚠ sortBy=age IS THE CAP'S CORRECTNESS, not an ordering preference.
-       *
-       * Each status is capped at PER_STATUS_CAP. Unsorted, the route falls back
-       * to `ORDER BY j.job_id DESC` — highest ids, i.e. most recently CREATED —
-       * so the rows dropped by the cap were the OLDEST open jobs. This screen
-       * exists to open on the worst thing in the book and sorts oldest-first to
-       * do it, so the cap was discarding precisely what the page is for, and
-       * the age band above it was counting a set with its tail cut off.
-       *
-       * `age` is on the backend's SORTABLE_COLUMNS whitelist and resolves to
-       * GREATEST(TIMESTAMPDIFF(SECOND, j.ticket_created_date_time, <end>), 0) —
-       * the SAME measure this page's ageDays and every bucket is computed from,
-       * and anchored on ticket_created_date_time, which is immutable (unlike
-       * created_date_time, which is re-stamped on edits). One definition, so
-       * the server's choice of which rows survive and the client's ordering of
-       * them can never disagree.
-       */
-      const pages = await Promise.all(
-        OPEN_STATUSES.map((s) => fetchAllJobs<JobRow>(
-          `status=${s}${scope}&sortBy=age&sortDir=desc`, PER_STATUS_CAP,
-        )),
-      );
-      setTruncated(pages.some((p) => p.length >= PER_STATUS_CAP));
-      setJobs(pages.flat());
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load your open jobs');
+    setPartial([]);
+
+    const scope = spocId ? `&spoc=${spocId}` : '';
+    /*
+     * ⚠ sortBy=age IS THE CAP'S CORRECTNESS, not an ordering preference.
+     *
+     * Each status is capped at PER_STATUS_CAP. Unsorted, the route falls back
+     * to `ORDER BY j.job_id DESC` — highest ids, i.e. most recently CREATED —
+     * so the rows dropped by the cap were the OLDEST open jobs. This screen
+     * exists to open on the worst thing in the book and sorts oldest-first to
+     * do it, so the cap was discarding precisely what the page is for, and
+     * the age band above it was counting a set with its tail cut off.
+     *
+     * `age` is on the backend's SORTABLE_COLUMNS whitelist and resolves to
+     * GREATEST(TIMESTAMPDIFF(SECOND, j.ticket_created_date_time, <end>), 0) —
+     * the SAME measure this page's ageDays and every bucket is computed from,
+     * and anchored on ticket_created_date_time, which is immutable (unlike
+     * created_date_time, which is re-stamped on edits). One definition, so
+     * the server's choice of which rows survive and the client's ordering of
+     * them can never disagree.
+     */
+    /*
+     * ─── SEVEN SWEEPS, RENDERED AS THEY LAND ──────────────────────────────
+     *
+     * This was `await Promise.all(...)` followed by one setJobs, so the page
+     * showed nothing at all until the SLOWEST of seven status sweeps came
+     * back — on a large client, the whole screen waited on its least
+     * interesting status. Each sweep now appends the moment it resolves.
+     *
+     * The accumulator is why the list is not blanked first: the previous
+     * scope's rows stay on screen until the first chunk of the new one
+     * arrives, so a manual refresh does not flash empty.
+     */
+    const acc: JobRow[] = [];
+    let capped = false;
+    const failed: number[] = [];
+
+    const settled = await Promise.all(OPEN_STATUSES.map((st) =>
+      fetchAllJobs<JobRow>(`status=${st}${scope}&sortBy=age&sortDir=desc`, PER_STATUS_CAP)
+        .then((rows) => {
+          if (seqRef.current !== seq) return;
+          if (rows.length >= PER_STATUS_CAP) capped = true;
+          acc.push(...rows);
+          setJobs([...acc]);
+        })
+        .catch((err) => {
+          failed.push(st);
+          return err instanceof ApiError ? err.message : 'Could not load your open jobs';
+        })));
+
+    if (seqRef.current !== seq) return;
+
+    /*
+     * ⚠ A PARTIAL BOOK IS NOT A LOADED BOOK. Under Promise.all one failed
+     * sweep rejected the lot and the page showed an error. Streaming would
+     * instead show six statuses out of seven with no sign anything was
+     * missing — every bucket count silently short. So: all seven failed is an
+     * error, some failed is a disclosed partial, and only none failed is a
+     * clean load.
+     */
+    if (failed.length === OPEN_STATUSES.length) {
+      setError(settled.find((m) => typeof m === 'string') || 'Could not load your open jobs');
       setJobs([]);
-    } finally {
-      setLoading(false);
     }
+    setPartial(failed);
+    setTruncated(capped);
+    setLoading(false);
   }, [spocId]);
 
   useEffect(() => { void load(); }, [load]);
-  return { jobs, loading, error, truncated, reload: load };
+  return { jobs, loading, error, truncated, partial, reload: load };
 }
 
 /* ─── ageing ──────────────────────────────────────────────────────────────
@@ -676,14 +724,12 @@ export default function OpenJobsPage() {
 
   /* ─── loading / failure ─────────────────────────────────────────────── */
 
-  if (book.loading && jobs.length === 0) {
-    return (
-      <div className="bg-surface rounded-xl border border-ink-100 p-10 text-center">
-        <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
-        <div className="mt-2 text-sm text-ink-500">Loading your open jobs…</div>
-      </div>
-    );
-  }
+  /*
+   * NO PAGE-WIDE SPINNER. The toolbar, the age band and the list frame do not
+   * need the book to exist, and the seven sweeps now land one at a time — so
+   * the screen appears immediately and fills in. The list area shows its own
+   * spinner while it is genuinely empty; see the SplitLayout below.
+   */
   if (book.error) {
     return (
       <Panel accent="brand">
@@ -817,6 +863,22 @@ export default function OpenJobsPage() {
         </FilterChip>
       </Toolbar>
 
+      {/*
+        ⚠ AN INCOMPLETE BOOK, DISCLOSED. Streaming means one failed status
+        sweep no longer takes the whole page down — but six statuses out of
+        seven rendered silently is worse than an error, because every bucket
+        count below is short and nothing says so.
+      */}
+      {book.partial.length > 0 ? (
+        <Banner accent="warning" className="mb-4">
+          {book.partial.length} of {OPEN_STATUSES.length} open states could not be loaded, so the list
+          and the bucket counts below are incomplete.{' '}
+          <button type="button" onClick={() => void book.reload()} className="underline font-medium">
+            Try again
+          </button>
+        </Banner>
+      ) : null}
+
       {book.truncated ? (
         <Banner accent="warning" className="mb-4">
           More than {PER_STATUS_CAP.toLocaleString('en-IN')} jobs in one open state — the list and the
@@ -839,7 +901,17 @@ export default function OpenJobsPage() {
 
       <SplitLayout
         list={
-          rows.length === 0 ? (
+          book.loading && rows.length === 0 ? (
+            /* Still arriving. A spinner HERE rather than over the whole page —
+               the toolbar and age band are already usable, and the filters can
+               be set while the sweeps land. */
+            <Panel>
+              <div className="py-10 text-center">
+                <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
+                <div className="mt-2 text-sm text-ink-500">Loading your open jobs…</div>
+              </div>
+            </Panel>
+          ) : rows.length === 0 ? (
             <Panel>
               <EmptyState
                 icon={Search}
@@ -1160,29 +1232,3 @@ export default function OpenJobsPage() {
  * the chip is untouched and unrestyled, and every behaviour a dropdown needs
  * comes from the element the platform already ships.
  */
-function ChipSelect({
-  icon, label, value, onChange, allLabel, options,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  allLabel: string;
-  options: ReadonlyArray<string | { value: string; label: string }>;
-}) {
-  const opts = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
-  return (
-    <span className="relative inline-flex">
-      <FilterChip icon={icon} active={!!value}>{label}</FilterChip>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={allLabel}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-      >
-        <option value="">{allLabel}</option>
-        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </span>
-  );
-}

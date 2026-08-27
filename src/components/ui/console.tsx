@@ -593,6 +593,51 @@ export function RankedList({
   );
 }
 
+/* ─── chip select ──────────────────────────────────────────────────────────
+ *
+ * A FilterChip that opens a native picker: the chip is the face, a transparent
+ * <select> sits OVER it as a sibling. That overlay is the point — an earlier
+ * copy nested the select inside the chip, which meant it could not use
+ * FilterChip at all (a <select> inside a <button> is invalid HTML) and had to
+ * restyle the chip by hand. Two chip styles that had to be kept in step.
+ *
+ * Native, not a popover: real keyboard support, a real mobile picker, and no
+ * open/closed state to own.
+ *
+ * `neutral` is the value that counts as "not filtering" and so leaves the chip
+ * untinted. It defaults to '' for an all/none picker; a control whose value is
+ * always set — a date-range preset, say — passes its default instead, or every
+ * chip would read as an active filter.
+ */
+export function ChipSelect({
+  icon, label, value, onChange, allLabel, options, neutral = '',
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  /** Adds a leading empty option. Omit when every choice is a real value. */
+  allLabel?: string;
+  options: ReadonlyArray<string | { value: string; label: string }>;
+  neutral?: string;
+}) {
+  const opts = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
+  return (
+    <span className="relative inline-flex">
+      <FilterChip icon={icon} active={value !== neutral}>{label}</FilterChip>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={allLabel || label}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      >
+        {allLabel ? <option value="">{allLabel}</option> : null}
+        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </span>
+  );
+}
+
 /* ─── split layout ─────────────────────────────────────────────────────────
  * List on the left, detail on the right — the shape of Open jobs and
  * Completed. On narrow viewports the detail moves BELOW the list rather than

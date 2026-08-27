@@ -43,7 +43,7 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  Gauge, Wrench, RotateCcw, Timer, Lock, AlertTriangle, Loader2, Info,
+  Gauge, Wrench, RotateCcw, Timer, Lock, AlertTriangle, Loader2, Info, MapPin,
 } from 'lucide-react';
 import { useFetch, useFetchOnce } from '@/lib/hooks';
 import { useHasGrant } from '@/lib/spoc-context';
@@ -51,7 +51,7 @@ import {
   performanceKpis, JUDGE_ACCENT, kpiPct as pct, kpiDays as days, type Judgement,
 } from '@/lib/kpi';
 import {
-  PageHeader, SectionLabel, StatRow, KpiCard, Banner, Panel, Segmented,
+  PageHeader, SectionLabel, StatRow, KpiCard, Banner, Panel, Segmented, ChipSelect,
   DataTable, Row, Cell, StatusPill, Pill, EmptyState, ActionButton,
   type Accent, type Status,
 } from '@/components/ui/console';
@@ -256,6 +256,16 @@ export default function PerformancePage() {
   const allowed = useHasGrant('performance');
   const [period, setPeriod] = useState<PeriodKey>('month');
   const [dim, setDim] = useState('city');
+  /*
+   * City scope. /performance grew a ?city= dimension on 2026-08-26 so the
+   * client dashboard's KPI card could obey the chip above it; this page now
+   * drives it too, rather than owning a capability it could not reach.
+   *
+   * Options come from GET /cities — DISTINCT over the CLIENT'S OWN jobs, not
+   * the ~11k city master — so every option can actually select something, and
+   * an unknown value selects nothing rather than reaching another tenant.
+   */
+  const [city, setCity] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [showCaveats, setShowCaveats] = useState(false);
 
@@ -264,16 +274,20 @@ export default function PerformancePage() {
 
   // path = null skips the request entirely, so a SPOC without the grant never
   // fires a call the server would 403.
+  const cityQs = city ? `&city=${encodeURIComponent(city)}` : '';
   const path = allowed
-    ? `/performance?from=${current.from}&to=${current.to}&dim=${encodeURIComponent(dim)}&months=${MONTHS}`
+    ? `/performance?from=${current.from}&to=${current.to}&dim=${encodeURIComponent(dim)}&months=${MONTHS}${cityQs}`
     : null;
   const { data, error, loading, reload } = useFetchOnce<Performance>(path);
 
   // The comparison window. Pinned to dim=city and months=1: this call exists
   // only for four scalars, and re-running the scorer because someone switched
   // the table to Category would be pure waste.
-  const prevPath = allowed ? `/performance?from=${previous.from}&to=${previous.to}&dim=city&months=1` : null;
+  /* The comparison MUST carry the same city, or every delta on this page
+     compares one city against the whole client. */
+  const prevPath = allowed ? `/performance?from=${previous.from}&to=${previous.to}&dim=city&months=1${cityQs}` : null;
   const { data: prior } = useFetch<Performance>(prevPath);
+  const { data: cities } = useFetchOnce<{ items: string[] }>(allowed ? '/cities' : null);
 
   if (!allowed) {
     return (
@@ -346,7 +360,19 @@ export default function PerformancePage() {
             {loading ? ' · updating…' : ''}
           </>
         }
-        filters={<Segmented options={PERIODS} value={period} onChange={setPeriod} />}
+        filters={
+          <>
+            <ChipSelect
+              icon={MapPin}
+              label={city || 'All cities'}
+              value={city}
+              onChange={setCity}
+              allLabel="All cities"
+              options={cities?.items ?? []}
+            />
+            <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+          </>
+        }
       />
 
       <SectionLabel>Against target</SectionLabel>
