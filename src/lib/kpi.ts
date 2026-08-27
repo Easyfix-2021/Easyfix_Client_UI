@@ -94,12 +94,16 @@ export type Kpi = {
  * the previous window) to get deltas; omit it for a screen that shows none.
  *
  * ⚠ `available: false` means the linked_job table is absent, so a follow-up
- * visit cannot be DETECTED at all. The server sends null rather than a
- * fabricated 100%, and both KPIs say "Not recorded" instead of judging a number
- * that does not exist.
+ * visit cannot be DETECTED at all. It gates the REVISIT rate ONLY.
+ *
+ * First-time fix used to be gated by it too, because both numbers came from
+ * that table — ftfr was "no child row" and revisit was `100 - ftfr`. It is now
+ * check-in and check-out on the same day: two core tbl_job columns, measurable
+ * on any deployment, and a different question from whether anyone came back.
  */
 export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLabel = 'previous'): Kpi[] {
-  const ftfAvailable = d.firstTimeFix.available;
+  /** linked_job present — gates the REVISIT rate only. */
+  const revisitMeasurable = d.firstTimeFix.available;
   return [
     {
       key: 'sla',
@@ -118,9 +122,10 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       label: 'First time fix rate',
       value: kpiPct(d.firstTimeFix.ftfrPct),
       good: 'up',
-      target: ftfAvailable ? `Target ${d.targets.ftfr_pct}%` : 'Not recorded',
+      // NOT gated on `available` — same-day close needs no linked_job table.
+      target: `Target ${d.targets.ftfr_pct}%`,
       progress: towardHigher(d.firstTimeFix.ftfrPct, d.targets.ftfr_pct),
-      accent: ftfAvailable ? accentFor(d.firstTimeFix.ftfrStatus) : 'info',
+      accent: accentFor(d.firstTimeFix.ftfrStatus),
       ...deltaOf(d.firstTimeFix.ftfrPct, prior?.firstTimeFix.ftfrPct, 'pp', priorLabel),
     },
     {
@@ -130,9 +135,9 @@ export function performanceKpis(d: KpiSource, prior?: KpiSource | null, priorLab
       value: kpiPct(d.firstTimeFix.revisitPct),
       // A FALLING revisit rate is an improvement.
       good: 'down',
-      target: ftfAvailable ? `Target under ${d.targets.revisit_pct}%` : 'Not recorded',
+      target: revisitMeasurable ? `Target under ${d.targets.revisit_pct}%` : 'Not recorded',
       progress: towardLower(d.firstTimeFix.revisitPct, d.targets.revisit_pct),
-      accent: ftfAvailable ? accentFor(d.firstTimeFix.revisitStatus) : 'info',
+      accent: revisitMeasurable ? accentFor(d.firstTimeFix.revisitStatus) : 'info',
       ...deltaOf(d.firstTimeFix.revisitPct, prior?.firstTimeFix.revisitPct, 'pp', priorLabel),
     },
     {

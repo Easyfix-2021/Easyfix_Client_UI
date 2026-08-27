@@ -10,8 +10,9 @@
     "brand:gen": "node scripts/gen-brand-css.mjs",
     "brand:verify": "node scripts/gen-brand-css.mjs --verify",
     "check:brand": "node scripts/check-brand-tokens.js",
-    "test:build": "tsc src/lib/format.ts --outDir .test-build --rootDir src/lib --module commonjs --target es2020 --skipLibCheck",
-    "test": "npm run test:build && node --test tests/*.test.js"
+    "test:build": "tsc src/lib/format.ts src/lib/sweeps.ts --outDir .test-build --rootDir src/lib --module commonjs --target es2020 --skipLibCheck",
+    "test": "npm run test:build && node --test tests/*.test.js && npm run test:react",
+    "test:react": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -28,13 +29,18 @@
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.1.0",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   }
 }

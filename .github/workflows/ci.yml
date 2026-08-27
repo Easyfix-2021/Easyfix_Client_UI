@@ -1,0 +1,54 @@
+# Easyfix_client_UI — PR gate: typecheck, brand guard and both test suites
+# BEFORE a change merges into a deploy branch.
+#
+# The QA/Production PUSH path is gated separately by deploy.yml's `precheck`
+# job, which runs the same three commands — this covers the pull-request path
+# without duplicating the push path. Same split the backend's ci.yml uses.
+#
+# Nothing here touches a database, a network or a browser: the lib suite is
+# node:test over dependency-free modules, and the React suite is vitest under
+# jsdom with the data hooks mocked. Deterministic, ~1 minute on a hosted runner.
+
+name: CI (typecheck + brand + tests)
+
+on:
+  pull_request:
+    branches: [QA, Production]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck, brand guard & unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # ⚠ NODE 22, NOT 20 — jsdom 29 declares ^20.19.0 || ^22.13.0 || >=24 and
+      # @vitejs/plugin-react 6 declares ^20.19.0 || >=22.12.0. `node-version: 20`
+      # would only work while setup-node resolves 20.x to >= 20.19.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: 'npm' }
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # A strict assertion, not advice — tokens only, no colour literals
+      # outside the seam, weights <= 600, type >= 12px.
+      - name: Brand guard
+        run: npm run check:brand
+
+      # `npm test` chains both: test:build compiles the dependency-free lib
+      # modules for node:test, then vitest runs the React hook and page tests.
+      - name: Unit tests (lib + React)
+        run: npm test
+
+      # A production build is the only check that catches what tsc does not —
+      # a Next page exporting something it may not, a bad import boundary, a
+      # server/client mismatch.
+      - name: Production build
+        run: npm run build
