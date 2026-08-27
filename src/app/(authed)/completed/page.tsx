@@ -409,18 +409,33 @@ export default function CompletedPage() {
     if (url) window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const loading = (closed.loading || audited.loading) && rows.length === 0;
+  const listPending = (closed.loading || audited.loading) && rows.length === 0;
   const failed = closed.error && audited.error;
 
-  if (loading) {
-    return (
-      <div className="bg-surface rounded-xl border border-ink-100 p-10 text-center">
-        <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
-        <div className="mt-2 text-sm text-ink-500">Loading completed jobs…</div>
-      </div>
-    );
-  }
+  /*
+   * ⚠ BOTH CALLS MUST HAVE ANSWERED BEFORE ANY AGGREGATE IS REAL.
+   *
+   * This page is the union of two status sweeps (3 and 5), so every figure
+   * computed from `rows` while one is still in flight counts HALF the window —
+   * and the page-wide spinner that used to sit here is what hid that. With the
+   * frame rendering first, a confident half-total would be on screen instead,
+   * which is worse than a spinner: it looks like an answer.
+   *
+   * Keyed on `data`, not on `loading`, so a refetch does NOT blank figures
+   * already on screen — useFetch spreads `loading: true` over its existing
+   * state rather than clearing it (see the note above).
+   */
+  const bothIn = !!closed.data && !!audited.data;
+  /** Em dash until the window is whole. */
+  const agg = (v: number) => (bothIn ? v.toLocaleString('en-IN') : '—');
 
+  /*
+   * NO PAGE-WIDE SPINNER. The window chip is the control a reader reaches for
+   * when this page is slow — a wide window on a large client is exactly the
+   * case where both 500-row sweeps take their time — so trapping it behind the
+   * query it exists to narrow was the wrong way round. The frame renders
+   * immediately; only the list waits.
+   */
   if (failed) {
     return (
       <Panel accent="brand">
@@ -465,7 +480,9 @@ export default function CompletedPage() {
           window chip re-queries the server. */}
       <Toolbar
         count={
-          truncated
+          !bothIn
+            ? 'Loading…'
+            : truncated
             ? `${filtered.length.toLocaleString('en-IN')} shown · ${windowTotal.toLocaleString('en-IN')} completed in this window`
             : `${filtered.length.toLocaleString('en-IN')} completed`
         }
@@ -564,7 +581,10 @@ export default function CompletedPage() {
 
       {/* The 500-row cap is the route's, not ours. Saying so is the difference
           between a windowed figure and a wrong one. */}
-      {truncated ? (
+      {/* bothIn: windowTotal is the SUM of two totals, so mid-load this banner
+          could compare a full row count against half a window and claim a
+          truncation that is not there. */}
+      {bothIn && truncated ? (
         <Banner
           accent="info"
           className="mb-4"
@@ -581,7 +601,7 @@ export default function CompletedPage() {
           icon={CheckCircle2}
           accent="success"
           label="Completed"
-          value={stats.n.toLocaleString('en-IN')}
+          value={agg(stats.n)}
           sub={`${win.label} · closed ${fmtDay(win.from)} – ${fmtDay(win.to)}`}
         />
         <StatCard
@@ -593,15 +613,15 @@ export default function CompletedPage() {
           // this tile reports the closure evidence the payload DOES carry — a
           // technician check-in on the job.
           label="With on-site check-in"
-          value={pct(stats.withCheckin, stats.n) == null ? '—' : `${pct(stats.withCheckin, stats.n)}%`}
-          sub={`${stats.withCheckin.toLocaleString('en-IN')} of ${stats.n.toLocaleString('en-IN')} carry a technician check-in`}
+          value={!bothIn || pct(stats.withCheckin, stats.n) == null ? '—' : `${pct(stats.withCheckin, stats.n)}%`}
+          sub={`${agg(stats.withCheckin)} of ${agg(stats.n)} carry a technician check-in`}
         />
         <StatCard
           icon={Clock}
           accent="info"
           label="Avg days to close"
-          value={stats.avgAge == null ? '—' : stats.avgAge.toFixed(1)}
-          sub={`Ticket raised → checked out · ${stats.ageN.toLocaleString('en-IN')} job${stats.ageN === 1 ? '' : 's'} measured`}
+          value={!bothIn || stats.avgAge == null ? '—' : stats.avgAge.toFixed(1)}
+          sub={`Ticket raised → checked out · ${agg(stats.ageN)} job${stats.ageN === 1 ? '' : 's'} measured`}
         />
         <StatCard
           icon={CalendarCheck}
@@ -611,8 +631,8 @@ export default function CompletedPage() {
           // column, so nothing on this payload can say a job was rated well.
           // Closure inside a day is the nearest thing the data can prove.
           label="Closed within a day"
-          value={pct(stats.insideADay, stats.ageN) == null ? '—' : `${pct(stats.insideADay, stats.ageN)}%`}
-          sub={`${stats.insideADay.toLocaleString('en-IN')} closed in 1 day or less`}
+          value={!bothIn || pct(stats.insideADay, stats.ageN) == null ? '—' : `${pct(stats.insideADay, stats.ageN)}%`}
+          sub={`${agg(stats.insideADay)} closed in 1 day or less`}
         />
       </StatRow>
 
@@ -621,7 +641,14 @@ export default function CompletedPage() {
       <SplitLayout
         list={
           <Panel bodyClassName="px-4 py-1.5">
-            {filtered.length === 0 ? (
+            {listPending ? (
+              /* The spinner lives HERE now, not over the whole page — the
+                 window chip above is already usable, which is the point. */
+              <div className="py-10 text-center">
+                <Loader2 className="w-7 h-7 mx-auto animate-spin text-ink-300" aria-hidden />
+                <div className="mt-2 text-sm text-ink-500">Loading completed jobs…</div>
+              </div>
+            ) : filtered.length === 0 ? (
               <EmptyState
                 icon={CheckCircle2}
                 title="No completed jobs in this window"
