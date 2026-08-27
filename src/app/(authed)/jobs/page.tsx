@@ -57,7 +57,7 @@ import {
   ActionButton, EmptyState, type Accent,
 } from '@/components/ui/console';
 import { formatIst } from '@/lib/format';
-import { classifySweeps } from '@/lib/sweeps';
+import { useOpenBook, OPEN_STATUSES, PER_STATUS_CAP } from '@/lib/open-book';
 
 /* ─── contracts ───────────────────────────────────────────────────────────
  * Written against the handlers, not the mock: GET /jobs projects
@@ -152,110 +152,6 @@ type TeamMember = { id: number; name: string | null };
  * the "Your action needed" chip counts the rows in THIS book rather than the
  * queue's own total; see queueCount below.
  */
-const OPEN_STATUSES = [9, 0, 1, 2, 20, 15, 21] as const;
-
-/** Per-status ceiling. fetchAllJobs pages at 500, so this is at most two calls. */
-const PER_STATUS_CAP = 1000;
-
-function useOpenBook(spocId: number | null) {
-  const [jobs, setJobs] = useState<JobRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
-  /** Statuses whose sweep failed — the list is INCOMPLETE, and the page says so. */
-  const [partial, setPartial] = useState<number[]>([]);
-  /*
-   * Supersession guard. Changing the SPOC starts a new load while the old
-   * one's seven requests are still in flight, and a late chunk from the
-   * previous scope must not append itself to the new one.
-   *
-   * ⚠ The guard is on the WRITES, never on the single setLoading(false) — a
-   * stale-guarded finally is how a screen ends up stuck on its skeleton
-   * forever when the guard trips.
-   */
-  const seqRef = useRef(0);
-
-  const load = useCallback(async () => {
-    const seq = seqRef.current + 1;
-    seqRef.current = seq;
-    setLoading(true);
-    setError(null);
-    setPartial([]);
-
-    const scope = spocId ? `&spoc=${spocId}` : '';
-    /*
-     * ⚠ sortBy=age IS THE CAP'S CORRECTNESS, not an ordering preference.
-     *
-     * Each status is capped at PER_STATUS_CAP. Unsorted, the route falls back
-     * to `ORDER BY j.job_id DESC` — highest ids, i.e. most recently CREATED —
-     * so the rows dropped by the cap were the OLDEST open jobs. This screen
-     * exists to open on the worst thing in the book and sorts oldest-first to
-     * do it, so the cap was discarding precisely what the page is for, and
-     * the age band above it was counting a set with its tail cut off.
-     *
-     * `age` is on the backend's SORTABLE_COLUMNS whitelist and resolves to
-     * GREATEST(TIMESTAMPDIFF(SECOND, j.ticket_created_date_time, <end>), 0) —
-     * the SAME measure this page's ageDays and every bucket is computed from,
-     * and anchored on ticket_created_date_time, which is immutable (unlike
-     * created_date_time, which is re-stamped on edits). One definition, so
-     * the server's choice of which rows survive and the client's ordering of
-     * them can never disagree.
-     */
-    /*
-     * ─── SEVEN SWEEPS, RENDERED AS THEY LAND ──────────────────────────────
-     *
-     * This was `await Promise.all(...)` followed by one setJobs, so the page
-     * showed nothing at all until the SLOWEST of seven status sweeps came
-     * back — on a large client, the whole screen waited on its least
-     * interesting status. Each sweep now appends the moment it resolves.
-     *
-     * The accumulator is why the list is not blanked first: the previous
-     * scope's rows stay on screen until the first chunk of the new one
-     * arrives, so a manual refresh does not flash empty.
-     */
-    const acc: JobRow[] = [];
-    let capped = false;
-    const failed: number[] = [];
-
-    const settled = await Promise.all(OPEN_STATUSES.map((st) =>
-      fetchAllJobs<JobRow>(`status=${st}${scope}&sortBy=age&sortDir=desc`, PER_STATUS_CAP)
-        .then((rows) => {
-          if (seqRef.current !== seq) return;
-          if (rows.length >= PER_STATUS_CAP) capped = true;
-          acc.push(...rows);
-          setJobs([...acc]);
-        })
-        .catch((err) => {
-          failed.push(st);
-          return err instanceof ApiError ? err.message : 'Could not load your open jobs';
-        })));
-
-    if (seqRef.current !== seq) return;
-
-    /*
-     * ⚠ A PARTIAL BOOK IS NOT A LOADED BOOK. Under Promise.all one failed
-     * sweep rejected the lot and the page showed an error. Streaming would
-     * instead show six statuses out of seven with no sign anything was
-     * missing — every bucket count silently short. So: all seven failed is an
-     * error, some failed is a disclosed partial, and only none failed is a
-     * clean load.
-     */
-    /* classifySweeps is in lib so this decision has a runnable check — the
-       portal has no React test harness, and a branch left inline in a hook is
-       verifiable only by reading. See tests/sweeps.test.js. */
-    const outcome = classifySweeps(OPEN_STATUSES.length, failed.length);
-    if (outcome === 'failed') {
-      setError(settled.find((m) => typeof m === 'string') || 'Could not load your open jobs');
-      setJobs([]);
-    }
-    setPartial(outcome === 'partial' ? failed : []);
-    setTruncated(capped);
-    setLoading(false);
-  }, [spocId]);
-
-  useEffect(() => { void load(); }, [load]);
-  return { jobs, loading, error, truncated, partial, reload: load };
-}
 
 /* ─── ageing ──────────────────────────────────────────────────────────────
  * Five mutually exclusive buckets, in this precedence:
@@ -568,7 +464,7 @@ export default function OpenJobsPage() {
     ? spocParam
     : null;
 
-  const book = useOpenBook(spocId);
+  const book = useOpenBook<JobRow>(spocId);
   // The endpoint the spec names for the page total. It counts the client's WHOLE
   // book, not the open part — see the header line where it is used.
   const orders = useFetchOnce<{ otherOrders: number; completedOrders: number }>('/orders/counts');

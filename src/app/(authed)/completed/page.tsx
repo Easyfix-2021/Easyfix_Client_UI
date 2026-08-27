@@ -58,6 +58,7 @@ import {
   ActionButton, EmptyState,
 } from '@/components/ui/console';
 import { formatIst } from '@/lib/format';
+import { classifySweeps } from '@/lib/sweeps';
 
 /* ─── contracts ─────────────────────────────────────────────────────────────
  * Only the columns this page reads, named exactly as jobService.LIST_COLUMNS
@@ -410,7 +411,15 @@ export default function CompletedPage() {
   };
 
   const listPending = (closed.loading || audited.loading) && rows.length === 0;
-  const failed = closed.error && audited.error;
+  /*
+   * Same three-way outcome /jobs uses, from the same tested function rather
+   * than hand-rolled again — this page fans out over two status sweeps where
+   * that one fans out over seven, but the decision is identical and so is the
+   * failure it guards: the sweeps that DID land render fine, so a partial book
+   * looks like a whole one.
+   */
+  const outcome = classifySweeps(2, (closed.error ? 1 : 0) + (audited.error ? 1 : 0));
+  const failed = outcome === 'failed';
 
   /*
    * ⚠ BOTH CALLS MUST HAVE ANSWERED BEFORE ANY AGGREGATE IS REAL.
@@ -571,7 +580,7 @@ export default function CompletedPage() {
       {/* Completed is two status codes read separately (see the header). If one
           read fails the page still has rows — and every figure on it is short by
           an unknown amount, which the reader has to be told. */}
-      {!failed && (closed.error || audited.error) ? (
+      {outcome === 'partial' ? (
         <Banner accent="warning" className="mb-4">
           One of the two completed statuses could not be read
           {closed.error ? ' (Completed)' : ' (Completed & audited)'} — {closed.error || audited.error}.
