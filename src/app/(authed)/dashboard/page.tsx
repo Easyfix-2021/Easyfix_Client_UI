@@ -387,21 +387,29 @@ export default function HomePage() {
   const totalOpen = counts.newTickets + counts.inProgress;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
   /*
-   * Pending with EasyFix vs pending with YOU.
+   * Pending with EasyFix vs pending with YOU, to the definitions Harshit gave:
    *
-   * ⚠ BOTH HALVES CHANGED. `onYou` was estimatePending + noResponse — status 15
-   * plus every job flagged call_later, which is a CUSTOMER not answering their
-   * phone and is not a thing the client can act on. `withUs` was derived from
-   * newTickets + inProgress, which counts statuses 9 and 0/1/2/20 and silently
-   * omits 15, 21 and 10 — open jobs by any reading.
+   *   with EasyFix   job_status NOT IN (3,5,6,7)   — every non-terminal job
+   *   with you       job_status = 15               — estimate sent, undecided
    *
-   * Now: with you is status 15 exactly, and the open book is every
-   * non-terminal job. The server sends both raw so the bar SUBTRACTS rather
-   * than adding two independently-derived numbers — that is what makes the two
-   * segments partition one total instead of overlapping.
+   * ⚠ THESE OVERLAP, AND THAT IS THE SPEC, NOT A BUG. Status 15 is
+   * non-terminal, so it is inside the EasyFix count as well as being the whole
+   * of yours. I raised it and this is the confirmed reading, so neither number
+   * is adjusted: each segment shows exactly the figure its label names. Do not
+   * "fix" this by subtracting — the previous version did, and it made the
+   * EasyFix figure something no stated definition produces.
+   *
+   * The consequence to know: ProportionBar scales by the SUM of its segments,
+   * so the widths are each count over (openTotal + awaitingYou) rather than a
+   * partition of the open book. The COUNTS printed in the labels are exact.
+   *
+   * Both replaced worse numbers. `onYou` was estimatePending + noResponse —
+   * status 15 plus every job flagged call_later, which is a CUSTOMER not
+   * answering their phone and nothing a client can act on. `withUs` came from
+   * newTickets + inProgress, which omits 15, 21 and 10.
    */
   const onYou = counts.awaitingYou;
-  const withUs = Math.max(0, counts.openTotal - onYou);
+  const withUs = counts.openTotal;
 
   const longDate = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -517,9 +525,11 @@ export default function HomePage() {
                 {queue.items.slice(0, 4).map((it) => (
                   <ListRow
                     key={it.jobId}
-                    /* Only a status-15 row is an estimate awaiting approval.
-                       Calling every row that had the same title was how 6,832
-                       enquiries came to read as approvals on QA. */
+                    /* The queue is filtered to status 15 server-side, so this
+                       reads "Estimate approval" for every row today. Still
+                       driven by the FLAG rather than assumed: if that filter is
+                       ever loosened, the title stays honest instead of calling
+                       6,832 enquiries approvals again, which is what it did. */
                     title={`${it.approvable ? 'Estimate approval' : 'Open order'} — ${it.reference || `Job ${it.jobId}`}${it.city ? ` ${it.city}` : ''}`}
                     sub={[it.category, it.estimateValue != null ? `Estimate ₹${it.estimateValue.toLocaleString('en-IN')}` : null]
                       .filter(Boolean).join(' · ')}

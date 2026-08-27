@@ -79,6 +79,10 @@ const LIMIT = 100;
  */
 const TYPE_LABEL: Record<string, string> = {
   approval: 'Estimate approval',
+  // The queue is filtered to status 15 server-side, so 'open' cannot arrive
+  // today. Mapped anyway: the fallback below renders an unknown type as its
+  // raw token, and "open" as a heading is worse than a wrong-but-tidy one.
+  open: 'Open order',
 };
 
 /*
