@@ -31,7 +31,7 @@ import { useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FolderOpen, CheckCircle2, CalendarDays, CalendarRange,
-  AlertTriangle, MapPin, User, Loader2, type LucideIcon,
+  AlertTriangle, MapPin, User, Loader2, PhoneOff, type LucideIcon,
 } from 'lucide-react';
 import { useFetchOnce, useRecentJobs } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
@@ -51,6 +51,12 @@ type Summary = {
   attention: {
     invoicesDue: { count: number; amount: number };
     estimatePending: number; noResponse: number; onHold: number; revisit: number; qcDone: number;
+    /*
+     * Unreachable on THREE DIFFERENT DAYS inside a three-day span, on a job
+     * that is still open. Distinct from `noResponse`, which is the bare
+     * call_later flag — "unreachable at least once, ever".
+     */
+    repeatedlyUnreachable: number;
   };
   counts: {
     newTickets: number; inProgress: number; completed: number; cancelled: number; escalated: number;
@@ -374,14 +380,25 @@ export default function HomePage() {
     attention: {
       invoicesDue: { count: 0, amount: 0 },
       estimatePending: 0, noResponse: 0, onHold: 0, revisit: 0, qcDone: 0,
+      repeatedlyUnreachable: 0,
     },
     counts: { newTickets: 0, inProgress: 0, completed: 0, cancelled: 0, escalated: 0, openTotal: 0, awaitingYou: 0 },
     teamSize: 0,
   };
-  /** Em dash until the number is real — never a placeholder zero. */
-  const stat = (v: number) => (data ? v.toLocaleString('en-IN') : '—');
+  /*
+   * Em dash until the number is real — never a placeholder zero.
+   *
+   * ⚠ `v == null` IS LOAD-BEARING, not defensive noise. A field the deployed
+   * backend does not send yet arrives as undefined, and calling
+   * .toLocaleString() on it throws inside render — taking the WHOLE PAGE down
+   * rather than showing one dash. That is precisely what a frontend deployed
+   * ahead of its backend looks like, and this dashboard adds summary fields
+   * often enough for it to be a real order-of-deploy hazard.
+   */
+  const stat = (v: number | undefined | null) => (data && v != null ? v.toLocaleString('en-IN') : '—');
   /** Same, for the sub-lines fed by the 60-day job window. */
-  const jstat = (v: number) => (jobsLoading ? '—' : v.toLocaleString('en-IN'));
+  const jstat = (v: number | undefined | null) =>
+    (jobsLoading || v == null ? '—' : v.toLocaleString('en-IN'));
 
   const { counts, slaAging, attention, boxes } = summary;
   const totalOpen = counts.newTickets + counts.inProgress;
@@ -468,7 +485,9 @@ export default function HomePage() {
       />
 
       <SectionLabel>Today&rsquo;s pulse</SectionLabel>
-      <StatRow className="mb-6">
+      {/* Five across, not the default four — the unreachable tile is a fifth
+          measure, and wrapping one card onto its own row reads as a mistake. */}
+      <StatRow className="mb-6 xl:grid-cols-5">
         <StatCard
           icon={FolderOpen}
           accent="info"
@@ -503,6 +522,22 @@ export default function HomePage() {
           label="Plan this week"
           value={jstat(derived.weekPlanned)}
           sub={jobsLoading ? 'Mon–Sun' : `Mon–Sun · ${derived.weekDone} already done`}
+        />
+        {/*
+          REPEATEDLY UNREACHABLE — a pattern, not a single miss.
+          Three different DAYS inside a three-day span, on a job still open.
+          Three calls in one afternoon is one bad afternoon and does not
+          qualify; one call across three days is a single attempt and does not
+          either. The server does the counting, from the comment history at
+          comment_on = 16 — tbl_job.call_later is a bit(1) flag with no count
+          and no dates, so it cannot answer this and is not used.
+        */}
+        <StatCard
+          icon={PhoneOff}
+          accent="brand"
+          label="Customer unreachable"
+          value={stat(attention.repeatedlyUnreachable)}
+          sub="3 days running · still open"
         />
       </StatRow>
 
