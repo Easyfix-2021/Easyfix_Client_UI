@@ -57,6 +57,7 @@ import {
   ActionButton, EmptyState, type Accent,
 } from '@/components/ui/console';
 import { formatIst } from '@/lib/format';
+import { classifySweeps } from '@/lib/sweeps';
 
 /* ─── contracts ───────────────────────────────────────────────────────────
  * Written against the handlers, not the mock: GET /jobs projects
@@ -239,11 +240,15 @@ function useOpenBook(spocId: number | null) {
      * error, some failed is a disclosed partial, and only none failed is a
      * clean load.
      */
-    if (failed.length === OPEN_STATUSES.length) {
+    /* classifySweeps is in lib so this decision has a runnable check — the
+       portal has no React test harness, and a branch left inline in a hook is
+       verifiable only by reading. See tests/sweeps.test.js. */
+    const outcome = classifySweeps(OPEN_STATUSES.length, failed.length);
+    if (outcome === 'failed') {
       setError(settled.find((m) => typeof m === 'string') || 'Could not load your open jobs');
       setJobs([]);
     }
-    setPartial(failed);
+    setPartial(outcome === 'partial' ? failed : []);
     setTruncated(capped);
     setLoading(false);
   }, [spocId]);
