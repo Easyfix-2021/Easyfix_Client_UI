@@ -12,7 +12,8 @@
     "check:brand": "node scripts/check-brand-tokens.js",
     "test:build": "tsc src/lib/format.ts src/lib/sweeps.ts --outDir .test-build --rootDir src/lib --module commonjs --target es2020 --skipLibCheck",
     "test": "npm run test:build && node --test tests/*.test.js && npm run test:react",
-    "test:react": "vitest run"
+    "test:react": "vitest run",
+    "hooks:install": "git config core.hooksPath .githooks && echo \"hooks installed (core.hooksPath=.githooks)\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
