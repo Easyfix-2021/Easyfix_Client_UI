@@ -138,7 +138,19 @@ type QueueItem = {
 };
 
 /** GET /team — `isManager` decides whether the SPOC filter is even offered. */
-type TeamMember = { id: number; name: string | null };
+/*
+ * inScope: /team is also the company DIRECTORY, so it lists every contact.
+ * The picker below must only offer SPOCs whose book this caller can open —
+ * an id outside the subtree is IGNORED by the server, so offering it puts a
+ * name in the chip that the list is not scoped to. Optional, so a backend
+ * that predates the field is treated as "everyone in scope" rather than
+ * emptying the picker.
+ */
+type TeamMember = { id: number; name: string | null; inScope?: boolean };
+
+/** The SPOCs this caller may actually scope to. */
+const inScope = (items: TeamMember[] | undefined) =>
+  (items ?? []).filter((m) => m.inScope !== false);
 
 /* ─── the open book ───────────────────────────────────────────────────────
  * Home's "Total open" and this screen now count ONE book: job_status NOT IN
@@ -463,7 +475,7 @@ export default function OpenJobsPage() {
    * to. That only happens on a hand-edited URL; a link from Home always carries
    * an id /team will confirm.
    */
-  const spocId = !team.data || (team.data.items ?? []).some((m) => m.id === spocParam)
+  const spocId = !team.data || inScope(team.data.items).some((m) => m.id === spocParam)
     ? spocParam
     : null;
 
@@ -681,7 +693,7 @@ export default function OpenJobsPage() {
   const canEscalate = !!selected && !estimatePending && selectedBucket !== 'future';
 
   const scopeName = spocId
-    ? (team.data?.items ?? []).find((m) => m.id === spocId)?.name || 'Selected SPOC'
+    ? inScope(team.data?.items).find((m) => m.id === spocId)?.name || 'Selected SPOC'
     : null;
 
   return (
@@ -746,7 +758,7 @@ export default function OpenJobsPage() {
             value={spocId ? String(spocId) : ''}
             onChange={(v) => setFilters({ spoc: v })}
             allLabel="All SPOCs"
-            options={(team.data.items ?? []).map((m) => ({
+            options={inScope(team.data.items).map((m) => ({
               value: String(m.id),
               label: m.name || `Contact ${m.id}`,
             }))}

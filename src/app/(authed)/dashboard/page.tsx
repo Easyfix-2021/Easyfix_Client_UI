@@ -225,9 +225,24 @@ export default function HomePage() {
    * nobody reporting to them has one option, which is not a filter.
    */
   const { data: cityList } = useFetchOnce<{ items: string[] }>('/cities');
-  const { data: team } = useFetchOnce<{ items: Array<{ id: number; name: string | null; status: number }>; isManager: boolean }>('/team');
+  const { data: team } = useFetchOnce<{
+    items: Array<{ id: number; name: string | null; status: number; inScope?: boolean }>;
+    isManager: boolean;
+  }>('/team');
+  /*
+   * ⚠ inScope, NOT just status. /team is also the company DIRECTORY, so it
+   * lists every contact — and this picker offered all of them. Picking a
+   * colleague outside your subtree passed the validation on the next line,
+   * put their name in the chip, and then hierarchyFilter ignored the id, so
+   * the cards showed YOUR book under THEIR name. Exactly what the note below
+   * says must never happen.
+   *
+   * `!== false` and not `=== true`: a backend that predates the field sends
+   * undefined, and hiding every option would be a worse failure than the one
+   * being fixed.
+   */
   const spocOptions = useMemo(
-    () => (team?.items ?? []).filter((m) => m.status === 1),
+    () => (team?.items ?? []).filter((m) => m.status === 1 && m.inScope !== false),
     [team],
   );
 
