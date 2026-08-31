@@ -401,7 +401,20 @@ export default function HomePage() {
     (jobsLoading || v == null ? '—' : v.toLocaleString('en-IN'));
 
   const { counts, slaAging, attention, boxes } = summary;
-  const totalOpen = counts.newTickets + counts.inProgress;
+  /*
+   * ⚠ THE CARD AND THE BAR BESIDE IT MUST COUNT THE SAME BOOK.
+   *
+   * This was newTickets + inProgress — statuses 9 and (0,1,2,20) — while the
+   * open-breakdown bar two panels over partitions `openTotal`, every job NOT
+   * IN (3,5,6,7). So a book of 6 open jobs with one estimate awaiting approval
+   * rendered "Total open 5" beside a bar reading 5 + 1, and the missing job
+   * was the one the client was being asked to act on. 15, 21 and 10 are open
+   * by any reading; only the two named buckets are not.
+   *
+   * Left as `counts.openTotal` rather than withUs + onYou so the universe has
+   * ONE definition and the segments stay derived from it.
+   */
+  const totalOpen = counts.openTotal;
   const closedDelta = derived.closedYesterday - derived.closedDayBefore;
   /*
    * Pending with EasyFix vs pending with YOU, to the definitions Harshit gave:

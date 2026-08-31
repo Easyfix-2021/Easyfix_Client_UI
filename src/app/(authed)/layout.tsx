@@ -236,9 +236,22 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     let cancelled = false;
     async function refreshCounts() {
       try {
-        const orders = await api.get<{ otherOrders: number }>('/orders/counts').catch(() => null);
+        const orders = await api
+          .get<{ otherOrders: number; openOrders?: number }>('/orders/counts')
+          .catch(() => null);
         if (cancelled) return;
-        if (orders) setOpenCount(Number(orders.otherOrders) || 0);
+        /*
+         * ⚠ openOrders, NOT otherOrders. otherOrders is EVERY order on file —
+         * the "All Orders" tab count on Order History — so a tab named "Open
+         * jobs" was badged "99+" over a page reading "209 orders on file · 2
+         * of them open". A badge on that tab has one honest meaning.
+         *
+         * Absent (a backend deployed behind this build) leaves the badge
+         * UNSET rather than falling back to otherOrders: the badge is
+         * advisory and hides itself when it has no number, which is strictly
+         * better than confidently showing the wrong one.
+         */
+        if (orders && orders.openOrders != null) setOpenCount(Number(orders.openOrders) || 0);
       } catch { /* advisory only */ }
     }
     refreshCounts();
