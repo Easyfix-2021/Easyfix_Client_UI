@@ -51,7 +51,7 @@ describe('useOpenBook', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // The banner's condition. Without this the page renders five statuses out
-    // of seven and looks entirely healthy.
+    // of eight and looks entirely healthy.
     expect(result.current.partial.sort()).toEqual([1, 20]);
     // NOT an error — an error would replace a screen that has usable rows on it.
     expect(result.current.error).toBeNull();
@@ -59,7 +59,7 @@ describe('useOpenBook', () => {
     expect(result.current.jobs).toHaveLength((OPEN_STATUSES.length - 2) * 2);
   });
 
-  it('one failure out of seven is enough to disclose', async () => {
+  it('one failure out of eight is enough to disclose', async () => {
     sweeps({ failing: [21] });
     const { result } = renderHook(() => useOpenBook<Row>(null));
     await waitFor(() => expect(result.current.loading).toBe(false));

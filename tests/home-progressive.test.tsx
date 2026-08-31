@@ -77,9 +77,9 @@ describe('Home progressive render', () => {
     setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
     render(<Home />);
 
-    // newTickets 4 + inProgress 7
+    // openTotal 12 — the whole open book, not newTickets 4 + inProgress 7.
     const openTile = screen.getByText('Total open').closest('div')?.parentElement;
-    expect(openTile?.textContent).toContain('11');
+    expect(openTile?.textContent).toContain('12');
     expect(openTile?.textContent).not.toContain('—');
   });
 
@@ -93,7 +93,8 @@ describe('Home progressive render', () => {
     const closed = screen.getByText('Closed yesterday').closest('div')?.parentElement;
     expect(closed?.textContent).toContain('—');
     const openTile = screen.getByText('Total open').closest('div')?.parentElement;
-    expect(openTile?.textContent).toContain('11');
+    // openTotal, not newTickets + inProgress — see the reconciliation test below.
+    expect(openTile?.textContent).toContain('12');
   });
 });
 
@@ -134,5 +135,51 @@ describe('Open breakdown partitions the open book', () => {
     expect(container.textContent).toContain('Jobs Waiting for You');
     expect(container.textContent).toContain('Pending with EasyFix vs with You');
     expect(container.textContent).toContain('Customer Unreachable');
+  });
+});
+
+describe('Total open and the bar beside it count ONE book', () => {
+  it('⚠ the card is openTotal — not newTickets + inProgress', () => {
+    /*
+     * THE BUG THIS PINS. The card summed newTickets (9) + inProgress
+     * (0,1,2,20) while the bar two panels over partitioned openTotal, every
+     * job NOT IN (3,5,6,7). With the fixture's 12 open and 2 awaiting
+     * approval, the card read 10 beside a bar reading 10 + 2 — and the job it
+     * dropped was one the client was being asked to act on.
+     *
+     * 4 + 7 = 11 here, deliberately DIFFERENT from openTotal 12, so the old
+     * arithmetic cannot satisfy this test by coincidence.
+     */
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    render(<Home />);
+    const tile = screen.getByText('Total open').closest('div')?.parentElement;
+    expect(tile?.textContent).toContain('12');
+    expect(tile?.textContent).not.toContain('11');
+  });
+
+  it('the two segments sum to the card', () => {
+    setFetches({ '/dashboard-summary': { data: SUMMARY, loading: false } });
+    const { container } = render(<Home />);
+    // 10 + 2 = 12, the number on the card. A reader can add them up.
+    expect(container.textContent).toContain('EasyFix (10 jobs)');
+    expect(container.textContent).toContain('Pending on you (2 jobs)');
+  });
+
+  it('an older backend with no openTotal shows a dash, not a zero', () => {
+    /*
+     * The card no longer derives from two fields it could always find, so a
+     * frontend deployed ahead of its backend must degrade to "—". A confident
+     * "0 open" is a wrong answer; a dash is a missing one.
+     */
+    const older = { ...SUMMARY, counts: { ...SUMMARY.counts } } as Record<string, unknown>;
+    delete (older.counts as Record<string, unknown>).openTotal;
+    setFetches({ '/dashboard-summary': { data: older, loading: false } });
+    // LOADED, so the sub-line reads "0 due today" — otherwise it renders its
+    // own dash and this assertion passes no matter what the value does.
+    setRecentJobs([], false);
+    render(<Home />);
+    const tile = screen.getByText('Total open').closest('div')?.parentElement;
+    expect(tile?.textContent).toContain('—');
+    expect(tile?.textContent).not.toContain('12');
   });
 });

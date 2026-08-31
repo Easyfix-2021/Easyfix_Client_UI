@@ -1,5 +1,5 @@
 /*
- * The open book — seven parallel status sweeps, streamed.
+ * The open book — eight parallel status sweeps, streamed.
  *
  * ⚠ THIS LIVES IN lib BECAUSE IT HAD TO BE TESTABLE. It was defined inside
  * app/(authed)/jobs/page.tsx, and Next rejects a non-page export from a page
@@ -17,7 +17,20 @@ import { ApiError } from '@/lib/api';
 import { fetchAllJobs } from '@/lib/hooks';
 import { classifySweeps } from '@/lib/sweeps';
 
-export const OPEN_STATUSES = [9, 0, 1, 2, 20, 15, 21] as const;
+/*
+ * ⚠ THIS LIST IS "job_status NOT IN (3,5,6,7)" ENUMERATED, and it has to stay
+ * that way — the Home card counts the book with that predicate and this page
+ * is where the reader lands when they click it. Any code the predicate keeps
+ * and this array drops is a job counted but not listable.
+ *
+ * 10 was the one that got dropped. It reads as CLOSED_FROM_APP, but it is a
+ * RESTING state, not a terminal one: 259 of them on QA, not one with a
+ * checkout timestamp, none newer than four months old, and statusLabel renders
+ * them as "Ready for Full-Fillement" / "Estimate Approved" — work outstanding
+ * by any reading. It is excluded from the terminal set for that reason, so the
+ * list has to carry it.
+ */
+export const OPEN_STATUSES = [9, 0, 1, 2, 20, 15, 21, 10] as const;
 
 /** Per-status ceiling. fetchAllJobs pages at 500, so this is at most two calls. */
 export const PER_STATUS_CAP = 1000;
@@ -31,7 +44,7 @@ export function useOpenBook<T>(spocId: number | null) {
   const [partial, setPartial] = useState<number[]>([]);
   /*
    * Supersession guard. Changing the SPOC starts a new load while the old
-   * one's seven requests are still in flight, and a late chunk from the
+   * one's eight requests are still in flight, and a late chunk from the
    * previous scope must not append itself to the new one.
    *
    * ⚠ The guard is on the WRITES, never on the single setLoading(false) — a
@@ -70,7 +83,7 @@ export function useOpenBook<T>(spocId: number | null) {
      * ─── SEVEN SWEEPS, RENDERED AS THEY LAND ──────────────────────────────
      *
      * This was `await Promise.all(...)` followed by one setJobs, so the page
-     * showed nothing at all until the SLOWEST of seven status sweeps came
+     * showed nothing at all until the SLOWEST of eight status sweeps came
      * back — on a large client, the whole screen waited on its least
      * interesting status. Each sweep now appends the moment it resolves.
      *
@@ -100,8 +113,8 @@ export function useOpenBook<T>(spocId: number | null) {
     /*
      * ⚠ A PARTIAL BOOK IS NOT A LOADED BOOK. Under Promise.all one failed
      * sweep rejected the lot and the page showed an error. Streaming would
-     * instead show six statuses out of seven with no sign anything was
-     * missing — every bucket count silently short. So: all seven failed is an
+     * instead show seven statuses out of eight with no sign anything was
+     * missing — every bucket count silently short. So: all eight failed is an
      * error, some failed is a disclosed partial, and only none failed is a
      * clean load.
      */

@@ -16,9 +16,10 @@
  * and the list would show 30. So both come from ONE set: the client's open book,
  * pulled once per scope change.
  *
- * `/jobs` takes a single `status`, so "open" is seven parallel calls — the same
- * seven codes Home counts as open (9 new + 0/1/2/20 in flight) plus 15 awaiting
- * approval and 21 on hold, which are open precisely BECAUSE they are waiting on
+ * `/jobs` takes a single `status`, so "open" is eight parallel calls — every
+ * code Home's "Total open" counts, i.e. job_status NOT IN (3,5,6,7) enumerated:
+ * 9 new, 0/1/2/20 in flight, 15 awaiting approval, 21 on hold and 10 awaiting
+ * fulfilment. The last four are open precisely BECAUSE they are waiting on
  * someone. Each call is capped; if a cap is hit the page says so rather than
  * quietly under-counting a bucket.
  *
@@ -140,13 +141,15 @@ type QueueItem = {
 type TeamMember = { id: number; name: string | null };
 
 /* ─── the open book ───────────────────────────────────────────────────────
- * Home counts open as newTickets (9) + inProgress (0, 1, 2, 20). This screen
- * adds 15 and 21: an estimate awaiting the client's answer and a job held for
- * parts are open precisely BECAUSE they are waiting on someone. The seven codes
- * are exactly the set the backend's own SLA-ageing query treats as still active
- * (routes/client/index.js — `j.job_status IN (0,1,2,20,9,15,21)`).
+ * Home's "Total open" and this screen now count ONE book: job_status NOT IN
+ * (3,5,6,7). Home used to count newTickets (9) + inProgress (0,1,2,20), which
+ * dropped 15, 21 and 10 — an estimate awaiting the client's answer, a job held
+ * for parts, a job awaiting fulfilment — every one of them open precisely
+ * BECAUSE it is waiting on someone. The backend's SLA-ageing query uses the
+ * same negative predicate (routes/client/index.js), so the card, the age bands
+ * and this list can no longer disagree.
  *
- * /action-queue is NOT confined to those seven. Its SQL selects on two unanswered
+ * /action-queue is NOT confined to those eight. Its SQL selects on two unanswered
  * approval stamps plus `job_status NOT IN (3,5,6)` — there is no status-15
  * predicate — so it can hold jobs in states this screen never loads. That is why
  * the "Your action needed" chip counts the rows in THIS book rather than the
@@ -375,7 +378,7 @@ export default function OpenJobsPage() {
    * useOpenBook refetches on it — and reading it from the URL DURING RENDER is
    * what makes carrying it from Home free. Seeded in an effect instead, the
    * first render would fetch the whole team's book and the effect would
-   * immediately fetch it again, narrowed: seven parallel status sweeps, twice.
+   * immediately fetch it again, narrowed: eight parallel status sweeps, twice.
    */
   const spocParam = Number(searchParams.get('spoc')) || null;
   const city = searchParams.get('city') ?? '';
@@ -627,7 +630,7 @@ export default function OpenJobsPage() {
 
   /*
    * NO PAGE-WIDE SPINNER. The toolbar, the age band and the list frame do not
-   * need the book to exist, and the seven sweeps now land one at a time — so
+   * need the book to exist, and the eight sweeps now land one at a time — so
    * the screen appears immediately and fills in. The list area shows its own
    * spinner while it is genuinely empty; see the SplitLayout below.
    */
@@ -766,8 +769,8 @@ export default function OpenJobsPage() {
 
       {/*
         ⚠ AN INCOMPLETE BOOK, DISCLOSED. Streaming means one failed status
-        sweep no longer takes the whole page down — but six statuses out of
-        seven rendered silently is worse than an error, because every bucket
+        sweep no longer takes the whole page down — but seven statuses out of
+        eight rendered silently is worse than an error, because every bucket
         count below is short and nothing says so.
       */}
       {book.partial.length > 0 ? (
