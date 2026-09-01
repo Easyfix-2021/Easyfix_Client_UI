@@ -114,7 +114,24 @@ const EXTRAS: NavItem[] = [
   { href: '/client-profile', label: 'Client Profile', icon: Building2 },
   { href: '/history',     label: 'Order History',  icon: History },
   { href: '/tickets/new', label: 'New Tickets',    icon: Ticket },
-  { href: '/wallet',      label: 'Wallet',         icon: Wallet },
+  /*
+   * ⚠ WALLET IS NOT LINKED, AND MUST NOT BE UNTIL IT HAS A BACKEND.
+   *
+   * The page makes ZERO API calls — its balance, card numbers and transactions
+   * are a hardcoded array (its own header says so: "PLACEHOLDER DATA... renders
+   * the approved UI against a mock"). That is fine for design review and not
+   * fine in the nav, where a client opens it and reads invented figures about
+   * their own account as if they were real.
+   *
+   * It cannot simply be pointed at tbl_client_transaction either. That table is
+   * an ACCRUAL ledger — every amount is positive and `balance` climbs as job
+   * charges land (421 -> 431 -> 441) — whereas this page is a PREPAID UI with a
+   * limit and a depleting balance. Wiring one to the other would show the
+   * balance rising as the client spends. It is also long dead: no non-zero row
+   * since 2024, and the last real activity was 2021.
+   *
+   * Restore this line when a real wallet backend exists.
+   */
   { href: '/ratecard',    label: 'Ratecard',       icon: ReceiptText },
   { href: '/technicians', label: 'My Technicians', icon: HardHat },
   { externalHref: 'https://www.easyfix.in/our-team', label: 'Contact Us', icon: ExternalLink },
