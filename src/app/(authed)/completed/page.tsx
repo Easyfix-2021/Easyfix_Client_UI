@@ -51,6 +51,7 @@ import {
   MapPin, Wrench, CalendarDays, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { useFetch, useFetchOnce } from '@/lib/hooks';
+import { bucketOf, isPhoto } from '@/lib/jobImageBuckets';
 import { cn } from '@/lib/utils';
 import {
   PageHeader, SectionLabel, Toolbar, FilterChip, StatRow, StatCard, Banner,
@@ -162,47 +163,11 @@ function windowFor(key: WindowKey, now: Date) {
 }
 
 /* ─── image buckets ────────────────────────────────────────────────────────
- * tbl_job_image is tagged twice — a text `image_category` and a numeric
- * `job_stage` enum — and rows in the wild carry one, the other, or neither.
- * This is the SAME vocabulary routes/admin/jobs.js bucketed the CRM's
- * transaction view with (start_job 0 · site_inspection 1 · job_sheet 2 ·
- * material_used 3 · signature 4 · checkout 5), so a photo lands in the same
- * bucket on both consoles.
- *
- * Matched against closed sets rather than a loose /before|start/ regex: a
- * substring test would put `job_sheet` or `signature` in a photo tile the
- * moment someone adds a category containing one of those fragments.
+ * Moved to `@/lib/jobImageBuckets` so the console, the job drawer and the job
+ * detail page all answer "what is this image" the same way — and so the rules
+ * sit next to their reasoning rather than in whichever screen needed them
+ * first. That module mirrors EasyFix_Backend/utils/job-image-buckets.js.
  */
-type Bucket = 'before' | 'after' | 'jobsheet' | 'material' | 'other';
-
-const norm = (s: string | null | undefined) =>
-  String(s ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-
-const BEFORE_CATS = new Set(['booking', 'start_job', 'startjob', 'checkin', 'check_in', 'site_inspection', 'siteinspection', 'before']);
-const AFTER_CATS = new Set(['completion', 'checkout', 'check_out', 'after']);
-const JOBSHEET_CATS = new Set(['job_sheet', 'jobsheet']);
-const MATERIAL_CATS = new Set(['material_used', 'material', 'materials', 'bom']);
-
-function bucketOf(im: JobImage): Bucket {
-  const c = norm(im.image_category);
-  if (BEFORE_CATS.has(c)) return 'before';
-  if (AFTER_CATS.has(c)) return 'after';
-  if (JOBSHEET_CATS.has(c)) return 'jobsheet';
-  if (MATERIAL_CATS.has(c)) return 'material';
-  // Number(null) is 0, and 0 is a REAL stage (start_job) — so an untagged row
-  // would land in "Before" if the null were not excluded first.
-  const raw = im.job_stage;
-  if (raw === null || raw === undefined || raw === '') return 'other';
-  const st = Number(raw);
-  if (st === 0 || st === 1) return 'before';
-  if (st === 5) return 'after';
-  if (st === 2) return 'jobsheet';
-  if (st === 3) return 'material';
-  return 'other';
-}
-
-/** A PDF attachment is a document, not a photo — keep it out of the tiles. */
-const isPhoto = (im: JobImage) => !/\.pdf$/i.test(String(im.image ?? ''));
 
 /* ─── small local shapes ────────────────────────────────────────────────────
  * Two things the console grammar does not have a primitive for, composed here

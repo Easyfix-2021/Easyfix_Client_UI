@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { bucketOf, isPo } from '@/lib/jobImageBuckets';
 import { useFetch } from '@/lib/hooks';
 import { seriesGradient } from '@/brand/charts';
 import { STATUS_LABELS } from '@/lib/utils';
@@ -193,8 +194,11 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
   const imgUrl = (id: number) => `/api/client/jobs/${jobId}/images/${id}`;
   const pics = (j?.images || []).filter((im) => !/\.pdf$/i.test(im.image || ''));
   // PO / Jobsheet docs live in tbl_job_image, tagged by image_category.
-  const poDoc = (j?.images || []).find((im) => /purchase.?order|^po$/i.test(im.image_category || ''));
-  const jsDoc = (j?.images || []).find((im) => /job.?sheet/i.test(im.image_category || ''));
+  // Closed-set matching, not a regex: `/job.?sheet/i` also matches a future
+  // "job_sheet_signed" or "no_jobsheet" category, and the drawer would open the
+  // wrong file with no error anywhere. See @/lib/jobImageBuckets.
+  const poDoc = (j?.images || []).find(isPo);
+  const jsDoc = (j?.images || []).find((im) => bucketOf(im) === 'jobsheet');
 
   // "Last updated" = the most recent lifecycle timestamp we have.
   let lastUpdated: string | null = null;
