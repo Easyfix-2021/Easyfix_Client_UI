@@ -33,6 +33,31 @@ const plexMono = IBM_Plex_Mono({
 export const metadata = {
   title: 'EasyFix Client Portal',
   description: 'Client SPOC dashboard for the EasyFix workorder platform',
+  /*
+   * Brand Kit §7.2. There was no `icons` field at all, so the only tab icon
+   * was whatever the src/app/icon.svg file convention emitted — no PNG
+   * fallback for a browser that will not take an SVG favicon, and no
+   * apple-touch-icon, which left iOS to screenshot the page for a home-screen
+   * bookmark.
+   *
+   * ⚠ EVERY FILE HERE IS THE KIT'S OWN OUTPUT, COPIED BYTE FOR BYTE.
+   *
+   * They are the RED colourway — apps/client-dashboard/web/*-red.* — because
+   * this portal's tab icon is the red inverse. The kit's web/ set used to be
+   * built only from favicon.svg, the LIGHT colourway, which left two bad
+   * options: declare the light PNG and let every browser that prefers PNG
+   * over SVG show a white tile, or hand-roll the set here and fork the
+   * identity away from the kit. Neither is acceptable, so the kit grew the
+   * red set instead (build.js, the `kind === "web"` block) and this copies
+   * it. Regenerate there, never here.
+   */
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
