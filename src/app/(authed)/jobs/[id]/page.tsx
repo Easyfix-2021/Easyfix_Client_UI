@@ -33,6 +33,7 @@ import {
   PhoneCall, Star, Flame, Headphones, ShoppingCart, Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { isFeedback, isPo } from '@/lib/jobImageBuckets';
 import { useFetchOnce } from '@/lib/hooks';
 import { STATUS_LABELS } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -399,7 +400,7 @@ export default function JobDetailPage() {
   // matches the legacy SQL `LIKE 'feedback'`. Picks the most recent
   // when multiple exist.
   const feedbackImage = (j.images || [])
-    .filter((img) => (img.image_category || '').toLowerCase() === 'feedback')
+    .filter(isFeedback)
     .sort((a, b) => b.image_id - a.image_id)[0] || null;
 
   /*
@@ -412,7 +413,7 @@ export default function JobDetailPage() {
    * present, so a job with no PO uploaded shows no button.
    */
   const poImages = (j.images || [])
-    .filter((img) => (img.image_category || '').toLowerCase() === 'po')
+    .filter(isPo)
     .sort((a, b) => b.image_id - a.image_id);
   const isCompleted = j.job_status === 3 || j.job_status === 5;
   function openPo() {
