@@ -101,7 +101,7 @@ const AREAS: Array<{ label: string; href: string; match: string[]; grant?: strin
   // light this chip when visited rather than leaving the header with nothing active.
   { label: 'Operations',  href: '/dashboard',   match: ['/dashboard', '/jobs', '/completed', '/action-queue', '/stores', '/history', '/tickets'] },
   { label: 'Performance', href: '/performance', match: ['/performance'], grant: 'performance' },
-  { label: 'Invoicing',   href: '/invoices',    match: ['/invoices', '/wallet'], grant: 'invoicing' },
+  { label: 'Invoicing',   href: '/invoices',    match: ['/invoices'], grant: 'invoicing' },
 ];
 
 const EXTRAS: NavItem[] = [
