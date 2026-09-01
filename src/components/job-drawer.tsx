@@ -13,6 +13,8 @@ import {
   X, Loader2, Phone, Star, Flame, Activity, User, FileText, Check,
   ClipboardList, ChevronsDown, ImageIcon, IndianRupee, ChevronDown, Briefcase, Info,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { seriesGradient } from '@/brand/charts';
 import { STATUS_LABELS } from '@/lib/utils';
@@ -102,6 +104,70 @@ const SCROLL_ITEMS = [
 export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: () => void }) {
   const { data: j, loading, error } = useFetch<JobFull>(jobId != null ? `/jobs/${jobId}` : null);
   const [scrollOpen, setScrollOpen] = useState(false);
+
+  /*
+   * ─── THE THREE ACTIONS THAT USED TO DO NOTHING ───────────────────────────
+   *
+   * All three reach endpoints that already existed:
+   *   Escalate       POST /jobs/:id/escalate  { reasonId, comment }
+   *   Send Feedback  POST /support            { subject, message }
+   *   Invoice        the /invoices page
+   *
+   * `panel` is a single slot rather than a boolean each: only one of these can
+   * be open at a time, and two booleans can both be true.
+   */
+  const router = useRouter();
+  const [panel, setPanel] = useState<null | 'escalate' | 'feedback'>(null);
+  const [escReason, setEscReason] = useState('');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  /* actionType=23 is the escalation reason set — the same list the Open-jobs
+   * screen sends, so the two produce comparable rows. Fetched only when the
+   * panel opens. */
+  const reasons = useFetch<{ items: { id: number; label: string }[] }>(
+    panel === 'escalate' ? '/lookup/reasons?actionType=23' : null,
+  );
+
+  /* Reset when the drawer moves to another job, or a half-typed escalation
+   * reason would carry across to a different one. */
+  useEffect(() => { setPanel(null); setEscReason(''); setComment(''); setNote(null); }, [jobId]);
+
+  async function submitEscalation() {
+    if (!jobId || !escReason) return;
+    setBusy(true); setNote(null);
+    try {
+      await api.post(`/jobs/${jobId}/escalate`, {
+        reasonId: Number(escReason),
+        comment: comment.trim(),
+      });
+      setPanel(null); setEscReason(''); setComment('');
+      setNote('Escalation raised with the EasyFix owner for this job.');
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : 'Could not raise the escalation.');
+    } finally { setBusy(false); }
+  }
+
+  async function submitFeedback() {
+    if (!jobId || comment.trim().length < 3) return;
+    setBusy(true); setNote(null);
+    try {
+      /* POST /support routes to the client's own account owner (vertical
+       * mapping user_type 1) with the account manager cc'd — so feedback about
+       * a job reaches the person who owns that relationship, not a shared
+       * inbox. The job id goes in the subject because that is what they will
+       * search on. */
+      await api.post('/support', {
+        subject: `Feedback on job ${jobId}${j?.client_ref_id ? ' (' + j.client_ref_id + ')' : ''}`,
+        message: comment.trim(),
+      });
+      setPanel(null); setComment('');
+      setNote('Thanks — your feedback has gone to your EasyFix account owner.');
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : 'Could not send that feedback.');
+    } finally { setBusy(false); }
+  }
 
   useEffect(() => {
     if (jobId == null) return;
@@ -315,11 +381,74 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
                     Contact = informational blue, Send Feedback = warning/gold
                     (earned rating), Escalate = danger red, Invoice = success
                     (money settled). */}
-                <ActionCard href={j.customer_mob_no ? `tel:${j.customer_mob_no}` : undefined} icon={Phone} title="Contact" sub="Call customer or technician" gradient="linear-gradient(135deg,var(--ef-blue-500),var(--ef-blue-700))" />
-                <ActionCard icon={Star} title="Send Feedback" sub="Share what worked or didn't" gradient="linear-gradient(135deg,var(--ef-warning),var(--ef-gold))" />
-                <ActionCard icon={Flame} title="Escalate" sub="Flag for urgent ops attention" gradient="linear-gradient(135deg,var(--ef-red-500),var(--ef-red-600))" />
-                <ActionCard icon={IndianRupee} title="Invoice" sub="View billing & invoice" gradient="linear-gradient(135deg,var(--ef-success),var(--ef-success-text))" />
+                {j.customer_mob_no ? (
+                  <ActionCard href={`tel:${j.customer_mob_no}`} icon={Phone} title="Contact" sub="Call customer or technician" gradient="linear-gradient(135deg,var(--ef-blue-500),var(--ef-blue-700))" />
+                ) : (
+                  /* Says WHY rather than rendering a live-looking card that
+                     cannot dial. Same posture as the job page's call buttons. */
+                  <ActionCard disabled icon={Phone} title="Contact" sub="No number on file" gradient="" />
+                )}
+                <ActionCard onClick={() => { setPanel(panel === 'feedback' ? null : 'feedback'); setComment(''); setNote(null); }} icon={Star} title="Send Feedback" sub="Share what worked or didn't" gradient="linear-gradient(135deg,var(--ef-warning),var(--ef-gold))" />
+                <ActionCard onClick={() => { setPanel(panel === 'escalate' ? null : 'escalate'); setComment(''); setNote(null); }} icon={Flame} title="Escalate" sub="Flag for urgent ops attention" gradient="linear-gradient(135deg,var(--ef-red-500),var(--ef-red-600))" />
+                <ActionCard onClick={() => router.push('/invoices')} icon={IndianRupee} title="Invoice" sub="View billing & invoice" gradient="linear-gradient(135deg,var(--ef-success),var(--ef-success-text))" />
               </section>
+
+              {/* The panel the two composing actions open. Inline under the
+                  cards rather than a modal: the drawer IS the surface, and a
+                  dialog over a dialog is a focus trap inside a focus trap. */}
+              {panel && (
+                <section className="rounded-xl ring-1 ring-ink-100 bg-surface p-4 space-y-2">
+                  <div className="text-sm font-semibold text-ink-900">
+                    {panel === 'escalate' ? 'Raise an escalation' : 'Send feedback'}
+                  </div>
+                  {panel === 'escalate' && (
+                    <select
+                      value={escReason}
+                      onChange={(e) => setEscReason(e.target.value)}
+                      aria-label="Escalation reason"
+                      className="w-full rounded-lg ring-1 ring-ink-200 px-3 py-2 text-sm bg-surface text-ink-900"
+                    >
+                      <option value="">Choose a reason…</option>
+                      {(reasons.data?.items ?? []).map((r) => (
+                        <option key={r.id} value={r.id}>{r.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  <textarea
+                    rows={3}
+                    /* Both endpoints cap the free text at 500/1000; 500 is the
+                       tighter of the two, so one limit serves both. */
+                    maxLength={500}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder={panel === 'escalate'
+                      ? 'Anything the owner should know (optional)'
+                      : 'What worked, or what did not'}
+                    className="w-full rounded-lg ring-1 ring-ink-200 px-3 py-2 text-sm bg-surface text-ink-900"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || (panel === 'escalate' ? !escReason : comment.trim().length < 3)}
+                      onClick={() => void (panel === 'escalate' ? submitEscalation() : submitFeedback())}
+                      className="flex-1 rounded-lg px-3 py-2 text-sm font-semibold text-white bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {busy ? 'Sending…' : panel === 'escalate' ? 'Raise Escalation' : 'Send Feedback'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPanel(null); setNote(null); }}
+                      className="rounded-lg px-3 py-2 text-sm font-semibold ring-1 ring-ink-200 text-ink-700"
+                    >Cancel</button>
+                  </div>
+                </section>
+              )}
+
+              {note && (
+                <div role="status" className="rounded-lg bg-ink-50 ring-1 ring-ink-100 px-3 py-2 text-sm text-ink-700">
+                  {note}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -404,9 +533,30 @@ function Row({ label, children, accent }: { label: string; children: React.React
     </div>
   );
 }
-function ActionCard({ icon: Icon, title, sub, gradient, href }: {
-  icon: React.ComponentType<{ className?: string }>; title: string; sub: string; gradient: string; href?: string;
-}) {
+/*
+ * ⚠ A CARD WITH NOTHING BEHIND IT MUST NOT LOOK LIKE ONE THAT WORKS.
+ *
+ * This rendered `href ? <a> : <button type="button">` with no onClick, so three
+ * of the four cards — Send Feedback, Escalate, Invoice — were full-colour,
+ * hover-lit controls that did nothing at all, pixel-identical to Contact, which
+ * worked. Escalate and Invoice were not even unbuilt: POST /jobs/:id/escalate
+ * has always existed and /invoices is in the nav. Dead entry points to live
+ * features are the worst kind, because nothing on screen says so.
+ *
+ * The union type is the fix that outlives this commit: a card takes an `href`
+ * or an `onClick`, and the `never` arm means a third dead card cannot be added
+ * without TypeScript refusing it. `disabled` is the honest fourth state — muted
+ * and cursor-not-allowed, with the reason in `sub`.
+ */
+type ActionCardProps = {
+  icon: React.ComponentType<{ className?: string }>; title: string; sub: string; gradient: string;
+} & (
+  | { href: string; onClick?: never; disabled?: never }
+  | { onClick: () => void; href?: never; disabled?: never }
+  | { disabled: true; href?: never; onClick?: never }
+);
+
+function ActionCard({ icon: Icon, title, sub, gradient, href, onClick, disabled }: ActionCardProps) {
   const inner = (
     <>
       <span className="w-8 h-8 rounded-lg bg-white/25 grid place-items-center shrink-0"><Icon className="w-4 h-4" /></span>
@@ -417,7 +567,15 @@ function ActionCard({ icon: Icon, title, sub, gradient, href }: {
     </>
   );
   const cls = 'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-white transition hover:brightness-105';
+  if (disabled) {
+    return (
+      <div
+        className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-ink-400 bg-ink-100 cursor-not-allowed"
+        aria-disabled="true"
+      >{inner}</div>
+    );
+  }
   return href
     ? <a href={href} className={cls} style={{ background: gradient }}>{inner}</a>
-    : <button type="button" className={cls} style={{ background: gradient }}>{inner}</button>;
+    : <button type="button" onClick={onClick} className={cls} style={{ background: gradient }}>{inner}</button>;
 }
