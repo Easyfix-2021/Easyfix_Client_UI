@@ -88,11 +88,26 @@ type CompletedJob = {
 };
 
 /**
- * tbl_job_image, as getById() shapes it. `image_url` is a short-lived S3
- * presigned URL resolved server-side — it needs no Authorization header, which
- * is why the tiles render it directly instead of pointing an <img> at the
- * bearer-authed /jobs/:id/images/:imageId endpoint (that one 401s from an
- * <img>; it is fine for a click-through, which carries the session).
+ * tbl_job_image, as getById() shapes it.
+ *
+ * ⚠ `image_url` IS NOT ALWAYS A PRESIGNED URL. This comment used to say it was,
+ * and the tiles rendered it in an <img> on that promise. The backend's
+ * `resolveImageUrl` presigns when the object is in S3 and otherwise falls back
+ * to a RELATIVE `/easydoc/upload_jobs/<file>` path — which is correct for the
+ * old CRM, whose Apache serves /easydoc at its domain root, and meaningless
+ * here: nothing on client.easyfix.in serves that prefix, so the <img> 404s and
+ * renders broken.
+ *
+ * It bites on legacy rows only. New images are S3 keys
+ * (`JobSupportings/Booking_<jobId>_<seq>`) and presign fine, which is why a
+ * job's Before tile can render while its After tile is broken — the checkout
+ * photo was captured under the old naming (`<jobId>_checkout_<ts>.jpg`).
+ *
+ * So: test the VALUE, never the type's word for it — `isFetchableUrl` below.
+ * A presigned URL carries no Authorization header, which is still the reason
+ * an absolute one may go straight into an <img>; the bearer-authed
+ * /jobs/:id/images/:imageId endpoint 401s from an <img> and is only usable for
+ * a click-through, which carries the session.
  */
 type JobImage = {
   image_id: number;
@@ -182,15 +197,29 @@ function windowFor(key: WindowKey, now: Date) {
  *   PHOTO TILE      a labelled thumbnail with a count. Nothing in the grammar
  *                   is close; it is built from the same surface/ink tokens.
  */
+/*
+ * Can the browser fetch this from THIS origin with no extra headers?
+ *
+ * Only an absolute http(s) URL qualifies — in practice a presigned S3 link.
+ * A relative /easydoc path is a promise the portal cannot keep, and the whole
+ * defect was a truthiness test (`im.image_url ||`) standing in for this
+ * question: a non-null string that 404s is worse than a null, because null
+ * renders an honest placeholder and the string renders a broken image.
+ */
+const isFetchableUrl = (u: string | null | undefined): u is string =>
+  !!u && /^https?:\/\//i.test(u);
+
 function PhotoTile({ label, images }: { label: string; images: JobImage[] }) {
-  const cover = images.find((im) => im.image_url);
+  // The first image that can actually be SHOWN, not merely the first that has
+  // a value — a bucket mixing legacy and S3 rows still gets a cover this way.
+  const cover = images.find((im) => isFetchableUrl(im.image_url));
   const n = images.length;
   return (
     <div className={cn('rounded-lg border border-ink-100 overflow-hidden', n === 0 && 'opacity-60')}>
       <div className="h-20 flex items-center justify-center bg-surface-alt">
-        {cover?.image_url ? (
+        {isFetchableUrl(cover?.image_url) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover.image_url} alt={`${label} photo`} className="w-full h-20 object-cover" />
+          <img src={cover!.image_url!} alt={`${label} photo`} className="w-full h-20 object-cover" />
         ) : (
           <ImageOff className="w-5 h-5 text-ink-300" aria-hidden />
         )}
@@ -371,7 +400,15 @@ export default function CompletedPage() {
 
   const openDoc = (im: JobImage) => {
     const jobId = fresh?.job_id;
-    const url = im.image_url || (jobId ? `/api/client/jobs/${jobId}/images/${im.image_id}` : null);
+    /*
+     * Same test, opposite fallback. A click-through carries the session, so the
+     * bearer-authed endpoint works here — and it is the ONLY thing that can
+     * serve a legacy image, since the /easydoc path this would otherwise open
+     * 404s exactly as the tile did.
+     */
+    const url = isFetchableUrl(im.image_url)
+      ? im.image_url
+      : (jobId ? `/api/client/jobs/${jobId}/images/${im.image_id}` : null);
     if (url) window.open(url, '_blank', 'noopener,noreferrer');
   };
 
