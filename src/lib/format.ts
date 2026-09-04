@@ -145,3 +145,39 @@ export function formatIst(
   // this function exists to make.
   return new Intl.DateTimeFormat(locale, { ...options, timeZone: IST }).format(d);
 }
+
+/*
+ * formatServiceAddress — the address the CLIENT actually booked, and nothing
+ * else.
+ *
+ * tbl_address columns do not mean what their names suggest on these surfaces
+ * (ops remap, 2026-07-14):
+ *   - `address`  = the real Service Address, written by the booking flows
+ *                  (Book New Call, bulk upload, client API, magic link).
+ *                  This — and only this — is what a client recognises.
+ *   - `building` = REPURPOSED to hold the Google-Map SEARCH text behind the
+ *                  pin. It is a map location, not part of the address.
+ *   - `landmark` = likewise a map/navigation aid, not the booked address.
+ *
+ * WHY THIS EXISTS. Both job surfaces built the address inline as
+ * `[building, address, locality, landmark, city_name, pin_code].join(', ')`,
+ * duplicated verbatim in two files. Because `address` is already a complete
+ * postal string and `building` is a second complete one from the map, the
+ * result read as the same address three times over, with the city and PIN
+ * appended again at the end — see Job 533866, where one line ran to six
+ * repetitions of "Bengaluru, Karnataka 560098, India".
+ *
+ * The CRM settled this same question in its own `formatServiceAddress`
+ * ("ops want the single authoritative address string, nothing else"), so the
+ * two repos now agree rather than each deciding for itself.
+ *
+ * The map location has not been thrown away — it still drives the pin. It is
+ * simply not the answer to "where did the client say to go".
+ */
+export function formatServiceAddress(
+  job: { address?: string | null } | null | undefined,
+  opts: { fallback?: string } = {},
+): string {
+  const { fallback = '—' } = opts;
+  return (job?.address || '').trim() || fallback;
+}

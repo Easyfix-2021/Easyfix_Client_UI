@@ -19,7 +19,7 @@ import { bucketOf, isPo } from '@/lib/jobImageBuckets';
 import { useFetch } from '@/lib/hooks';
 import { seriesGradient } from '@/brand/charts';
 import { STATUS_LABELS } from '@/lib/utils';
-import { formatIst } from '@/lib/format';
+import { formatIst, formatServiceAddress } from '@/lib/format';
 
 type JobFull = {
   job_id: number;
@@ -187,7 +187,8 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
     setScrollOpen(false);
   }
 
-  const fullAddress = j ? [j.building, j.address, j.locality, j.landmark, j.city_name, j.pin_code].filter(Boolean).join(', ') : '';
+  // The booked address ALONE — building/landmark are map-search text. See formatServiceAddress.
+  const fullAddress = formatServiceAddress(j, { fallback: '' });
   const svc = j?.services?.[0];
   const serviceChip = j?.job_type || svc?.service_catg_name || svc?.service_type_name || null;
   const pay = j ? paymentLabel(j.collected_by) : null;

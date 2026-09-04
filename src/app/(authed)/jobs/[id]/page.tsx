@@ -37,7 +37,7 @@ import { isFeedback, isPo } from '@/lib/jobImageBuckets';
 import { useFetchOnce } from '@/lib/hooks';
 import { STATUS_LABELS } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import { formatIst } from '@/lib/format';
+import { formatIst, formatServiceAddress } from '@/lib/format';
 
 type Job = {
   job_id: number;
@@ -345,9 +345,9 @@ export default function JobDetailPage() {
   const e = estimate.data;
   const timeline = buildTimeline(j);
 
-  // Build complete address from parts
-  const fullAddress = [j.building, j.address, j.locality, j.landmark, j.city_name, j.pin_code]
-    .filter(Boolean).join(', ');
+  // The booked address ALONE — building/landmark are map-search text, not the
+  // address the client gave. See formatServiceAddress.
+  const fullAddress = formatServiceAddress(j, { fallback: '' });
 
   const showEstimateActions = !j.approved_on_date_time && !j.approval_reject_date_time
     && e && !e.already_approved && !e.already_rejected;
