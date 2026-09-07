@@ -33,6 +33,7 @@ import {
   PhoneCall, Star, Flame, Headphones, ShoppingCart, Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { SiteAccessRequests } from '@/components/site-access-requests';
 import { isFeedback, isPo } from '@/lib/jobImageBuckets';
 import { useFetchOnce } from '@/lib/hooks';
 import { STATUS_LABELS } from '@/lib/utils';
@@ -564,6 +565,11 @@ export default function JobDetailPage() {
         )}
       </div>
       )}
+
+      {/* Site access requests — ABOVE the lifecycle deliberately: a technician
+          standing at a gate outranks a progress bar. Renders nothing when the
+          job has no requests, which is almost every job. */}
+      <SiteAccessRequests jobId={j.job_id} />
 
       {/* Status timeline */}
       <Section title="Order Lifecycle" icon={Activity}>
