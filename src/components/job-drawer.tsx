@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { SiteAccessRequests } from '@/components/site-access-requests';
 import { bucketOf, isPo } from '@/lib/jobImageBuckets';
 import { useFetch } from '@/lib/hooks';
 import { seriesGradient } from '@/brand/charts';
@@ -308,6 +309,14 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
                 {j.source_type && <span className="inline-flex px-3 py-1.5 rounded-lg bg-ink-100 text-ink-500 text-sm font-semibold">Source · {j.source_type}</span>}
                 {pay && <span className="inline-flex px-3 py-1.5 rounded-lg bg-success-tint text-success-text text-sm font-semibold">₹ {pay}</span>}
               </div>
+
+              {/* 0 · Site access — first in the body because a technician
+                  stuck at a gate is the only thing here that is blocking work
+                  RIGHT NOW. Self-hiding: renders nothing unless this job has
+                  access requests, so the drawer is unchanged for every other
+                  job. Same component as the job detail page — one surface for
+                  the client to learn, one place to fix a bug. */}
+              {jobId != null && <SiteAccessRequests jobId={jobId} />}
 
               {/* 1 · Customer details */}
               <section id="jd-customer" className="scroll-mt-4">
