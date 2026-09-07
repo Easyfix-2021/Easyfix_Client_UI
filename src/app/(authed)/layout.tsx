@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GetAppModal } from '@/components/get-app-modal';
 import { JobDrawerHost } from '@/components/job-drawer';
+import { JobSearch } from '@/components/job-search';
 import { Logo } from '@/components/brand/logo';
 import { FilterChip } from '@/components/ui/console';
 
@@ -486,6 +487,10 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
             ))}
           </div>
           <div className="ml-auto lg:ml-0 shrink-0 flex items-center gap-2 md:gap-3">
+            {/* Universal job search, to the LEFT of Get the App. Scoped by the
+                server to this client and this SPOC's reporting hierarchy — see
+                the note in job-search.tsx. */}
+            <JobSearch />
             <button
               type="button"
               onClick={() => setAppModalOpen(true)}
