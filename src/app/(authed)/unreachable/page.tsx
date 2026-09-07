@@ -3,11 +3,19 @@
 /*
  * Customer Unreachable — the rows behind the Home tile.
  *
- * Jobs where the customer could not be reached on THREE DIFFERENT DAYS inside
- * a three-day span. Three calls in one afternoon is one bad afternoon and does
- * not qualify; one call across three days is a single attempt and does not
- * either. The server counts it — tbl_job.call_later is a bit(1) flag with no
- * count and no dates, so it cannot express a pattern.
+ * Jobs our team has flagged as unreachable — the FIRST time it happens, which
+ * is the same moment ops sees the job move to "Pending Action from Client" in
+ * the CRM. The two surfaces deliberately agree: a job waiting on you should not
+ * be visible to ops days before it is visible to you.
+ *
+ * This used to require three different days inside a three-day span. That was
+ * stricter than the CRM by a wide margin — measured on the open book, three
+ * days qualified ONE job while a single marker qualifies 71 — so a client could
+ * not see work ops had already handed to them.
+ *
+ * The day and attempt counts are still shown per row. They stopped being a
+ * GATE and remained a SIGNAL: five days of failed calls is a different
+ * conversation from one, and the column says which you are looking at.
  *
  * ⚠ OPEN JOBS ONLY. A completed or cancelled job carries the same unreachable
  * history forever, and listing it would put work nobody can act on in front of
@@ -113,8 +121,8 @@ export default function UnreachablePage() {
         title="Customer Unreachable"
         sub={
           data
-            ? `${num(data.total)} open job${data.total === 1 ? '' : 's'} · unreachable on 3 different days within 3 days`
-            : 'Unreachable on 3 different days within 3 days'
+            ? `${num(data.total)} open job${data.total === 1 ? '' : 's'} · our team could not reach the customer`
+            : 'Jobs where our team could not reach the customer'
         }
       />
 
@@ -139,12 +147,12 @@ export default function UnreachablePage() {
       ) : items.length === 0 ? (
         <Panel>
           {/* A genuinely good state, and it says so — an empty list here means
-              nobody has been chased three days running, not that a filter is
-              hiding rows. */}
+              every customer has been reachable, not that a filter is hiding
+              rows. */}
           <EmptyState
             icon={PhoneOff}
-            title="No repeatedly unreachable jobs"
-            sub="No open job has an unreachable outcome on three different days inside a three-day span."
+            title="No unreachable customers"
+            sub="Our team has reached the customer on every open job. Nothing needs your help here."
             action={<ActionButton onClick={() => router.push('/jobs')}>Open Jobs →</ActionButton>}
           />
         </Panel>
@@ -199,9 +207,12 @@ export default function UnreachablePage() {
                   <span className="block text-ink-900">{j.city}</span>
                   <span className="block text-xs text-ink-500">{j.category}</span>
                 </Cell>
-                {/* The DAYS are the finding, not the attempts: three calls in
-                    one afternoon is one bad afternoon. Attempts sit beside it
-                    so a reader can tell persistence from repetition. */}
+                {/* Days and attempts are CONTEXT now, not the qualifying rule:
+                    one marker puts a job on this page, and these two columns
+                    say how hard it has been chased since. Days still lead —
+                    three calls in one afternoon is one bad afternoon — and
+                    attempts sit beside them so a reader can tell persistence
+                    from repetition. */}
                 <Cell align="right">
                   <Pill accent={j.unreachableDays >= 5 ? 'brand' : 'warning'}>{num(j.unreachableDays)} days</Pill>
                 </Cell>
