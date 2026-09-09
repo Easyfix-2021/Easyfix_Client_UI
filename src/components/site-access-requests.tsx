@@ -17,6 +17,12 @@
  *   opens from every list). It renders NOTHING when the job has no requests, so
  *   every other job page is unchanged.
  *
+ *   That is still true and still not enough on its own: nobody opens a job to
+ *   find out there is a reason to open it. The console-level counterpart is
+ *   @/components/pending-on-you, which lists the OPEN requests across every job
+ *   and answers them through this file's RequestList — one implementation of
+ *   the upload, the size gate and the decline, rendered on two surfaces.
+ *
  * ENDPOINTS (agent A's contract, verbatim — the client half):
  *   GET  /api/client/jobs/:jobId/permission-requests
  *        → { items: [{ id, kind, note, status, requestedAt, fulfilledAt, documentUrl }] }
@@ -37,7 +43,7 @@
  * the item shape ever grows a content type, an image preview is a one-line add.
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, CheckCircle2, ExternalLink, Loader2,
   ShieldCheck, Upload, XCircle,
@@ -57,11 +63,11 @@ import { cn } from '@/lib/utils';
  * request with no explanation is useless to the technician and to the next SPOC
  * who opens the job — so it is read here as optional and rendered when present.
  *
- * `requestedBy` IS NOT SENT. The brief asks the list to say who raised the
- * request, and the row does carry `requested_by_efr_id`, but toItem does not
- * project a name for it. Declared optional and already wired into the card, so
- * the day that field is projected the name appears with no change here. Until
- * then the line simply omits it rather than showing a hollow "Raised by —".
+ * `requestedBy` is the technician's NAME, resolved server-side as a correlated
+ * subquery on tbl_easyfixer (ROW_COLS in the service) — a bare efr id tells the
+ * person who has to act nothing. It is null when that row is gone, and the card
+ * then omits the clause rather than printing a hollow "Raised by —", which is
+ * why it stays optional here.
  *
  * `requestedAt` / `fulfilledAt` are zone-less MySQL DATETIMEs in IST (the pool
  * runs dateStrings with timezone '+05:30'), which is why every read of them
@@ -140,6 +146,70 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
     jobId ? `/jobs/${jobId}/permission-requests` : null,
   );
 
+  const items = data?.items ?? [];
+  const waitingCount = items.filter((r) => r.status === 'requested').length;
+
+  /*
+   * A job with no access requests — the overwhelming majority — shows nothing
+   * at all. An "Everything is fine" panel on every job page would train people
+   * to scroll past the one place this feature has to be noticed.
+   *
+   * A FAILED load is not the same as an empty one, so it says so — but quietly,
+   * in body text rather than as a red alarm. This endpoint is new; a portal
+   * running against a backend that predates it must not paint an error banner
+   * across every job in the estate.
+   */
+  if (!items.length) {
+    return error ? (
+      <p className="text-xs text-ink-500">Site access requests could not be loaded.</p>
+    ) : null;
+  }
+
+  return (
+    <section aria-label="Site Access Requests" className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 grid place-items-center">
+          <ShieldCheck className="w-4 h-4 text-primary" />
+        </div>
+        <h2 className="text-base font-semibold text-ink-900">Site Access</h2>
+        {waitingCount > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-danger text-white text-xs font-semibold">
+            {/* bg-current, not bg-white: the dot IS the pill's own foreground,
+                so it follows the pill if that ever stops being white. */}
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" aria-hidden />
+            {waitingCount} Waiting
+          </span>
+        )}
+      </div>
+
+      <RequestList items={items} reload={reload} />
+    </section>
+  );
+}
+
+/*
+ * The interactive half — upload, decline, confirm, the two flash lines.
+ *
+ * Extracted from SiteAccessRequests so the cross-job "Pending on you" panel
+ * (@/components/pending-on-you) answers a request with the SAME code rather
+ * than a second copy of it. The size gate, the decline bounds, the input reset
+ * and the never-window.confirm rule are each one implementation; a copy would
+ * be a second place for them to drift.
+ *
+ * Callers own the heading and the empty state, because the two surfaces frame
+ * this differently: on a job it is a section with no chrome when empty, in the
+ * console it is a Panel that has to say "nothing waiting".
+ *
+ * `context` renders above the kind — the job identity, which the job page
+ * already has on screen and the console panel does not.
+ */
+export function RequestList({
+  items, reload, context,
+}: {
+  items: PermissionRequest[];
+  reload: () => Promise<void> | void;
+  context?: (req: PermissionRequest) => ReactNode;
+}) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flashOk, setFlashOk] = useState<string | null>(null);
@@ -147,8 +217,7 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
   const [reason, setReason] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
 
-  const items = ordered(data?.items ?? []);
-  const waitingCount = items.filter((r) => r.status === 'requested').length;
+  const rows = ordered(items);
 
   async function fulfil(req: PermissionRequest, file: File) {
     setActionError(null); setFlashOk(null);
@@ -175,7 +244,7 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
   }
 
   async function decline() {
-    const req = items.find((r) => r.id === decliningId);
+    const req = rows.find((r) => r.id === decliningId);
     if (!req) return;
     setBusyId(req.id); setActionError(null); setFlashOk(null);
     try {
@@ -191,43 +260,8 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
     } finally { setBusyId(null); }
   }
 
-  /*
-   * A job with no access requests — the overwhelming majority — shows nothing
-   * at all. An "Everything is fine" panel on every job page would train people
-   * to scroll past the one place this feature has to be noticed.
-   *
-   * A FAILED load is not the same as an empty one, so it says so — but quietly,
-   * in body text rather than as a red alarm. This endpoint is new; a portal
-   * running against a backend that predates it must not paint an error banner
-   * across every job in the estate.
-   *
-   * ponytail: if the reload AFTER a successful action fails, this line replaces
-   * the success flash — the upload still happened, and reopening the job shows
-   * it. Worth a spinner-and-retry only if that combination is ever seen.
-   */
-  if (!items.length) {
-    return error ? (
-      <p className="text-xs text-ink-500">Site access requests could not be loaded.</p>
-    ) : null;
-  }
-
   return (
-    <section aria-label="Site Access Requests" className="space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-primary/10 grid place-items-center">
-          <ShieldCheck className="w-4 h-4 text-primary" />
-        </div>
-        <h2 className="text-base font-semibold text-ink-900">Site Access</h2>
-        {waitingCount > 0 && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-danger text-white text-xs font-semibold">
-            {/* bg-current, not bg-white: the dot IS the pill's own foreground,
-                so it follows the pill if that ever stops being white. */}
-            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" aria-hidden />
-            {waitingCount} Waiting
-          </span>
-        )}
-      </div>
-
+    <>
       {actionError && (
         <p className="rounded-lg border border-danger/30 bg-danger-tint px-3 py-2 text-sm text-danger-text">
           {actionError}
@@ -240,10 +274,11 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
       )}
 
       <ul className="space-y-2">
-        {items.map((r) => (
+        {rows.map((r) => (
           <RequestCard
             key={r.id}
             req={r}
+            context={context?.(r)}
             busy={busyId === r.id}
             declining={decliningId === r.id}
             reason={reason}
@@ -266,15 +301,16 @@ export function SiteAccessRequests({ jobId }: { jobId: number }) {
         confirmLabel="Yes, Decline"
         tone="danger"
       />
-    </section>
+    </>
   );
 }
 
 function RequestCard({
-  req, busy, declining, reason,
+  req, context, busy, declining, reason,
   onReason, onStartDecline, onCancelDecline, onAskDecline, onPickFile,
 }: {
   req: PermissionRequest;
+  context?: ReactNode;
   busy: boolean;
   declining: boolean;
   reason: string;
@@ -295,6 +331,7 @@ function RequestCard({
     )}>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
+          {context}
           {open && (
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-text">
               <AlertTriangle className="w-3.5 h-3.5" />

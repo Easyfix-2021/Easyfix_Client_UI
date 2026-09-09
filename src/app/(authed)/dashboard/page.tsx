@@ -38,6 +38,7 @@ import { useAccess } from '@/lib/spoc-context';
 import { cn } from '@/lib/utils';
 import { performanceKpis, type KpiSource } from '@/lib/kpi';
 import { openJobDrawer } from '@/components/job-drawer';
+import { PendingOnYou } from '@/components/pending-on-you';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, ListRow, Pill,
   RankedList, ProportionBar, MetricRow, ActionButton, EmptyState, Bar, ChipSelect,
@@ -568,6 +569,12 @@ export default function HomePage() {
           onClick={() => router.push('/unreachable')}
         />
       </StatRow>
+
+      {/* Above the action queue, and above the fold, because the person in
+          this row is standing at a gate right now — every other item on this
+          screen can wait until the end of the day. Renders nothing at all when
+          no request is open, which is almost every day. */}
+      <PendingOnYou />
 
       <div className="grid gap-x-6 gap-y-2 grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] mb-6 items-stretch">
         <div className="flex flex-col min-w-0">

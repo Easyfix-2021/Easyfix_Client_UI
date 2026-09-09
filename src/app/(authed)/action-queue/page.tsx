@@ -38,6 +38,7 @@ import {
 import { useFetchOnce } from '@/lib/hooks';
 import { useAccess } from '@/lib/spoc-context';
 import { openJobDrawer } from '@/components/job-drawer';
+import { PendingOnYou } from '@/components/pending-on-you';
 import {
   PageHeader, SectionLabel, Panel, ListRow, Pill, FilterChip,
   ActionButton, EmptyState,
@@ -171,6 +172,10 @@ export default function ActionQueuePage() {
           </>
         }
       />
+
+      {/* Site access sits ABOVE the estimate queue: an estimate waits for a
+          decision, a gate pass waits for a person who is already on site. */}
+      <PendingOnYou />
 
       <SectionLabel>Waiting on you</SectionLabel>
       <Panel
