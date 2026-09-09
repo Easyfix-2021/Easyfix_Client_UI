@@ -120,7 +120,7 @@ type JobDetail = JobRow & {
 /** GET /jobs/:id/estimate-preview — the canonical estimate figure. */
 type EstimatePreview = {
   job_id: number;
-  totals: { services_subtotal: number; material_subtotal: number; grand_total: number };
+  totals: { service_charge_subtotal: number; material_subtotal: number; grand_total: number };
   already_approved: boolean;
   already_rejected: boolean;
 };

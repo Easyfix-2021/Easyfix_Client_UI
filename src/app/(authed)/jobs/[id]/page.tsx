@@ -128,7 +128,7 @@ type EstimateLine = {
 type EstimatePreview = {
   job_id: number;
   services: EstimateLine[];
-  totals: { services_subtotal: number | string; material_subtotal: number | string; grand_total: number | string };
+  totals: { service_charge_subtotal: number | string; material_subtotal: number | string; grand_total: number | string };
   already_approved: boolean;
   already_rejected: boolean;
 };
