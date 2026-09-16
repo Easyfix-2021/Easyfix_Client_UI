@@ -95,6 +95,13 @@ COPY --from=builder --chown=node:node /app/public ./public
 
 EXPOSE 5181
 
+# The commit this build came from, returned by GET /healthcheck so a deploy is
+# confirmed by reading a SHA (same contract as the backend's /api/health).
+# Declared this late on purpose: an ARG that changes every build invalidates
+# every layer after it, and nothing after this point is expensive.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # Probe the dedicated /healthcheck route handler — returns 200 with a
 # tiny JSON body when the Next.js server is responsive. Cheaper than
 # probing `/` (no React rendering) and side-effect-free.
