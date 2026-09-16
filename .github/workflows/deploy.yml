@@ -226,6 +226,7 @@ jobs:
           # secret again here — single source of truth.
           build-args: |
             NEXT_PUBLIC_API_URL=${{ steps.api.outputs.url }}
+            GIT_COMMIT=${{ github.sha }}
           tags: |
             ${{ steps.meta.outputs.image_uri }}
             ${{ steps.meta.outputs.moving_uri }}
