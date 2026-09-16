@@ -29,6 +29,9 @@ export async function GET() {
   return NextResponse.json({
     status: 'ok',
     service: 'client-ui',
+    // Baked in by the Dockerfile's GIT_COMMIT build arg; 'unknown' on a local
+    // run. Lets a deploy be confirmed by SHA without asking GitHub.
+    commit: process.env.GIT_COMMIT || 'unknown',
     timestamp: new Date().toISOString(),
   });
 }
