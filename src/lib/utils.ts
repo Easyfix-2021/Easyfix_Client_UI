@@ -9,7 +9,7 @@ export const STATUS_LABELS: Record<number, string> = {
   0: 'Unconfirmed', 1: 'Scheduled', 2: 'In-Progress',
   3: 'Completed', 5: 'Completed', 6: 'Cancelled',
   7: 'Enquiry', 9: 'Call Later', 10: 'Revisit',
-  15: 'Awaiting Approval', 21: 'On Hold',
+  15: 'Awaiting Approval', 16: 'Pending for Material', 21: 'On Hold',
 };
 
 /*
@@ -24,11 +24,18 @@ export const STATUS_LABELS: Record<number, string> = {
  *   9                   → New Ticket
  *   15, 21              → Client Delay
  *   0, 1                → Committed Appointments
- *   2, 20               → Tx On Location
+ *   2, 20, 16           → Tx On Location
  *   3, 5                → Completed
  *   10                  → Under Audit
  *   6, 7                → Failed Order
  *   anything else       → '' (empty)
+ *
+ * 16 "Pending for Material" is a new (2026-09) status with no legacy Java
+ * equivalent — a technician-flagged, PM-reviewed material quote, still
+ * entirely EasyFix-side. It joins 2/20 rather than 15/21's "Client Delay":
+ * the client has nothing to do at 16 (see EasyFix_Backend's
+ * docs/superpowers/specs/2026-09-18-pending-for-material-status-16-design.md),
+ * so reading it as a delay caused BY the client would be backwards.
  */
 export function getBucketStatusForJob(status: number | null | undefined): string {
   switch (status) {
@@ -38,7 +45,8 @@ export function getBucketStatusForJob(status: number | null | undefined): string
     case 0:
     case 1:  return 'Committed Appointments';
     case 2:
-    case 20: return 'Tx On Location';
+    case 20:
+    case 16: return 'Tx On Location';
     case 3:
     case 5:  return 'Completed';
     case 10: return 'Under Audit';

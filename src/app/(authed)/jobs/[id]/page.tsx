@@ -150,6 +150,7 @@ function statusBadgeClass(status: number) {
     case 9:  return 'bg-warning-tint text-warning-text ring-warning/30';
     case 10: return 'bg-primary/10 text-primary ring-primary/30';
     case 15: return 'bg-warning-tint text-warning-text ring-warning/30';
+    case 16: return 'bg-info-tint text-info-text ring-info/30';
     case 21: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
     default: return 'bg-ink-100 text-ink-700 ring-ink-300/40';
   }
@@ -350,7 +351,21 @@ export default function JobDetailPage() {
   // address the client gave. See formatServiceAddress.
   const fullAddress = formatServiceAddress(j, { fallback: '' });
 
-  const showEstimateActions = !j.approved_on_date_time && !j.approval_reject_date_time
+  /*
+   * ⚠ job_status === 15 IS LOAD-BEARING, not a narrowing nicety.
+   *
+   * /jobs/:id/estimate-preview builds its lines from job_service_status = 1
+   * rows with no job_status predicate of its own — the technician populates
+   * those same rows while the job sits at 16 (Quotation / Review Pending),
+   * before a PM has reviewed anything. Without this check a 16 job with a
+   * drafted-but-unreviewed quote would satisfy every other condition here and
+   * render Approve/Reject — exactly the unreviewed-quote-reaches-the-client
+   * bug status 16 exists to close. 15 is the one status
+   * PATCH /jobs/:id/estimate/approve is meant for (see /action-queue's own
+   * `job_status = 15` guard on the server).
+   */
+  const showEstimateActions = j.job_status === 15
+    && !j.approved_on_date_time && !j.approval_reject_date_time
     && e && !e.already_approved && !e.already_rejected;
 
   // Group images by category for the gallery. PDFs are excluded —

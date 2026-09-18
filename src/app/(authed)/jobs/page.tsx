@@ -16,12 +16,14 @@
  * and the list would show 30. So both come from ONE set: the client's open book,
  * pulled once per scope change.
  *
- * `/jobs` takes a single `status`, so "open" is eight parallel calls — every
+ * `/jobs` takes a single `status`, so "open" is nine parallel calls — every
  * code Home's "Total open" counts, i.e. job_status NOT IN (3,5,6,7) enumerated:
- * 9 new, 0/1/2/20 in flight, 15 awaiting approval, 21 on hold and 10 awaiting
- * fulfilment. The last four are open precisely BECAUSE they are waiting on
- * someone. Each call is capped; if a cap is hit the page says so rather than
- * quietly under-counting a bucket.
+ * 9 new, 0/1/2/20 in flight, 16 pending for material, 15 awaiting approval, 21
+ * on hold and 10 awaiting fulfilment. The last four are open precisely BECAUSE
+ * they are waiting on someone — 16 is the one exception: it is EasyFix-side
+ * (tech drafting a quote, then a PM reviewing it), so it is open but not
+ * waiting on the client. Each call is capped; if a cap is hit the page says so
+ * rather than quietly under-counting a bucket.
  *
  * WHERE THE FILTERS RUN
  *
@@ -239,6 +241,11 @@ function statusOf(j: JobRow): { label: string; cls: string } {
     case 1: return { label: 'Scheduled', cls: 'text-info' };
     case 2:
     case 20: return { label: 'Technician On Site', cls: 'text-success' };
+    // Pending for Material — a tech-flagged quote sitting with EasyFix (tech
+    // drafting it, then a PM reviewing it), never with the client. Reads as
+    // "in progress", not "waiting on you" — no primary/warning tone, which
+    // this vocabulary reserves for states the client must act on.
+    case 16: return { label: 'Pending for Material', cls: 'text-info' };
     case 15: return { label: 'Awaiting Your Approval', cls: 'text-primary' };
     case 21: return { label: 'On Hold', cls: 'text-warning' };
     default: return {
@@ -687,7 +694,21 @@ export default function OpenJobsPage() {
    */
   const d = detail.data && detail.data.job_id === selectedId ? detail.data : null;
   const est = estimate.data && estimate.data.job_id === selectedId ? estimate.data : null;
-  const estimatePending = !!est && !est.already_approved && !est.already_rejected
+  /*
+   * ⚠ status === 15 IS LOAD-BEARING, not a narrowing nicety.
+   *
+   * /jobs/:id/estimate-preview builds its lines from job_service_status = 1
+   * rows with no job_status predicate of its own — the technician populates
+   * those same rows while the job sits at 16 (Quotation / Review Pending),
+   * before a PM has reviewed anything. Without this check a 16 job with a
+   * drafted-but-unreviewed quote would satisfy every other condition here and
+   * render Approve/Estimate — exactly the unreviewed-quote-reaches-the-client
+   * bug this status exists to close. 15 is the one status
+   * PATCH /jobs/:id/estimate/approve is meant for (see /action-queue's own
+   * `job_status = 15` guard on the server).
+   */
+  const estimatePending = !!est && selected?.job_status === 15
+    && !est.already_approved && !est.already_rejected
     && est.totals.grand_total > 0;
   const selectedBucket = selected ? bucketOf(selected, now) : null;
   const canEscalate = !!selected && !estimatePending && selectedBucket !== 'future';
