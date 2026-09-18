@@ -34,6 +34,7 @@ import {
   ThumbsUp, ThumbsDown, Send, ChevronDown,
 } from 'lucide-react';
 import { formatIstDateTimeLong } from '@/lib/format';
+import { EstimateMaterials, EstimateTotalsSummary, type MaterialLine } from '@/components/estimate-materials';
 
 /*
  * Frontend mirror of the backend's `/easydoc/...` Nginx convention,
@@ -54,6 +55,16 @@ type EstimateInfo = {
   actioned_by_name: string | null;
   actioned_on: string | null;
   reject_reason: string | null;
+  /*
+   * Both new for sub-project E (Ops Material Approval) — landing in a
+   * parallel backend change to GET /api/public/estimate/:token, which the
+   * design doc says reads the same services/job-line-total.js helper as
+   * GET /client/jobs/:id/estimate-preview. Optional: an old payload with
+   * neither key must still render the page as it does today (PDF only,
+   * no Materials section, no totals block).
+   */
+  materials?: MaterialLine[];
+  totals?: { service_charge_subtotal?: number | string; material_subtotal?: number | string; grand_total?: number | string };
 };
 
 /*
@@ -252,6 +263,18 @@ export default function EstimateApprovalPage() {
             </div>
           )}
         </div>
+
+        {/* Materials + totals — sub-project E (Ops Material Approval).
+            EstimateMaterials renders nothing on a service-only job (no
+            approved material lines); EstimateTotalsSummary renders nothing
+            until the backend ships `totals` on this endpoint. Placed above
+            the PDF so the SPOC sees the approved figure before opening it. */}
+        {(info.materials?.length || info.totals) ? (
+          <div className="px-5 py-4 border-b border-ink-100 space-y-3">
+            <EstimateMaterials materials={info.materials} />
+            <EstimateTotalsSummary totals={info.totals} />
+          </div>
+        ) : null}
 
         {/* PDF viewer — `<iframe>` is the broadest-compat way to render
             a remote PDF in 2024 browsers. Falls back to a "Download"

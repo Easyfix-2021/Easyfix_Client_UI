@@ -53,6 +53,7 @@ import type { LucideIcon } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
+import { EstimateMaterials, type MaterialLine } from '@/components/estimate-materials';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
   PageHeader, SectionLabel, Toolbar, FilterChip, ChipSelect, AgeBand, SplitLayout,
@@ -119,9 +120,18 @@ type JobDetail = JobRow & {
   }>;
 };
 
-/** GET /jobs/:id/estimate-preview — the canonical estimate figure. */
+/*
+ * GET /jobs/:id/estimate-preview — the canonical estimate figure.
+ *
+ * `materials` is new for sub-project E (Ops Material Approval): approved
+ * material lines Ops reviewed in the CRM, each carrying a name, a qty
+ * (`unit`) and the approved charge. Optional because it's landing in a
+ * parallel backend change — an old payload with no `materials` key at all
+ * must still render (no Materials section, same as a service-only job).
+ */
 type EstimatePreview = {
   job_id: number;
+  materials?: MaterialLine[];
   totals: { service_charge_subtotal: number; material_subtotal: number; grand_total: number };
   already_approved: boolean;
   already_rejected: boolean;
@@ -1075,6 +1085,12 @@ export default function OpenJobsPage() {
               <ActionButton size="md" className="w-full" onClick={() => openJobDrawer(selected.job_id)}>
                 Open Full Job Record
               </ActionButton>
+
+              {/* Materials — approved lines from Ops' Material Review (sub-
+                  project E). Placed above the Estimate-value row below,
+                  which already reads est.totals.grand_total and so already
+                  includes the material subtotal once the backend ships it. */}
+              <EstimateMaterials materials={est?.materials} className="mb-3" />
 
               <div>
                 <MetaRow
