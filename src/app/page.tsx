@@ -30,6 +30,23 @@ type View = 'signin' | 'signup';
 type Step = 'identifier' | 'otp';
 
 /*
+ * Where to land after auth. The authed layout sends an unauthenticated
+ * visitor here with `?next=<original path+query>` (e.g. `/jobs?jobId=123`
+ * from the "Send Request to Client" email link) so the deep link survives
+ * the login round-trip. Read from window.location, not useSearchParams —
+ * this page has no Suspense boundary around it (same reasoning as the
+ * one-time seed effect in (authed)/history/page.tsx).
+ *
+ * Only a same-origin relative path is honoured — `//evil.com` or an
+ * absolute URL is an open-redirect vector, not a page in this app.
+ */
+function nextPathAfterLogin(): string {
+  if (typeof window === 'undefined') return '/dashboard';
+  const raw = new URLSearchParams(window.location.search).get('next');
+  return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+}
+
+/*
  * `bg` is each network's OWN mark, taken from the vendor map in
  * src/brand/charts.ts — WhatsApp green belongs to WhatsApp, so a rebrand
  * must not repaint it. Applied as an inline background rather than a
@@ -64,7 +81,7 @@ export default function LoginPage() {
   const socialRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (getToken()) router.push('/dashboard');
+    if (getToken()) router.push(nextPathAfterLogin());
   }, [router]);
 
   useEffect(() => {
@@ -134,7 +151,7 @@ export default function LoginPage() {
         otp: Number(otpStr),
       });
       setToken(res.token);
-      router.push('/dashboard');
+      router.push(nextPathAfterLogin());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Invalid OTP');
       setOtp('');

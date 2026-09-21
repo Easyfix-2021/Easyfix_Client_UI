@@ -139,6 +139,37 @@ const EXTRAS: NavItem[] = [
 ];
 
 
+/*
+ * Where the login page sends an unauthenticated visitor back to. Captures
+ * the FULL current URL (path + query) — a deep link like /jobs?jobId=123
+ * (the "Send Request to Client" email link, sub-project E) must survive the
+ * round-trip, not just the pathname. Read from window.location rather than
+ * usePathname()/useSearchParams(): this runs from an effect that fires
+ * before the route's own page component (and its own searchParams read)
+ * ever mounts.
+ */
+function loginRedirectUrl(): string {
+  const next = window.location.pathname + window.location.search;
+  return `/?next=${encodeURIComponent(next)}`;
+}
+
+/*
+ * The backend is adding unread JOB notifications (dashboard_notification_log)
+ * to this count in parallel — it may start returning a bare number, or an
+ * object shaped { count } / { unread } / { count, notices, jobs }. Read
+ * tolerantly so this badge doesn't need a synchronized deploy with that
+ * change.
+ */
+function unreadCountOf(raw: unknown): number {
+  if (typeof raw === 'number') return raw;
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    if (typeof o.count === 'number') return o.count;
+    if (typeof o.unread === 'number') return o.unread;
+  }
+  return 0;
+}
+
 function initialsOf(name?: string) {
   if (!name) return 'U';
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -174,7 +205,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     if (bootedRef.current) return;
     bootedRef.current = true;
 
-    if (!getToken()) { router.push('/'); return; }
+    if (!getToken()) { router.push(loginRedirectUrl()); return; }
     (async () => {
       try {
         const res = await api.get<{ spoc: Spoc; access?: Access }>('/me');
@@ -186,7 +217,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
         else setBootError('We could not load your profile. Please try again.');
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
-          setToken(null); router.push('/');
+          setToken(null); router.push(loginRedirectUrl());
         } else {
           // Backend down / network blip — don't render children with a
           // null SPOC (that crashes useSpoc). Show a retry screen instead.
@@ -293,8 +324,8 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
     let cancelled = false;
     async function refreshUnread() {
       try {
-        const r = await api.get<{ count: number }>('/notices/unread-count');
-        if (!cancelled) setUnread(Number(r?.count) || 0);
+        const r = await api.get<unknown>('/notices/unread-count');
+        if (!cancelled) setUnread(unreadCountOf(r));
       } catch {
         // Silent — the badge just won't update. Avoid spamming the
         // console on an offline laptop.
