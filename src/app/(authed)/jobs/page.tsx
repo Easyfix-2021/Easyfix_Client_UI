@@ -465,6 +465,27 @@ export default function OpenJobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTerm]);
 
+  /*
+   * ─── DEEP LINK: ?jobId= opens that job's drawer on arrival ─────────────
+   *
+   * `${CLIENT_URL}/jobs?jobId=<id>` is the "Send Request to Client" email
+   * link (EasyFix_Backend, material-approval sub-project). Read ONCE on
+   * mount — never on every searchParams change, or a jobId left behind by a
+   * slow strip would reopen the drawer on the next filter click — then
+   * stripped via setFilters' router.replace so a refresh or Back never
+   * reopens it. A non-numeric id is ignored outright; the drawer itself
+   * already owns not-found/permission handling for a job this client cannot
+   * see.
+   */
+  useEffect(() => {
+    const raw = searchParams.get('jobId');
+    if (!raw) return;
+    const id = Number(raw);
+    if (Number.isInteger(id) && id > 0) openJobDrawer(id);
+    setFilters({ jobId: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* pane action state */
   const [busy, setBusy] = useState<'approve' | 'reject' | 'escalate' | null>(null);
   const [note, setNote] = useState<string | null>(null);
