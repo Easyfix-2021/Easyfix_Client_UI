@@ -54,6 +54,7 @@ import { api, ApiError } from '@/lib/api';
 import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
 import { EstimateMaterials, type MaterialLine } from '@/components/estimate-materials';
+import { ApproveQuotationDialog, type ApproveResult, type VisitSlotsResponse } from '@/components/ApproveQuotationDialog';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
   PageHeader, SectionLabel, Toolbar, FilterChip, ChipSelect, AgeBand, SplitLayout,
@@ -487,8 +488,9 @@ export default function OpenJobsPage() {
   }, []);
 
   /* pane action state */
-  const [busy, setBusy] = useState<'approve' | 'reject' | 'escalate' | null>(null);
+  const [busy, setBusy] = useState<'reject' | 'escalate' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [escOpen, setEscOpen] = useState(false);
@@ -612,6 +614,7 @@ export default function OpenJobsPage() {
   /* A new selection starts with no half-filled forms and no stale confirmation. */
   useEffect(() => {
     setNote(null);
+    setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason('');
     setEscOpen(false);
@@ -626,19 +629,25 @@ export default function OpenJobsPage() {
     await Promise.all([detail.reload(), estimate.reload(), queue.reload(), book.reload()]);
   }, [detail, estimate, queue, book]);
 
-  const onApprove = useCallback(async () => {
-    if (!selectedId) return;
-    setBusy('approve');
-    setNote(null);
-    try {
-      await api.patch(`/jobs/${selectedId}/estimate/approve`, {});
-      await refresh('Estimate approved. The job is back with EasyFix.');
-    } catch (err) {
-      setNote(err instanceof ApiError ? err.message : 'Could not approve the estimate.');
-    } finally {
-      setBusy(null);
-    }
-  }, [selectedId, refresh]);
+  /*
+   * Injected into ApproveQuotationDialog — see that file's header for why the
+   * dialog takes these as props rather than calling `api` itself. Both are
+   * re-created per selectedId so a slot fetch started for job A can never be
+   * submitted against job B (the dialog is reset and re-closed on every
+   * selection change above).
+   */
+  const loadVisitSlots = useCallback(
+    () => api.get<VisitSlotsResponse>(`/jobs/${selectedId}/visit-slots`),
+    [selectedId],
+  );
+  const submitApprove = useCallback(
+    (form: FormData) => api.upload<ApproveResult>(`/jobs/${selectedId}/estimate/approve`, form, { method: 'PATCH' }),
+    [selectedId],
+  );
+  const onApproved = useCallback(async (_result: ApproveResult, summary: string) => {
+    setApproveOpen(false);
+    await refresh(`Approved — visit on ${summary}.`);
+  }, [refresh]);
 
   const onReject = useCallback(async () => {
     if (!selectedId || rejectReason.trim().length < 3) return;
@@ -1011,11 +1020,9 @@ export default function OpenJobsPage() {
                     size="md"
                     className="w-full"
                     disabled={busy !== null}
-                    onClick={() => void onApprove()}
+                    onClick={() => setApproveOpen(true)}
                   >
-                    {busy === 'approve'
-                      ? 'Approving…'
-                      : `Approve Estimate — ${rupees(est!.totals.grand_total)}`}
+                    {`Approve Estimate — ${rupees(est!.totals.grand_total)}`}
                   </ActionButton>
                   {rejectOpen ? (
                     <div className="space-y-2">
@@ -1197,6 +1204,16 @@ export default function OpenJobsPage() {
           )
         }
       />
+
+      {selectedId != null && (
+        <ApproveQuotationDialog
+          open={approveOpen}
+          onClose={() => setApproveOpen(false)}
+          loadSlots={loadVisitSlots}
+          approve={submitApprove}
+          onApproved={onApproved}
+        />
+      )}
     </>
   );
 }

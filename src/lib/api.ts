@@ -56,10 +56,17 @@ export const api = {
    * set Content-Type itself is what generates that boundary, so this path
    * must never set the header.
    */
-  upload: async <T>(p: string, form: FormData): Promise<T> => {
+  /*
+   * `method` defaults to POST (every existing caller). The estimate-approve
+   * routes are PATCH and gained a required file field (visit permission) in
+   * the 2026-09-22 next-visit change — same multipart mechanics, different
+   * verb — so this takes an override rather than a second near-duplicate
+   * function.
+   */
+  upload: async <T>(p: string, form: FormData, opts?: { method?: string }): Promise<T> => {
     const token = getToken();
     const res = await fetch(`/api/client${p}`, {
-      method: 'POST',
+      method: opts?.method ?? 'POST',
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: form,
