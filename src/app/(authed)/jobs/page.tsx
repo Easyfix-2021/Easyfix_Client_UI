@@ -54,7 +54,7 @@ import { api, ApiError } from '@/lib/api';
 import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
 import { EstimateMaterials, type MaterialLine } from '@/components/estimate-materials';
-import { ApproveQuotationDialog, type ApproveResult, type VisitSlotsResponse } from '@/components/ApproveQuotationDialog';
+import { ApproveQuotationDialog, approvalOutcomeNote, type ApproveResult, type VisitSlotsResponse } from '@/components/ApproveQuotationDialog';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
   PageHeader, SectionLabel, Toolbar, FilterChip, ChipSelect, AgeBand, SplitLayout,
@@ -644,9 +644,9 @@ export default function OpenJobsPage() {
     (form: FormData) => api.upload<ApproveResult>(`/jobs/${selectedId}/estimate/approve`, form, { method: 'PATCH' }),
     [selectedId],
   );
-  const onApproved = useCallback(async (_result: ApproveResult, summary: string) => {
+  const onApproved = useCallback(async (result: ApproveResult, summary: string) => {
     setApproveOpen(false);
-    await refresh(`Approved — visit on ${summary}.`);
+    await refresh(approvalOutcomeNote(result, summary));
   }, [refresh]);
 
   const onReject = useCallback(async () => {

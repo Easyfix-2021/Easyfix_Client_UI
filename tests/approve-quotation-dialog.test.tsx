@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import {
   slotLabel, toVisitDateTime, formatVisitSummary,
   validatePermissionFile, isApproveFormValid, isSlotConflict,
-  MAX_PERMISSION_FILE_BYTES,
+  MAX_PERMISSION_FILE_BYTES, approvalOutcomeNote,
 } from '@/components/ApproveQuotationDialog';
 
 function file(name: string, type: string, size: number): File {
@@ -152,5 +152,16 @@ describe('isSlotConflict', () => {
     expect(isSlotConflict(new Error('network down'))).toBe(false);
     expect(isSlotConflict(null)).toBe(false);
     expect(isSlotConflict(undefined)).toBe(false);
+  });
+});
+
+describe('approvalOutcomeNote', () => {
+  const ok = { visit_date_time: '2026-09-25 10:00:00', permission: { choice: 'later' as const, request_id: 7 } };
+  it('plain success when both post-commit steps worked', () => {
+    expect(approvalOutcomeNote(ok, 'Thu 25 Sep, 10 AM – 11 AM')).toBe('Approved — visit on Thu 25 Sep, 10 AM – 11 AM.');
+  });
+  it('never plain success over a failed reschedule or permission write', () => {
+    expect(approvalOutcomeNote({ ...ok, schedule_error: 'boom' }, 'x')).toMatch(/^Approved, but the visit could not be booked/);
+    expect(approvalOutcomeNote({ ...ok, permission_error: 'boom' }, 'x')).toMatch(/entry permission could not be saved/);
   });
 });

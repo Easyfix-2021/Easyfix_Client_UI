@@ -50,7 +50,24 @@ export type PermissionChoice = 'now' | 'later' | 'not_required';
 export type ApproveResult = {
   visit_date_time: string;
   permission: { choice: PermissionChoice; request_id: number | null };
+  /** Post-commit step failures — the approval itself succeeded. */
+  schedule_error?: string | null;
+  permission_error?: string | null;
 };
+
+/**
+ * The note shown after approving. The approval commits first; the reschedule
+ * and the permission request run after it and report failures in the result,
+ * so plain "Approved — visit on …" over one of them would be a silent partial
+ * failure.
+ */
+export function approvalOutcomeNote(result: ApproveResult | null | undefined, summary: string): string {
+  const problems = [
+    result?.schedule_error ? 'the visit could not be booked — EasyFix will call you to fix the time' : null,
+    result?.permission_error ? 'the entry permission could not be saved — please upload it from Permission Requests' : null,
+  ].filter(Boolean);
+  return problems.length ? `Approved, but ${problems.join('; and ')}.` : `Approved — visit on ${summary}.`;
+}
 
 /* ─── pure logic (exported for tests — no DOM, no fetch) ───────────────── */
 

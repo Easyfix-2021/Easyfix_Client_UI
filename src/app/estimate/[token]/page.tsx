@@ -36,7 +36,7 @@ import {
 import { formatIstDateTimeLong } from '@/lib/format';
 import { EstimateMaterials, EstimateTotalsSummary, type MaterialLine } from '@/components/estimate-materials';
 import {
-  ApproveQuotationDialog, type ApproveResult, type VisitSlotsResponse,
+  ApproveQuotationDialog, approvalOutcomeNote, type ApproveResult, type VisitSlotsResponse,
 } from '@/components/ApproveQuotationDialog';
 
 /*
@@ -165,9 +165,9 @@ export default function EstimateApprovalPage() {
     return body.data as ApproveResult;
   }, [token]);
 
-  const onApproved = useCallback(async (_result: ApproveResult, summary: string) => {
+  const onApproved = useCallback(async (result: ApproveResult, summary: string) => {
     setApproveOpen(false);
-    setApprovedNote(`Approved — visit on ${summary}.`);
+    setApprovedNote(approvalOutcomeNote(result, summary));
     // Re-fetch the info so the success screen renders with
     // actioned_by_name + actioned_on populated by the backend.
     const r2 = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}`);
