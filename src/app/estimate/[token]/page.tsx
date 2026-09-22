@@ -27,13 +27,17 @@
  * own context — a focused, single-purpose approval surface.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, XCircle, AlertCircle, FileText, X,
   ThumbsUp, ThumbsDown, Send, ChevronDown,
 } from 'lucide-react';
 import { formatIstDateTimeLong } from '@/lib/format';
+import { EstimateMaterials, EstimateTotalsSummary, type MaterialLine } from '@/components/estimate-materials';
+import {
+  ApproveQuotationDialog, approvalOutcomeNote, type ApproveResult, type VisitSlotsResponse,
+} from '@/components/ApproveQuotationDialog';
 
 /*
  * Frontend mirror of the backend's `/easydoc/...` Nginx convention,
@@ -54,6 +58,16 @@ type EstimateInfo = {
   actioned_by_name: string | null;
   actioned_on: string | null;
   reject_reason: string | null;
+  /*
+   * Both new for sub-project E (Ops Material Approval) — landing in a
+   * parallel backend change to GET /api/public/estimate/:token, which the
+   * design doc says reads the same services/job-line-total.js helper as
+   * GET /client/jobs/:id/estimate-preview. Optional: an old payload with
+   * neither key must still render the page as it does today (PDF only,
+   * no Materials section, no totals block).
+   */
+  materials?: MaterialLine[];
+  totals?: { service_charge_subtotal?: number | string; material_subtotal?: number | string; grand_total?: number | string };
 };
 
 /*
@@ -82,6 +96,14 @@ export default function EstimateApprovalPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Next-Visit + Entry-Permission dialog (2026-09-22 owner-approved design).
+  // `approvedNote` is this page's only "toast" — there is no toast primitive
+  // here, and the terminal Approved screen below replaces this whole view the
+  // moment the re-fetch lands, so the visit summary is folded into that screen
+  // instead of a banner that would flash and vanish with it.
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approvedNote, setApprovedNote] = useState<string | null>(null);
 
   // Reject side-pane state. The flow is:
   //   click Reject → showReject = true (form appears below buttons)
@@ -115,28 +137,43 @@ export default function EstimateApprovalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  async function approve() {
-    // Browser-native confirm matches the legacy flow ("Are you really
-    // approve this estimate") — minimal UX, avoids pulling in a modal
-    // for what is effectively a one-tap commitment.
-    if (!confirm('Approve this estimate?')) return;
-    setSubmitError(null); setSubmitting(true);
-    try {
-      const res = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}/approve`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const body = await res.json();
-      if (!body.success) throw new Error(body.error || 'Could not approve.');
-      // Re-fetch the info so the success screen renders with
-      // actioned_by_name + actioned_on populated by the backend.
-      const r2 = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}`);
-      const b2 = await r2.json();
-      if (b2.success) setInfo(b2.data as EstimateInfo);
-    } catch (err) {
-      setSubmitError((err as Error).message || 'Could not approve.');
-    } finally { setSubmitting(false); }
-  }
+  /*
+   * The approve call is now multipart (visit_date_time + permission [+
+   * permission_file]) and asked for by ApproveQuotationDialog, so the old
+   * one-tap `confirm()` + bare PATCH is gone — the dialog IS the
+   * confirmation step now, same as the portal's own dialogs never using
+   * window.confirm.
+   */
+  const loadVisitSlots = useCallback(async (): Promise<VisitSlotsResponse> => {
+    const res = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}/visit-slots`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.success === false) {
+      throw Object.assign(new Error(body?.error || `HTTP ${res.status}`), { status: res.status });
+    }
+    return body.data as VisitSlotsResponse;
+  }, [token]);
+
+  const submitApprove = useCallback(async (form: FormData): Promise<ApproveResult> => {
+    const res = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}/approve`, {
+      method: 'PATCH',
+      body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.success === false) {
+      throw Object.assign(new Error(body?.error || `HTTP ${res.status}`), { status: res.status });
+    }
+    return body.data as ApproveResult;
+  }, [token]);
+
+  const onApproved = useCallback(async (result: ApproveResult, summary: string) => {
+    setApproveOpen(false);
+    setApprovedNote(approvalOutcomeNote(result, summary));
+    // Re-fetch the info so the success screen renders with
+    // actioned_by_name + actioned_on populated by the backend.
+    const r2 = await fetch(`/api/public/estimate/${encodeURIComponent(String(token))}`);
+    const b2 = await r2.json().catch(() => ({}));
+    if (b2.success) setInfo(b2.data as EstimateInfo);
+  }, [token]);
 
   async function reject() {
     setSubmitError(null);
@@ -201,7 +238,10 @@ export default function EstimateApprovalPage() {
       <Shell>
         <ErrorCard
           title="Estimate Approved"
-          subtitle={`Approved${info.actioned_by_name ? ` by ${info.actioned_by_name}` : ''}${info.actioned_on ? ` on ${formatIstDateTimeLong(info.actioned_on, info.actioned_on)}` : ''}.`}
+          subtitle={
+            `Approved${info.actioned_by_name ? ` by ${info.actioned_by_name}` : ''}${info.actioned_on ? ` on ${formatIstDateTimeLong(info.actioned_on, info.actioned_on)}` : ''}.`
+            + (approvedNote ? `\n${approvedNote}` : '')
+          }
           tone="success"
         />
       </Shell>
@@ -252,6 +292,18 @@ export default function EstimateApprovalPage() {
             </div>
           )}
         </div>
+
+        {/* Materials + totals — sub-project E (Ops Material Approval).
+            EstimateMaterials renders nothing on a service-only job (no
+            approved material lines); EstimateTotalsSummary renders nothing
+            until the backend ships `totals` on this endpoint. Placed above
+            the PDF so the SPOC sees the approved figure before opening it. */}
+        {(info.materials?.length || info.totals) ? (
+          <div className="px-5 py-4 border-b border-ink-100 space-y-3">
+            <EstimateMaterials materials={info.materials} />
+            <EstimateTotalsSummary totals={info.totals} />
+          </div>
+        ) : null}
 
         {/* PDF viewer — `<iframe>` is the broadest-compat way to render
             a remote PDF in 2024 browsers. Falls back to a "Download"
@@ -338,11 +390,11 @@ export default function EstimateApprovalPage() {
             {!showReject && (
               <button
                 type="button"
-                onClick={approve}
+                onClick={() => setApproveOpen(true)}
                 disabled={submitting}
                 className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-success to-success-text text-white shadow hover:shadow-md inline-flex items-center gap-1.5 disabled:opacity-60"
               >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                <ThumbsUp className="w-4 h-4" />
                 Approve
               </button>
             )}
@@ -364,6 +416,14 @@ export default function EstimateApprovalPage() {
           </div>
         </div>
       </div>
+
+      <ApproveQuotationDialog
+        open={approveOpen}
+        onClose={() => setApproveOpen(false)}
+        loadSlots={loadVisitSlots}
+        approve={submitApprove}
+        onApproved={onApproved}
+      />
     </Shell>
   );
 }

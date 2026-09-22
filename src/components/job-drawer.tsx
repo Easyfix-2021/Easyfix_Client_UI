@@ -79,6 +79,7 @@ function statusPillCls(s: number) {
     case 0: case 1:  return 'bg-info-tint text-info-text';
     case 6:          return 'bg-danger-tint text-danger-text';
     case 9: case 15: return 'bg-warning-tint text-warning-text';
+    case 16:         return 'bg-info-tint text-info-text';
     default:         return 'bg-ink-100 text-ink-700';
   }
 }

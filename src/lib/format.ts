@@ -181,3 +181,17 @@ export function formatServiceAddress(
   const { fallback = '—' } = opts;
   return (job?.address || '').trim() || fallback;
 }
+
+/*
+ * rupees — the one shared ₹ formatter. Several pages (jobs list, action
+ * queue, invoices) had each hand-rolled their own `₹${Math.round(n)
+ * .toLocaleString('en-IN')}` one-liner; this is that same convention,
+ * pulled out so new money-rendering code (the Materials section, sub-
+ * project E) has one canonical helper instead of a fourth copy.
+ * Non-finite / null input renders as ₹0 rather than "₹NaN".
+ */
+export function rupees(n: number | string | null | undefined): string {
+  const v = typeof n === 'number' ? n : Number(n);
+  const safe = Number.isFinite(v) ? v : 0;
+  return `₹${Math.round(safe).toLocaleString('en-IN')}`;
+}

@@ -16,12 +16,14 @@
  * and the list would show 30. So both come from ONE set: the client's open book,
  * pulled once per scope change.
  *
- * `/jobs` takes a single `status`, so "open" is eight parallel calls — every
+ * `/jobs` takes a single `status`, so "open" is nine parallel calls — every
  * code Home's "Total open" counts, i.e. job_status NOT IN (3,5,6,7) enumerated:
- * 9 new, 0/1/2/20 in flight, 15 awaiting approval, 21 on hold and 10 awaiting
- * fulfilment. The last four are open precisely BECAUSE they are waiting on
- * someone. Each call is capped; if a cap is hit the page says so rather than
- * quietly under-counting a bucket.
+ * 9 new, 0/1/2/20 in flight, 16 pending for material, 15 awaiting approval, 21
+ * on hold and 10 awaiting fulfilment. The last four are open precisely BECAUSE
+ * they are waiting on someone — 16 is the one exception: it is EasyFix-side
+ * (tech drafting a quote, then a PM reviewing it), so it is open but not
+ * waiting on the client. Each call is capped; if a cap is hit the page says so
+ * rather than quietly under-counting a bucket.
  *
  * WHERE THE FILTERS RUN
  *
@@ -51,6 +53,8 @@ import type { LucideIcon } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { fetchAllJobs, useDebouncedValue, useFetchOnce } from '@/lib/hooks';
 import { openJobDrawer } from '@/components/job-drawer';
+import { EstimateMaterials, type MaterialLine } from '@/components/estimate-materials';
+import { ApproveQuotationDialog, approvalOutcomeNote, type ApproveResult, type VisitSlotsResponse } from '@/components/ApproveQuotationDialog';
 import { STATUS_LABELS } from '@/lib/utils';
 import {
   PageHeader, SectionLabel, Toolbar, FilterChip, ChipSelect, AgeBand, SplitLayout,
@@ -117,9 +121,18 @@ type JobDetail = JobRow & {
   }>;
 };
 
-/** GET /jobs/:id/estimate-preview — the canonical estimate figure. */
+/*
+ * GET /jobs/:id/estimate-preview — the canonical estimate figure.
+ *
+ * `materials` is new for sub-project E (Ops Material Approval): approved
+ * material lines Ops reviewed in the CRM, each carrying a name, a qty
+ * (`unit`) and the approved charge. Optional because it's landing in a
+ * parallel backend change — an old payload with no `materials` key at all
+ * must still render (no Materials section, same as a service-only job).
+ */
 type EstimatePreview = {
   job_id: number;
+  materials?: MaterialLine[];
   totals: { service_charge_subtotal: number; material_subtotal: number; grand_total: number };
   already_approved: boolean;
   already_rejected: boolean;
@@ -239,6 +252,11 @@ function statusOf(j: JobRow): { label: string; cls: string } {
     case 1: return { label: 'Scheduled', cls: 'text-info' };
     case 2:
     case 20: return { label: 'Technician On Site', cls: 'text-success' };
+    // Pending for Material — a tech-flagged quote sitting with EasyFix (tech
+    // drafting it, then a PM reviewing it), never with the client. Reads as
+    // "in progress", not "waiting on you" — no primary/warning tone, which
+    // this vocabulary reserves for states the client must act on.
+    case 16: return { label: 'Pending for Material', cls: 'text-info' };
     case 15: return { label: 'Awaiting Your Approval', cls: 'text-primary' };
     case 21: return { label: 'On Hold', cls: 'text-warning' };
     default: return {
@@ -448,9 +466,31 @@ export default function OpenJobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTerm]);
 
+  /*
+   * ─── DEEP LINK: ?jobId= opens that job's drawer on arrival ─────────────
+   *
+   * `${CLIENT_URL}/jobs?jobId=<id>` is the "Send Request to Client" email
+   * link (EasyFix_Backend, material-approval sub-project). Read ONCE on
+   * mount — never on every searchParams change, or a jobId left behind by a
+   * slow strip would reopen the drawer on the next filter click — then
+   * stripped via setFilters' router.replace so a refresh or Back never
+   * reopens it. A non-numeric id is ignored outright; the drawer itself
+   * already owns not-found/permission handling for a job this client cannot
+   * see.
+   */
+  useEffect(() => {
+    const raw = searchParams.get('jobId');
+    if (!raw) return;
+    const id = Number(raw);
+    if (Number.isInteger(id) && id > 0) openJobDrawer(id);
+    setFilters({ jobId: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* pane action state */
-  const [busy, setBusy] = useState<'approve' | 'reject' | 'escalate' | null>(null);
+  const [busy, setBusy] = useState<'reject' | 'escalate' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [escOpen, setEscOpen] = useState(false);
@@ -574,6 +614,7 @@ export default function OpenJobsPage() {
   /* A new selection starts with no half-filled forms and no stale confirmation. */
   useEffect(() => {
     setNote(null);
+    setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason('');
     setEscOpen(false);
@@ -588,19 +629,25 @@ export default function OpenJobsPage() {
     await Promise.all([detail.reload(), estimate.reload(), queue.reload(), book.reload()]);
   }, [detail, estimate, queue, book]);
 
-  const onApprove = useCallback(async () => {
-    if (!selectedId) return;
-    setBusy('approve');
-    setNote(null);
-    try {
-      await api.patch(`/jobs/${selectedId}/estimate/approve`, {});
-      await refresh('Estimate approved. The job is back with EasyFix.');
-    } catch (err) {
-      setNote(err instanceof ApiError ? err.message : 'Could not approve the estimate.');
-    } finally {
-      setBusy(null);
-    }
-  }, [selectedId, refresh]);
+  /*
+   * Injected into ApproveQuotationDialog — see that file's header for why the
+   * dialog takes these as props rather than calling `api` itself. Both are
+   * re-created per selectedId so a slot fetch started for job A can never be
+   * submitted against job B (the dialog is reset and re-closed on every
+   * selection change above).
+   */
+  const loadVisitSlots = useCallback(
+    () => api.get<VisitSlotsResponse>(`/jobs/${selectedId}/visit-slots`),
+    [selectedId],
+  );
+  const submitApprove = useCallback(
+    (form: FormData) => api.upload<ApproveResult>(`/jobs/${selectedId}/estimate/approve`, form, { method: 'PATCH' }),
+    [selectedId],
+  );
+  const onApproved = useCallback(async (result: ApproveResult, summary: string) => {
+    setApproveOpen(false);
+    await refresh(approvalOutcomeNote(result, summary));
+  }, [refresh]);
 
   const onReject = useCallback(async () => {
     if (!selectedId || rejectReason.trim().length < 3) return;
@@ -687,7 +734,21 @@ export default function OpenJobsPage() {
    */
   const d = detail.data && detail.data.job_id === selectedId ? detail.data : null;
   const est = estimate.data && estimate.data.job_id === selectedId ? estimate.data : null;
-  const estimatePending = !!est && !est.already_approved && !est.already_rejected
+  /*
+   * ⚠ status === 15 IS LOAD-BEARING, not a narrowing nicety.
+   *
+   * /jobs/:id/estimate-preview builds its lines from job_service_status = 1
+   * rows with no job_status predicate of its own — the technician populates
+   * those same rows while the job sits at 16 (Quotation / Review Pending),
+   * before a PM has reviewed anything. Without this check a 16 job with a
+   * drafted-but-unreviewed quote would satisfy every other condition here and
+   * render Approve/Estimate — exactly the unreviewed-quote-reaches-the-client
+   * bug this status exists to close. 15 is the one status
+   * PATCH /jobs/:id/estimate/approve is meant for (see /action-queue's own
+   * `job_status = 15` guard on the server).
+   */
+  const estimatePending = !!est && selected?.job_status === 15
+    && !est.already_approved && !est.already_rejected
     && est.totals.grand_total > 0;
   const selectedBucket = selected ? bucketOf(selected, now) : null;
   const canEscalate = !!selected && !estimatePending && selectedBucket !== 'future';
@@ -959,11 +1020,9 @@ export default function OpenJobsPage() {
                     size="md"
                     className="w-full"
                     disabled={busy !== null}
-                    onClick={() => void onApprove()}
+                    onClick={() => setApproveOpen(true)}
                   >
-                    {busy === 'approve'
-                      ? 'Approving…'
-                      : `Approve Estimate — ${rupees(est!.totals.grand_total)}`}
+                    {`Approve Estimate — ${rupees(est!.totals.grand_total)}`}
                   </ActionButton>
                   {rejectOpen ? (
                     <div className="space-y-2">
@@ -1055,6 +1114,12 @@ export default function OpenJobsPage() {
                 Open Full Job Record
               </ActionButton>
 
+              {/* Materials — approved lines from Ops' Material Review (sub-
+                  project E). Placed above the Estimate-value row below,
+                  which already reads est.totals.grand_total and so already
+                  includes the material subtotal once the backend ships it. */}
+              <EstimateMaterials materials={est?.materials} className="mb-3" />
+
               <div>
                 <MetaRow
                   label="Estimate sent"
@@ -1139,6 +1204,16 @@ export default function OpenJobsPage() {
           )
         }
       />
+
+      {selectedId != null && (
+        <ApproveQuotationDialog
+          open={approveOpen}
+          onClose={() => setApproveOpen(false)}
+          loadSlots={loadVisitSlots}
+          approve={submitApprove}
+          onApproved={onApproved}
+        />
+      )}
     </>
   );
 }
