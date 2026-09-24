@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import {
   slotLabel, toVisitDateTime, formatVisitSummary,
   validatePermissionFile, isApproveFormValid, isSlotConflict,
-  MAX_PERMISSION_FILE_BYTES, approvalOutcomeNote,
+  MAX_PERMISSION_FILE_BYTES, approvalOutcomeNote, isVisitDayBlocked,
 } from '@/components/ApproveQuotationDialog';
 
 function file(name: string, type: string, size: number): File {
@@ -163,5 +163,18 @@ describe('approvalOutcomeNote', () => {
   it('never plain success over a failed reschedule or permission write', () => {
     expect(approvalOutcomeNote({ ...ok, schedule_error: 'boom' }, 'x')).toMatch(/^Approved, but the visit could not be booked/);
     expect(approvalOutcomeNote({ ...ok, permission_error: 'boom' }, 'x')).toMatch(/entry permission could not be saved/);
+  });
+});
+
+describe('isVisitDayBlocked (calendar view)', () => {
+  const free = new Set(['2026-09-25', '2026-10-23']);
+  it('blocks days outside the offered window', () => {
+    expect(isVisitDayBlocked('2026-09-23', '2026-09-24', '2026-10-23', free)).toBe(true);
+    expect(isVisitDayBlocked('2026-10-24', '2026-09-24', '2026-10-23', free)).toBe(true);
+  });
+  it('blocks a fully booked day inside the window, allows a free one incl. the last day', () => {
+    expect(isVisitDayBlocked('2026-09-24', '2026-09-24', '2026-10-23', free)).toBe(true);
+    expect(isVisitDayBlocked('2026-09-25', '2026-09-24', '2026-10-23', free)).toBe(false);
+    expect(isVisitDayBlocked('2026-10-23', '2026-09-24', '2026-10-23', free)).toBe(false);
   });
 });
