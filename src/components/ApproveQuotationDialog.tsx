@@ -36,7 +36,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, CalendarDays, CheckCircle2, Loader2, ShieldCheck, Upload, X,
+  AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, ShieldCheck, Upload, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatIstDayDate } from '@/lib/format';
@@ -70,6 +70,11 @@ export function approvalOutcomeNote(result: ApproveResult | null | undefined, su
 }
 
 /* ─── pure logic (exported for tests — no DOM, no fetch) ───────────────── */
+
+/** A calendar day is pickable only inside the offered window and with a free hour. */
+export function isVisitDayBlocked(iso: string, min: string, max: string, freeDays: Set<string>): boolean {
+  return iso < min || iso > max || !freeDays.has(iso);
+}
 
 /** "9 AM", "12 PM", "6 PM" — plain integer arithmetic, no Date object. */
 function fmt12(hour: number): string {
@@ -293,49 +298,26 @@ export function ApproveQuotationDialog({ open, onClose, loadSlots, approve, onAp
 
             {!slotsLoading && !slotsError && (
               <>
-                <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Visit day">
-                  {days.map((d) => (
-                    <button
-                      key={d.date}
-                      type="button"
-                      role="tab"
-                      aria-selected={date === d.date}
-                      onClick={() => pickDate(d.date)}
-                      className={cn(
-                        'px-2.5 py-1.5 rounded-lg border text-xs font-medium transition whitespace-nowrap',
-                        date === d.date
-                          ? 'border-primary bg-primary-50 text-primary'
-                          : 'border-ink-100 bg-surface text-ink-700 hover:border-ink-300',
-                      )}
-                    >
-                      {formatIstDayDate(d.date)}
-                    </button>
-                  ))}
-                  {days.length === 0 && (
-                    <p className="text-xs text-ink-500">No visit slots are available in the next 30 days.</p>
-                  )}
-                </div>
+                {days.length === 0 ? (
+                  <p className="text-xs text-ink-500">No visit slots are available in the next 30 days.</p>
+                ) : (
+                  <VisitCalendar days={days} value={date} onPick={pickDate} />
+                )}
 
                 {activeDay && (
-                  <div className="flex flex-wrap gap-1.5">
+                  <select
+                    className="input w-full"
+                    aria-label="Visit time"
+                    value={hour == null ? '' : String(hour)}
+                    onChange={(e) => setHour(e.target.value === '' ? null : Number(e.target.value))}
+                  >
+                    <option value="">Select a time · {formatIstDayDate(activeDay.date)}</option>
                     {activeDay.hours.map((h) => (
-                      <button
-                        key={h.hour}
-                        type="button"
-                        disabled={!h.free}
-                        aria-pressed={hour === h.hour}
-                        onClick={() => setHour(h.hour)}
-                        className={cn(
-                          'px-2.5 py-1.5 rounded-lg border text-xs font-medium transition whitespace-nowrap',
-                          !h.free && 'opacity-40 cursor-not-allowed line-through border-ink-100 bg-ink-50 text-ink-300',
-                          h.free && hour === h.hour && 'border-primary bg-primary text-white',
-                          h.free && hour !== h.hour && 'border-ink-100 bg-surface text-ink-700 hover:border-ink-300',
-                        )}
-                      >
-                        {slotLabel(h.hour)}
-                      </button>
+                      <option key={h.hour} value={h.hour} disabled={!h.free}>
+                        {slotLabel(h.hour)}{h.free ? '' : ' · Already booked'}
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 )}
                 {!activeDay && days.length > 0 && (
                   <p className="text-xs text-ink-500">Choose a day to see available times.</p>
@@ -449,6 +431,75 @@ function PermissionOption({
         {label}
       </label>
       {checked && children}
+    </div>
+  );
+}
+
+/**
+ * Month-grid calendar over the offered visit days (owner, 2026-09-24: a calendar
+ * instead of day chips). Naive 'YYYY-MM-DD' strings throughout, built with
+ * Date.UTC so the browser's timezone can never shift a day.
+ */
+function VisitCalendar({ days, value, onPick }: { days: VisitDay[]; value: string | null; onPick: (iso: string) => void }) {
+  const min = days[0].date;
+  const max = days[days.length - 1].date;
+  const freeDays = new Set(days.filter((d) => d.hours.some((h) => h.free)).map((d) => d.date));
+  const [view, setView] = useState(() => {
+    const [y, m] = (value ?? min).split('-').map(Number);
+    return { y, m: m - 1 };
+  });
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const iso = (d: number) => `${view.y}-${pad(view.m + 1)}-${pad(d)}`;
+  const firstDow = new Date(Date.UTC(view.y, view.m, 1)).getUTCDay();
+  const count = new Date(Date.UTC(view.y, view.m + 1, 0)).getUTCDate();
+  const monthKey = `${view.y}-${pad(view.m + 1)}`;
+  const shift = (delta: number) => {
+    const d = new Date(Date.UTC(view.y, view.m + delta, 1));
+    setView({ y: d.getUTCFullYear(), m: d.getUTCMonth() });
+  };
+  return (
+    <div className="rounded-lg border border-ink-100 bg-surface p-3 select-none">
+      <div className="mb-2 flex items-center justify-between">
+        <button type="button" onClick={() => shift(-1)} disabled={monthKey <= min.slice(0, 7)} aria-label="Previous month"
+          className="rounded p-1.5 text-ink-700 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-30">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <div className="text-sm font-semibold text-ink-900">
+          {new Date(Date.UTC(view.y, view.m, 1)).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+        </div>
+        <button type="button" onClick={() => shift(1)} disabled={monthKey >= max.slice(0, 7)} aria-label="Next month"
+          className="rounded p-1.5 text-ink-700 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-30">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="mb-1 grid grid-cols-7 text-center text-xs font-medium text-ink-500">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: firstDow }, (_, i) => <div key={`b${i}`} />)}
+        {Array.from({ length: count }, (_, i) => {
+          const day = iso(i + 1);
+          const blocked = isVisitDayBlocked(day, min, max, freeDays);
+          const selected = day === value;
+          return (
+            <button
+              key={day}
+              type="button"
+              disabled={blocked}
+              aria-pressed={selected}
+              onClick={() => onPick(day)}
+              className={cn(
+                'h-9 rounded-full text-sm transition',
+                blocked && 'cursor-not-allowed text-ink-300',
+                !blocked && selected && 'bg-primary text-white',
+                !blocked && !selected && 'text-ink-700 hover:bg-ink-50',
+              )}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
