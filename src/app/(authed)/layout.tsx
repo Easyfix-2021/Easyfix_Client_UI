@@ -116,6 +116,14 @@ const EXTRAS: NavItem[] = [
   { href: '/history',     label: 'Order History',  icon: History },
   { href: '/tickets/new', label: 'New Tickets',    icon: Ticket },
   /*
+   * 3.8 Quality Check — no `grant`, same as Open jobs/Completed/Action queue:
+   * every SPOC has Operations, and the backend's own SPOC scoping on
+   * /client/qc is the real boundary. The route (/tickets/under-audit) is
+   * unchanged from the old "Completed & Under Audit" stub it replaces, so
+   * this is the first live nav entry pointing at it.
+   */
+  { href: '/tickets/under-audit', label: 'Quality Check', icon: ClipboardCheck },
+  /*
    * ⚠ WALLET IS NOT LINKED, AND MUST NOT BE UNTIL IT HAS A BACKEND.
    *
    * The page makes ZERO API calls — its balance, card numbers and transactions
