@@ -39,13 +39,6 @@ import {
   ApproveQuotationDialog, approvalOutcomeNote, type ApproveResult, type VisitSlotsResponse,
 } from '@/components/ApproveQuotationDialog';
 
-/*
- * Frontend mirror of the backend's `/easydoc/...` Nginx convention,
- * with a build-time env override for QA. Matches the helper used on
- * the authed job-detail page so dev/QA URLs line up.
- */
-const FILE_BASE = (process.env.NEXT_PUBLIC_FILE_BASE_URL || '/easydoc').replace(/\/+$/, '');
-
 type EstimateInfo = {
   job_id: number;
   job_status: number;
@@ -54,6 +47,13 @@ type EstimateInfo = {
   service_category: string | null;
   client_name: string | null;
   pdf_path: string;
+  /*
+   * Absolute, HEAD-verified estimate PDF on the legacy file host, or null
+   * (2026-09-30). Rendered instead of pdf_path, which was joined onto this
+   * app's own host (no /easydoc there) AND onto a FILE_BASE of `/easydoc`,
+   * doubling the prefix — the viewer framed a 404 either way.
+   */
+  pdf_url?: string | null;
   status: 'pending' | 'approved' | 'rejected';
   actioned_by_name: string | null;
   actioned_on: string | null;
@@ -265,7 +265,7 @@ export default function EstimateApprovalPage() {
   }
 
   // Pending state — render PDF + Approve/Reject controls.
-  const pdfUrl = `${FILE_BASE}${info.pdf_path}`;
+  const pdfUrl = info.pdf_url ?? null;
 
   return (
     <Shell>
@@ -309,17 +309,25 @@ export default function EstimateApprovalPage() {
             a remote PDF in 2024 browsers. Falls back to a "Download"
             link if the browser blocks inline PDFs. */}
         <div className="relative bg-ink-100" style={{ height: '70vh', minHeight: 460 }}>
-          {!pdfLoaded && (
-            <div className="absolute inset-0 grid place-items-center">
-              <Loader2 className="w-8 h-8 animate-spin text-ink-300" />
+          {!pdfUrl ? (
+            <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-ink-500">
+              The estimate PDF is not available yet. The approved lines and totals above are what you are approving.
             </div>
+          ) : (
+            <>
+              {!pdfLoaded && (
+                <div className="absolute inset-0 grid place-items-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-ink-300" />
+                </div>
+              )}
+              <iframe
+                src={pdfUrl}
+                title="Estimate PDF"
+                className="w-full h-full"
+                onLoad={() => setPdfLoaded(true)}
+              />
+            </>
           )}
-          <iframe
-            src={pdfUrl}
-            title="Estimate PDF"
-            className="w-full h-full"
-            onLoad={() => setPdfLoaded(true)}
-          />
         </div>
 
         {/* Action bar — sticky-feeling footer with Approve / Reject.
@@ -403,17 +411,19 @@ export default function EstimateApprovalPage() {
           {/* Fallback — some browsers (older iOS Safari) refuse inline
               PDFs even from same-origin. Give the SPOC a direct link
               so they can still review. */}
-          <div className="text-center text-xs text-ink-300">
-            Trouble viewing the PDF?{' '}
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-link hover:text-info-text underline"
-            >
-              Open in new tab
-            </a>
-          </div>
+          {pdfUrl && (
+            <div className="text-center text-xs text-ink-300">
+              Trouble viewing the PDF?{' '}
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link hover:text-info-text underline"
+              >
+                Open in new tab
+              </a>
+            </div>
+          )}
         </div>
       </div>
 

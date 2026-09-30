@@ -40,7 +40,7 @@ import {
   AlertTriangle, CheckCircle2, Download, FileDown, Loader2, ReceiptText, Wallet,
 } from 'lucide-react';
 import { useFetchOnce } from '@/lib/hooks';
-import { saveBlob } from '@/lib/api';
+import { api, saveBlob } from '@/lib/api';
 import {
   PageHeader, SectionLabel, StatRow, StatCard, Panel, Segmented,
   DataTable, Row, Cell, StatusPill, Pill, ActionButton, EmptyState,
@@ -169,10 +169,41 @@ function overdueAccent(days: number | null): Accent {
   return 'success';
 }
 
-/* PDF paths are stored relative to the document host, exactly as the previous
- * build resolved them. An absolute URL is passed straight through. */
-const FILE_BASE = (process.env.NEXT_PUBLIC_FILE_BASE_URL || '/easydoc').replace(/\/+$/, '');
-const pdfUrl = (p: string) => (/^https?:\/\//.test(p) ? p : `${FILE_BASE}/${p.replace(/^\/+/, '')}`);
+/*
+ * Invoice PDF — rendered by GET /invoices/:id/pdf, the same renderer the admin
+ * CRM issues (2026-09-30), downloaded WITH the auth header via api.download.
+ *
+ * This used to link `${FILE_BASE}/<pdfPath>`: the portal's own host (which
+ * serves no /easydoc), missing the legacy `client_invoice/` directory, and for
+ * files the legacy generator stopped writing in Feb 2018 — every link was dead,
+ * and most rows never had a pdfPath at all. Every raised invoice has one now.
+ */
+function InvoicePdfButton({ inv, label }: { inv: Invoice; label: string }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await api.download(`/invoices/${inv.id}/pdf`, `invoice-${(inv.invoiceNumber || String(inv.id)).replace(/[^\w.-]+/g, '_')}.pdf`);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:text-info-text disabled:opacity-60"
+    >
+      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Download className="w-3.5 h-3.5" aria-hidden />}
+      {failed ? 'Retry' : label}
+    </button>
+  );
+}
 
 /** The pending table shows this many rows; the rest are summarised in its footer. */
 const PENDING_ROWS = 8;
@@ -391,19 +422,7 @@ export default function InvoicesPage() {
                       ) : null}
                     </Cell>
                     <Cell align="right">
-                      {inv.pdfPath ? (
-                        <a
-                          href={pdfUrl(inv.pdfPath)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:text-info-text"
-                        >
-                          <Download className="w-3.5 h-3.5" aria-hidden />
-                          Download
-                        </a>
-                      ) : (
-                        <span className="text-xs text-ink-300">No PDF</span>
-                      )}
+                      <InvoicePdfButton inv={inv} label="Download" />
                     </Cell>
                   </Row>
                 );
@@ -470,19 +489,7 @@ export default function InvoicesPage() {
               <Row key={inv.id}>
                 <Cell>
                   <div className="font-medium text-ink-900">{inv.invoiceNumber || `#${inv.id}`}</div>
-                  {inv.pdfPath ? (
-                    <a
-                      href={pdfUrl(inv.pdfPath)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:text-info-text"
-                    >
-                      <Download className="w-3.5 h-3.5" aria-hidden />
-                      PDF
-                    </a>
-                  ) : (
-                    <div className="text-xs text-ink-500 tabular-nums">Invoice {inv.id}</div>
-                  )}
+                  <InvoicePdfButton inv={inv} label="PDF" />
                 </Cell>
                 <Cell>
                   <div className="text-ink-900">
