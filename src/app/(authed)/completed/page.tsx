@@ -104,10 +104,14 @@ type CompletedJob = {
  * photo was captured under the old naming (`<jobId>_checkout_<ts>.jpg`).
  *
  * So: test the VALUE, never the type's word for it — `isFetchableUrl` below.
- * A presigned URL carries no Authorization header, which is still the reason
- * an absolute one may go straight into an <img>; the bearer-authed
- * /jobs/:id/images/:imageId endpoint 401s from an <img> and is only usable for
- * a click-through, which carries the session.
+ *
+ * Since 2026-09-30 GET /api/client/jobs/:id rewrites a relative image_url to
+ * the HEAD-verified legacy-host URL, or null — so a legacy row is absolute
+ * too now. The test stays: a backend older than that still sends the relative
+ * form. There is NO fallback route: /jobs/:id/images/:imageId is bearer-authed,
+ * and neither an <img> nor a new tab sends the header (the "a click-through
+ * carries the session" note that used to sit here was wrong — the backend reads
+ * only the header or ?token=, and this app's /api rewrite adds neither).
  */
 type JobImage = {
   image_id: number;
@@ -395,21 +399,12 @@ export default function CompletedPage() {
       : detail.error
         ? 'Attachments could not be loaded'
         : found
-          ? 'Attached to this job'
+          ? (isFetchableUrl(found.image_url) ? 'Attached to this job' : 'Attached, but the file could not be found')
           : 'Not attached to this job';
 
+  // Unloadable rows say so in docSub rather than opening a 401 tab.
   const openDoc = (im: JobImage) => {
-    const jobId = fresh?.job_id;
-    /*
-     * Same test, opposite fallback. A click-through carries the session, so the
-     * bearer-authed endpoint works here — and it is the ONLY thing that can
-     * serve a legacy image, since the /easydoc path this would otherwise open
-     * 404s exactly as the tile did.
-     */
-    const url = isFetchableUrl(im.image_url)
-      ? im.image_url
-      : (jobId ? `/api/client/jobs/${jobId}/images/${im.image_id}` : null);
-    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    if (isFetchableUrl(im.image_url)) window.open(im.image_url, '_blank', 'noopener,noreferrer');
   };
 
   const listPending = (closed.loading || audited.loading) && rows.length === 0;

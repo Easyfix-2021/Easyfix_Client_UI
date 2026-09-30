@@ -114,6 +114,17 @@ export default function CustomerFeedbackPage() {
   const router = useRouter();
   const { jobId } = useParams<{ jobId: string }>();
   const jobIdNum = Number(jobId);
+  /*
+   * Forward the link's signed ?t= to the API (2026-09-30). The page never did,
+   * so the backend saw every visit as a bare-id link: FEEDBACK_TOKEN_REQUIRED
+   * =true would have 401'd every customer, and the technician photo — sent
+   * only to a signed link — could never appear. Read at call time (both calls
+   * are client-side), not via useSearchParams, which needs a Suspense boundary.
+   */
+  const feedbackApi = () => {
+    const t = new URLSearchParams(window.location.search).get('t');
+    return `/api/public/feedback/${jobIdNum}${t ? `?t=${encodeURIComponent(t)}` : ''}`;
+  };
 
   const [job, setJob] = useState<JobInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,7 +144,7 @@ export default function CustomerFeedbackPage() {
       setLoading(false);
       return;
     }
-    fetch(`/api/public/feedback/${jobIdNum}`)
+    fetch(feedbackApi())
       .then((r) => r.json())
       .then((body) => {
         if (!body.success) throw new Error(body.error || 'Could not load job');
@@ -178,7 +189,7 @@ export default function CustomerFeedbackPage() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/public/feedback/${jobIdNum}`, {
+      const res = await fetch(feedbackApi(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -281,9 +292,8 @@ export default function CustomerFeedbackPage() {
               ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  src={job.easyfixer_image.startsWith('http')
-                    ? job.easyfixer_image
-                    : `/easydoc/upload_jobs/${job.easyfixer_image}`}
+                  /* Absolute (S3 presign / legacy host) or null from the API — signed links only. */
+                  src={job.easyfixer_image}
                   alt={job.easyfixer_name || 'Technician'}
                   className="w-full h-full object-cover"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
