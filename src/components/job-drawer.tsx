@@ -52,7 +52,8 @@ type JobFull = {
   checkin_date_time: string | null;
   checkout_date_time: string | null;
   services: Array<{ service_catg_name: string | null; service_type_name: string | null }>;
-  images: Array<{ image_id: number; image: string; image_category: string | null; job_stage: string | null }>;
+  /* image_url: a URL the browser loads with NO auth (S3 presign or legacy host), or null = unloadable. */
+  images: Array<{ image_id: number; image: string; image_url: string | null; image_category: string | null; job_stage: string | null }>;
 };
 
 const OPEN_JOB_EVENT = 'easyfix:open-job';
@@ -194,7 +195,17 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
   const svc = j?.services?.[0];
   const serviceChip = j?.job_type || svc?.service_catg_name || svc?.service_type_name || null;
   const pay = j ? paymentLabel(j.collected_by) : null;
-  const imgUrl = (id: number) => `/api/client/jobs/${jobId}/images/${id}`;
+  /*
+   * Render from image_url, never /api/client/jobs/:id/images/:imageId
+   * (2026-09-30). That route is bearer-authed, and neither an <img> nor a new
+   * tab sends the header — every thumbnail, PO and Jobsheet here was a 401.
+   * image_url comes from GET /jobs/:id already token-free (S3 presign, or the
+   * legacy file host) and is null when nothing is loadable.
+   * ponytail: an S3 presign lives 5 min; a drawer left open longer opens an
+   * expired PO/Jobsheet — reopening the drawer refetches. Add a per-click
+   * re-resolve if that bites.
+   */
+  const isVideo = (im: { image: string }) => /\.(mp4|mov|webm|3gp)$/i.test(im.image || '');
   const pics = (j?.images || []).filter((im) => !/\.pdf$/i.test(im.image || ''));
   // PO / Jobsheet docs live in tbl_job_image, tagged by image_category.
   // Closed-set matching, not a regex: `/job.?sheet/i` also matches a future
@@ -256,19 +267,19 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled={!poDoc}
-                onClick={() => poDoc && window.open(imgUrl(poDoc.image_id), '_blank', 'noopener,noreferrer')}
+                disabled={!poDoc?.image_url}
+                onClick={() => poDoc?.image_url && window.open(poDoc.image_url, '_blank', 'noopener,noreferrer')}
                 title={poDoc ? 'Open Purchase Order' : 'No PO uploaded for this job'}
-                className={`${hbtn} ${!poDoc ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`${hbtn} ${!poDoc?.image_url ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <FileText className="w-4 h-4" /> PO
               </button>
               <button
                 type="button"
-                disabled={!jsDoc}
-                onClick={() => jsDoc && window.open(imgUrl(jsDoc.image_id), '_blank', 'noopener,noreferrer')}
+                disabled={!jsDoc?.image_url}
+                onClick={() => jsDoc?.image_url && window.open(jsDoc.image_url, '_blank', 'noopener,noreferrer')}
                 title={jsDoc ? 'Open Job Sheet' : 'No Jobsheet uploaded for this job'}
-                className={`${hbtn} ${!jsDoc ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`${hbtn} ${!jsDoc?.image_url ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <ClipboardList className="w-4 h-4" /> Jobsheet
               </button>
@@ -374,10 +385,16 @@ export function JobDrawer({ jobId, onClose }: { jobId: number | null; onClose: (
                 ) : (
                   <div className="flex flex-wrap gap-3">
                     {pics.map((im) => (
-                      <a key={im.image_id} href={imgUrl(im.image_id)} target="_blank" rel="noopener noreferrer"
+                      <a key={im.image_id} href={im.image_url ?? undefined} target="_blank" rel="noopener noreferrer"
                         className="w-28 relative rounded-xl overflow-hidden border border-ink-100 block" title={im.job_stage || im.image_category || 'Image'}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={imgUrl(im.image_id)} alt={im.job_stage || 'Job image'} className="w-28 h-28 object-cover" />
+                        {!im.image_url ? (
+                          <div className="w-28 h-28 flex items-center justify-center bg-ink-50 text-xs text-ink-300 text-center px-1">Not available</div>
+                        ) : isVideo(im) ? (
+                          <video src={`${im.image_url}#t=0.1`} preload="metadata" muted playsInline className="w-28 h-28 object-cover bg-ink-900" />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={im.image_url} alt={im.job_stage || 'Job image'} className="w-28 h-28 object-cover" />
+                        )}
                         {(im.job_stage || im.image_category) && (
                           <span className="absolute bottom-0 inset-x-0 bg-ink-900/55 text-white text-xs font-semibold px-1.5 py-0.5 truncate">
                             {im.job_stage || im.image_category}

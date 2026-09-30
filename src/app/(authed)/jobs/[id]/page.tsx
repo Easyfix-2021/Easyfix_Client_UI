@@ -111,6 +111,8 @@ type Job = {
   images: Array<{
     image_id: number;
     image: string;
+    /* Loadable with NO auth (S3 presign or legacy host), or null. */
+    image_url: string | null;
     image_category: string | null;
     job_stage: string | null;
     created_date: string;
@@ -157,22 +159,15 @@ function statusBadgeClass(status: number) {
 }
 
 /*
- * Nginx-served file URL conventions (CRM, /var/www/html/easydoc/...).
- * Both artefacts are keyed only by job_id, so we don't need a DB row
- * to surface them. The Jobsheet image-category lookup is kept as a
- * fallback in case ops uploads a custom feedback PDF manually.
- *
- * `FILE_BASE_URL` overrides — set NEXT_PUBLIC_FILE_BASE_URL at build
- * time if your deploy serves these from a CDN (e.g.
- * https://files.easyfix.in). Defaults to '/easydoc' (proxied by Nginx).
+ * The two job-keyed legacy PDFs (Jobsheet: feedback_jobs/feedback<jobId>.pdf,
+ * Estimate: estimateapproval/Estimate_Approval_<jobId>.pdf) come from
+ * GET /jobs/:id/documents as HEAD-verified absolute URLs, or null (2026-09-30).
+ * They used to be built here as `${FILE_BASE}/…` with FILE_BASE the relative
+ * `/easydoc` — the portal's own host, which serves no /easydoc — so every
+ * Estimate link and the Jobsheet fallback was a 404. A link now renders only
+ * when its file is known to exist.
  */
-const FILE_BASE = (process.env.NEXT_PUBLIC_FILE_BASE_URL || '/easydoc').replace(/\/+$/, '');
-function estimatePdfUrl(jobId: number): string {
-  return `${FILE_BASE}/estimateapproval/Estimate_Approval_${jobId}.pdf`;
-}
-function jobsheetPdfUrl(jobId: number): string {
-  return `${FILE_BASE}/feedback_jobs/feedback${jobId}.pdf`;
-}
+type JobDocuments = { jobsheet_url: string | null; estimate_url: string | null };
 
 function formatDateTime(iso: string | null) {
   // Null rather than an em dash: callers here branch on the absence.
@@ -244,6 +239,8 @@ export default function JobDetailPage() {
 
   const job = useFetchOnce<Job>(id ? `/jobs/${id}` : null);
   const estimate = useFetchOnce<EstimatePreview>(id ? `/jobs/${id}/estimate-preview` : null);
+  const documents = useFetchOnce<JobDocuments>(id ? `/jobs/${id}/documents` : null);
+  const estimateHref = documents.data?.estimate_url ?? null;
 
   const [acting, setActing] = useState(false);
   const [actError, setActError] = useState<string | null>(null);
@@ -382,35 +379,15 @@ export default function JobDetailPage() {
     (imagesByCategory[cat] = imagesByCategory[cat] || []).push(img);
   }
 
-  // Resolve image src — relative paths go through our SPOC-scoped image
-  // endpoint (which 302s to S3 or streams from disk). Absolute URLs
   /*
-   * Resolve a tbl_job_image row to a browser-loadable URL.
-   *
-   * Resolution order (cheapest → most expensive):
-   *   1. Already absolute       — already an https://… URL, pass through.
-   *   2. Already has a slash    — looks like a stored path / S3 key
-   *                                (Job_Images/foo.jpg, JobSupportings/x).
-   *                                Route through the backend image
-   *                                endpoint which handles S3 presigned
-   *                                + Nginx fallback uniformly.
-   *   3. Bare filename          — Nginx convention:
-   *                                /easydoc/upload_jobs/{filename}
-   *                                Skips the backend round-trip entirely.
-   *   4. Anything else / empty  — backend endpoint as a safety net.
-   *
-   * Net effect: typical CRM-stored filenames like
-   *   479925_checkin_20260422113009.jpg
-   * load straight from Nginx, while legacy S3 / oddly-keyed rows still
-   * resolve through the BE so we never break those.
+   * A tbl_job_image row's src is its image_url (2026-09-30). This used to
+   * build one here: S3 keys → /api/client/jobs/:id/images/:imageId, which is
+   * bearer-authed and 401s from an <img> or a new tab; bare filenames →
+   * `${FILE_BASE}/upload_jobs/<name>`, which is the portal's OWN host (the
+   * build never sets NEXT_PUBLIC_FILE_BASE_URL) and 404s. GET /jobs/:id now
+   * returns a token-free URL per row, or null when nothing is loadable.
    */
-  function imageSrc(img: { image_id: number; image: string }): string {
-    const raw = String(img.image || '').trim();
-    if (!raw) return `/api/client/jobs/${j.job_id}/images/${img.image_id}`;
-    if (/^https?:\/\//i.test(raw)) return raw;
-    if (raw.includes('/'))    return `/api/client/jobs/${j.job_id}/images/${img.image_id}`;
-    return `${FILE_BASE}/upload_jobs/${raw}`;
-  }
+  const imageSrc = (img: { image_url: string | null }) => img.image_url;
 
   // Jobsheet = the feedback-category image. Case-insensitive match
   // matches the legacy SQL `LIKE 'feedback'`. Picks the most recent
@@ -438,7 +415,8 @@ export default function JobDetailPage() {
     // single click; for completed jobs operators normally only have 1
     // PO attached so this is fine in practice.
     for (const img of poImages) {
-      window.open(imageSrc(img), '_blank', 'noopener,noreferrer');
+      const src = imageSrc(img);
+      if (src) window.open(src, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -474,16 +452,14 @@ export default function JobDetailPage() {
               {STATUS_LABELS[j.job_status] || `Status ${j.job_status}`}
             </span>
           </div>
-          {/* Jobsheet button — points at the Nginx-served signed PDF
-              convention:  /easydoc/feedback_jobs/feedback{jobId}.pdf
-              Visible on terminal-state jobs (Completed = 3 or 5) where
-              the signed feedback artefact exists. The older
-              feedbackImage fallback (j.images where image_category=
-              'feedback') is still kept below for jobs whose PDFs were
-              uploaded under a non-standard filename. */}
-          {(isCompleted || feedbackImage) && (
+          {/* Jobsheet button — the feedback-category tbl_job_image row
+              first (PDFs uploaded under a non-standard filename), else the
+              legacy feedback{jobId}.pdf from /jobs/:id/documents. Shown on
+              Completed jobs (3 or 5) or when a feedback row exists, and only
+              when one of the two actually resolved. */}
+          {(isCompleted || feedbackImage) && ((feedbackImage && imageSrc(feedbackImage)) || documents.data?.jobsheet_url) && (
             <a
-              href={feedbackImage ? imageSrc(feedbackImage) : jobsheetPdfUrl(j.job_id)}
+              href={((feedbackImage && imageSrc(feedbackImage)) || documents.data?.jobsheet_url) ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-primary shrink-0"
@@ -728,17 +704,18 @@ export default function JobDetailPage() {
                   <span className="text-info-text/70 font-medium">
                     {formatDateTime(sent)}
                   </span>
-                  {/* Open the Nginx-served Estimate PDF in a new tab.
-                      Convention: /easydoc/estimateapproval/Estimate_Approval_{jobId}.pdf */}
-                  <a
-                    href={estimatePdfUrl(j.job_id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-info/30 text-info-text hover:bg-info-tint transition"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </a>
+                  {/* Open the Estimate PDF (verified URL from /jobs/:id/documents). */}
+                  {estimateHref && (
+                    <a
+                      href={estimateHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open Estimate PDF"
+                      className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-info/30 text-info-text hover:bg-info-tint transition"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
               </div>
             )}
@@ -749,15 +726,17 @@ export default function JobDetailPage() {
                     <CheckCircle2 className="w-5 h-5 text-success" />
                     <span className="font-semibold">Estimate Approved</span>
                   </div>
-                  <a
-                    href={estimatePdfUrl(j.job_id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-success/30 text-success-text hover:bg-success-tint transition"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </a>
+                  {estimateHref && (
+                    <a
+                      href={estimateHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open Estimate PDF"
+                      className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-success/30 text-success-text hover:bg-success-tint transition"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
@@ -778,15 +757,17 @@ export default function JobDetailPage() {
                     <XCircle className="w-5 h-5 text-danger" />
                     <span className="font-semibold">Estimate Rejected</span>
                   </div>
-                  <a
-                    href={estimatePdfUrl(j.job_id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open Estimate PDF"
-                    className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-danger/30 text-danger-text hover:bg-danger-tint transition"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </a>
+                  {estimateHref && (
+                    <a
+                      href={estimateHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open Estimate PDF"
+                      className="w-8 h-8 rounded-full grid place-items-center bg-surface border border-danger/30 text-danger-text hover:bg-danger-tint transition"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm pl-7">
                   <div className="flex gap-2">
@@ -948,12 +929,17 @@ export default function JobDetailPage() {
                       <button
                         key={img.image_id}
                         type="button"
-                        onClick={() => setZoomImage(src)}
+                        disabled={!src}
+                        onClick={() => src && setZoomImage(src)}
                         className="aspect-square rounded-lg bg-ink-100 overflow-hidden hover:ring-2 hover:ring-primary transition group relative"
                         title={img.job_stage || ''}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                        {src ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={src} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-ink-300">Not available</div>
+                        )}
                         {img.job_stage && (
                           <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-xs px-1 py-0.5 truncate">
                             {img.job_stage}
